@@ -96,7 +96,14 @@ def _scan(
     return d
 
 
-def _run(scans: Path, tmp: Path, *, rc: int = 0) -> tuple[list[dict] | None, dict | None, str]:
+def _run(
+    scans: Path | str,
+    tmp: Path,
+    *,
+    rc: int = 0,
+    cwd: Path | None = None,
+) -> tuple[list[dict] | None, dict | None, str]:
+    """`scans` is passed to --scans-dir exactly as given; the process runs in `cwd`."""
     out = tmp / "findings.json"
     cov = tmp / "coverage.json"
     for p in (out, cov):
@@ -118,7 +125,7 @@ def _run(scans: Path, tmp: Path, *, rc: int = 0) -> tuple[list[dict] | None, dic
         text=True,
         encoding="utf-8",
         errors="replace",
-        cwd=tmp,
+        cwd=cwd or tmp,
         timeout=120,
     )
     assert proc.returncode == rc, proc.stdout + proc.stderr
@@ -397,6 +404,185 @@ def test_a_ran_step_needs_a_real_tool_name():
         steps[0]["tool"] = tool
         report = scan_coverage.assess({"steps": steps}, ALL_STEPS, set(ALL_STEPS))
         assert report["coverage"] == "unknown", tool
+
+
+# -- relative and unusual --scans-dir forms -----------------------------------------------------------
+
+
+def _path_forms(tmp: Path) -> list[tuple[str, str, Path]]:
+    scans = tmp / "scans"
+    dated = scans / "web" / "2026-10-19"
+    forms = [
+        ("relative", "scans", tmp),
+        ("dot-in-the-scan-dir", ".", dated),
+        ("relative-dated-dir", "web/2026-10-19", scans),
+        ("dotdot-segments", "scans/web/../web", tmp),
+        ("dotdot-out-and-back", "../../../scans", dated),
+        ("trailing-slash", str(scans) + "/", tmp),
+        ("absolute", str(scans), tmp),
+    ]
+    if sys.platform == "win32":
+        forms += [
+            ("trailing-backslash", str(scans) + "\\", tmp),
+            ("relative-backslashes", "web\\2026-10-19", scans),
+            ("case-differs", str(scans).swapcase(), tmp),
+        ]
+    return forms
+
+
+@pytest.mark.parametrize("form", [f[0] for f in _path_forms(Path("x"))])
+def test_scans_dir_given_in_any_path_form_gives_the_same_result_as_the_absolute_path(
+    form: str, tmp_path: Path
+):
+    scans = tmp_path / "scans"
+    _scan(scans, "web", {"steps": _steps()})
+    baseline, base_cov, _ = _run(scans, tmp_path)
+
+    _, arg, cwd = next(f for f in _path_forms(tmp_path) if f[0] == form)
+    findings, coverage, stderr = _run(arg, tmp_path, cwd=cwd)
+
+    assert "Traceback" not in stderr
+    assert sorted(f["fingerprint"] for f in findings) == sorted(f["fingerprint"] for f in baseline)
+    assert coverage["coverage"] == "complete" == base_cov["coverage"]
+    assert len(coverage["scans"]) == 1
+    assert coverage["scans"][0]["steps_read"] == list(ALL_STEPS)
+
+
+def test_an_unexpected_failure_in_discovery_still_writes_the_sidecar(tmp_path: Path, monkeypatch):
+    sys.path.insert(0, str(ETL))
+    sys.path.insert(0, str(REPO_ROOT))
+    import parse_dast
+
+    scans = tmp_path / "scans"
+    _scan(scans, "web", {"steps": _steps()})
+    cov = tmp_path / "cov.json"
+
+    def boom(*_a, **_k):
+        raise RuntimeError("simulated discovery failure")
+
+    monkeypatch.setattr(parse_dast.scan_coverage, "split_by_scan_dir", boom)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["parse_dast.py", "--client", "c", "--scans-dir", str(scans), "--coverage-output", str(cov)],
+    )
+    with pytest.raises(SystemExit) as exit_info:
+        parse_dast.main()
+
+    assert exit_info.value.code == 1
+    sidecar = json.loads(cov.read_text("utf-8"))
+    assert sidecar["coverage"] == "unknown"
+    assert "simulated discovery failure" in sidecar["scans"][0]["limitations"][0]
+
+
+# -- text encodings: Windows tools do not write UTF-8 -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("label", "encode"),
+    [
+        ("utf8-bom", lambda t: b"\xef\xbb\xbf" + t.encode("utf-8")),
+        ("utf16-le-bom", lambda t: b"\xff\xfe" + t.replace("\n", "\r\n").encode("utf-16-le")),
+        ("utf16-be-no-bom", lambda t: t.encode("utf-16-be")),
+    ],
+)
+def test_reports_in_another_encoding_are_read_and_the_encoding_is_named(
+    label: str, encode, tmp_path: Path
+):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "web", {"steps": _steps()}, zap=None, nuclei=None)
+    (d / "zap-report.json").write_bytes(encode(json.dumps(ZAP_REPORT)))
+    (d / "nuclei-output.jsonl").write_bytes(encode(json.dumps(NUCLEI_LINE) + "\n"))
+
+    findings, coverage, _ = _run(scans, tmp_path)
+
+    assert {f["rule_id"].split("-")[1] for f in findings} == {"zap", "nuc"}, label
+    assert coverage["coverage"] == "complete"
+    limitations = coverage["scans"][0]["limitations"]
+    assert any("zap-report.json" in lim for lim in limitations)
+    assert any("nuclei-output.jsonl" in lim for lim in limitations)
+
+
+def test_a_report_that_is_not_text_is_unread(tmp_path: Path):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "web", {"steps": _steps()}, zap=None)
+    (d / "zap-report.json").write_bytes(b"\xff" * 1000)
+
+    _, coverage, _ = _run(scans, tmp_path)
+
+    assert coverage["scans"][0]["unread_steps"] == ["zap"]
+    assert any("zap-report.json could not be read" in lim for lim in coverage["scans"][0]["limitations"])
+
+
+# -- nuclei lines must look like nuclei results -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        json.dumps(ZAP_REPORT) + "\n",
+        '{"foo": 1}\n',
+        json.dumps(NUCLEI_LINE) + '\n{"foo": 1}\n',  # one good line, one that is not a result
+        '{"template-id": "x"}\n',  # no info object
+        '{"info": {"name": "x"}}\n',  # no template id
+        '{"template-id": "x", "info": "not an object"}\n',
+    ],
+    ids=["zap-json", "foo", "good-then-foreign", "no-info", "no-template-id", "info-not-object"],
+)
+def test_nuclei_file_with_lines_that_are_not_nuclei_results_is_unread(content: str, tmp_path: Path):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "web", {"steps": _steps()}, nuclei=None)
+    (d / "nuclei-output.jsonl").write_text(content, encoding="utf-8")
+
+    _, coverage, _ = _run(scans, tmp_path)
+
+    scan = coverage["scans"][0]
+    assert scan["unread_steps"] == ["nuclei"]
+    assert any("not nuclei results" in lim for lim in scan["limitations"])
+
+
+def test_nuclei_older_template_id_key_is_still_a_result(tmp_path: Path):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "web", {"steps": _steps()}, nuclei=None)
+    line = {"templateID": "exposed-panel", "info": {"severity": "low"}, "host": "h"}
+    (d / "nuclei-output.jsonl").write_text(json.dumps(line) + "\n", encoding="utf-8")
+
+    _, coverage, _ = _run(scans, tmp_path)
+
+    assert coverage["coverage"] == "complete"
+
+
+# -- a file that looks like a result but is not named like one is named -------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "step"),
+    [
+        ("zap-config.json", "zap"),
+        ("zap-report-old.json", "zap"),
+        ("ZAP-Report.JSON", "zap"),
+        ("nuclei-notes.jsonl", "nuclei"),
+    ],
+)
+def test_a_wrongly_named_top_level_file_is_named_in_the_limitations(
+    name: str, step: str, tmp_path: Path
+):
+    scans = tmp_path / "scans"
+    d = _scan(
+        scans,
+        "web",
+        {"steps": _steps()},
+        zap=None if step == "zap" else "findings",
+        nuclei=None if step == "nuclei" else "findings",
+    )
+    (d / name).write_text("{}", encoding="utf-8")
+
+    _, coverage, _ = _run(scans, tmp_path)
+
+    scan = coverage["scans"][0]
+    assert scan["unread_steps"] == [step]
+    assert any(name in lim and "was ignored" in lim for lim in scan["limitations"])
+    assert not any("see the other limitations" in lim for lim in scan["limitations"])
 
 
 def test_documented_run_record_names_the_steps_the_parser_plans_for():

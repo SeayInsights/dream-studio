@@ -163,6 +163,15 @@ available (for example on Windows without binutils), record `strings` as `skippe
 the reason and continue. When the pattern matches nothing the file is empty; keep it
 (an empty `strings-findings.txt` is a result, a missing one is not).
 
+**Write every result file as UTF-8.** Windows PowerShell 5.1 redirects (`>`) as UTF-16,
+which turns a credential scan into a file of NUL-separated characters. Use the bash form
+above (Git Bash or WSL), or in PowerShell pipe through `| Out-File -Encoding utf8
+strings-findings.txt` (PowerShell 7 writes UTF-8 by default), or set `PYTHONUTF8=1` for
+Python steps. Ingest also accepts a UTF-8 BOM and UTF-16/UTF-32 with a BOM (or UTF-16
+without one), decodes them, and names the encoding as a limitation; bytes it cannot decode
+make the step `partial`, and a file that is mostly undecodable or holds NUL characters is
+not read at all.
+
 ### Step A7: PE/ELF Header Analysis (needs `pefile` for PE, `pyelftools` for ELF)
 
 Try the import first. If the library for the binary's format is not installed, record

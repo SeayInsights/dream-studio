@@ -99,8 +99,18 @@ def _scan(
     return d
 
 
-def _run(scans: Path, tmp: Path, *, rc: int = 0) -> tuple[list[dict] | None, dict | None, str]:
-    """Run parse_binary.py; (findings, coverage sidecar, stderr). Absent outputs are None."""
+def _run(
+    scans: Path | str,
+    tmp: Path,
+    *,
+    rc: int = 0,
+    cwd: Path | None = None,
+) -> tuple[list[dict] | None, dict | None, str]:
+    """Run parse_binary.py; (findings, coverage sidecar, stderr). Absent outputs are None.
+
+    `scans` is passed to --scans-dir exactly as given (a str may be relative, `.`, have a
+    trailing separator or `..` segments); the process runs in `cwd` (default `tmp`).
+    """
     out = tmp / "findings.json"
     cov = tmp / "coverage.json"
     for p in (out, cov):
@@ -122,7 +132,7 @@ def _run(scans: Path, tmp: Path, *, rc: int = 0) -> tuple[list[dict] | None, dic
         text=True,
         encoding="utf-8",
         errors="replace",
-        cwd=tmp,
+        cwd=cwd or tmp,
         timeout=120,
     )
     assert proc.returncode == rc, proc.stdout + proc.stderr
@@ -865,17 +875,407 @@ def test_a_ran_step_needs_a_real_tool_name(tool):
 # -- undecodable bytes ----------------------------------------------------------------------------------
 
 
-def test_strings_with_undecodable_bytes_are_still_read_and_the_loss_is_named(tmp_path: Path):
+def test_strings_with_a_few_undecodable_bytes_are_read_but_partial_and_the_loss_is_named(
+    tmp_path: Path,
+):
     scans = tmp_path / "scans"
     d = _scan(scans, "app", {"steps": _steps()})
-    (d / "strings-findings.txt").write_bytes(b"password=ok\nsecret=\xff\xfe\xfd\n")
+    (d / "strings-findings.txt").write_bytes(b"password=ok\n" * 10 + b"secret=\xff\xfe\xfd\n")
 
     findings, coverage, _ = _run(scans, tmp_path)
 
-    assert len(_strings_findings(findings)) == 2
+    assert len(_strings_findings(findings)) == 11
     scan = coverage["scans"][0]
     assert "strings" in scan["steps_read"]
-    assert any("undecodable" in lim and "3" in lim for lim in scan["limitations"])
+    assert coverage["coverage"] == "partial"
+    assert scan["degraded_steps"] == ["strings"]
+    assert any("3 undecodable byte(s)" in lim for lim in scan["limitations"])
+
+
+# -- text encodings: Windows tools do not write UTF-8 ---------------------------------------------------
+
+CREDENTIAL_LINES = ["http://internal.example/x", "password=hunter2", "api_key=abcd1234"]
+CREDENTIAL_TEXT = "\r\n".join(CREDENTIAL_LINES) + "\r\n"
+
+
+def _severities(findings: list[dict]) -> list[str]:
+    return sorted(f["severity"] for f in findings if f["scanner"] == "strings")
+
+
+def _strings_as(tmp_path: Path, raw: bytes) -> tuple[list[dict], dict]:
+    scans = tmp_path / "scans"
+    d = _scan(scans, "app", {"steps": _steps()})
+    (d / "strings-findings.txt").write_bytes(raw)
+    findings, coverage, _ = _run(scans, tmp_path)
+    return findings, coverage["scans"][0] | {"overall": coverage["coverage"]}
+
+
+UTF8_SEVERITIES = ["high", "high", "medium"]
+
+
+@pytest.mark.parametrize(
+    ("label", "raw", "named"),
+    [
+        # what Windows PowerShell 5.1's `>` writes: UTF-16 LE with a BOM and CRLF
+        ("utf16-le-bom", b"\xff\xfe" + CREDENTIAL_TEXT.encode("utf-16-le"), "UTF-16"),
+        ("utf16-be-bom", b"\xfe\xff" + CREDENTIAL_TEXT.encode("utf-16-be"), "UTF-16"),
+        ("utf16-le-no-bom", CREDENTIAL_TEXT.encode("utf-16-le"), "UTF-16"),
+        ("utf16-be-no-bom", CREDENTIAL_TEXT.encode("utf-16-be"), "UTF-16"),
+        ("utf32-le-bom", b"\xff\xfe\x00\x00" + CREDENTIAL_TEXT.encode("utf-32-le"), "UTF-32"),
+        ("utf32-be-bom", b"\x00\x00\xfe\xff" + CREDENTIAL_TEXT.encode("utf-32-be"), "UTF-32"),
+        ("utf8-bom", b"\xef\xbb\xbf" + CREDENTIAL_TEXT.encode("utf-8"), "UTF-8 BOM"),
+    ],
+)
+def test_strings_in_another_unicode_encoding_are_decoded_and_the_encoding_is_named(
+    label: str, raw: bytes, named: str, tmp_path: Path
+):
+    """The same three lines must give the same severities as UTF-8, not 4 findings all `info`."""
+    findings, scan = _strings_as(tmp_path, raw)
+
+    assert _severities(findings) == UTF8_SEVERITIES, label
+    assert "strings" in scan["steps_read"]
+    assert scan["overall"] == "complete"  # decoded correctly: a note, not a degradation
+    assert any(named in lim and "strings-findings.txt" in lim for lim in scan["limitations"])
+
+
+def test_the_same_lines_in_utf8_are_the_baseline(tmp_path: Path):
+    findings, scan = _strings_as(tmp_path, CREDENTIAL_TEXT.encode("utf-8"))
+
+    assert _severities(findings) == UTF8_SEVERITIES
+    assert scan["limitations"] == []
+
+
+@pytest.mark.parametrize(
+    ("label", "raw"),
+    [
+        ("all-0xff", b"\xff" * 1000),
+        ("mostly-bad-bytes", b"password=x\n" + b"\xff\xfe" * 500),
+        ("nul-in-utf8-text", b"password=x\n\x00\x00secret=y\n"),
+        ("binary-with-nuls", bytes(range(256)) * 4),
+    ],
+)
+def test_strings_that_are_not_text_are_unread_not_complete(label: str, raw: bytes, tmp_path: Path):
+    findings, scan = _strings_as(tmp_path, raw)
+
+    assert scan["overall"] == "partial", label
+    assert scan["unread_steps"] == ["strings"]
+    assert any("strings-findings.txt could not be read" in lim for lim in scan["limitations"])
+
+
+def test_a_real_replacement_character_is_not_an_undecodable_byte(tmp_path: Path):
+    """Counted from the decoder's errors, not from U+FFFD in the output text."""
+    raw = ("password=caf�\r\n" * 3).encode("utf-8")
+
+    findings, scan = _strings_as(tmp_path, raw)
+
+    assert len(_strings_findings(findings)) == 3
+    assert scan["overall"] == "complete"
+    assert scan["limitations"] == []
+
+
+@pytest.mark.parametrize(
+    ("name", "make"),
+    [
+        ("checksec.json", lambda c: json.dumps(c)),
+        ("yara-matches.json", lambda c: json.dumps(c)),
+        ("header-analysis.json", lambda c: json.dumps(c)),
+    ],
+)
+@pytest.mark.parametrize(
+    ("label", "encode"),
+    [
+        ("utf8-bom", lambda t: b"\xef\xbb\xbf" + t.encode("utf-8")),
+        ("utf16-le-bom", lambda t: b"\xff\xfe" + t.encode("utf-16-le")),
+        ("utf16-be-no-bom", lambda t: t.encode("utf-16-be")),
+    ],
+)
+def test_json_results_in_another_encoding_are_read_and_the_encoding_is_named(
+    name: str, make, label: str, encode, tmp_path: Path
+):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "app", {"steps": _steps()})
+    step = {"checksec.json": "checksec", "yara-matches.json": "yara"}.get(name, "header_analysis")
+    (d / name).write_bytes(encode(make(OUTPUTS[step][1])))
+
+    findings, coverage, _ = _run(scans, tmp_path)
+
+    scan = coverage["scans"][0]
+    assert step in scan["steps_read"], label
+    assert [f for f in findings if f["scanner"] == step]
+    assert coverage["coverage"] == "complete"
+    assert any(name in lim and ("BOM" in lim or "UTF-16" in lim) for lim in scan["limitations"])
+
+
+@pytest.mark.parametrize(
+    ("label", "encode"),
+    [
+        ("utf8-bom", lambda t: b"\xef\xbb\xbf" + t.encode("utf-8")),
+        ("utf16-le-bom", lambda t: b"\xff\xfe" + t.encode("utf-16-le")),
+    ],
+)
+def test_scan_meta_written_by_a_windows_tool_still_counts(label: str, encode, tmp_path: Path):
+    """A BOM or UTF-16 scan-meta.json used to read as unreadable, so the scan went `unknown`."""
+    scans = tmp_path / "scans"
+    d = _scan(scans, "app", None)
+    (d / "scan-meta.json").write_bytes(encode(json.dumps({"steps": _steps()})))
+
+    _, coverage, _ = _run(scans, tmp_path)
+
+    assert coverage["coverage"] == "complete", label
+
+
+def test_a_scan_meta_nested_past_the_recursion_limit_reads_unknown_and_loses_nothing(
+    tmp_path: Path,
+):
+    scans = tmp_path / "scans"
+    _scan(scans, "app", '{"steps": ' + "[" * 100_000 + "]" * 100_000 + "}")
+
+    findings, coverage, _ = _run(scans, tmp_path)
+
+    assert {f["scanner"] for f in findings} == set(ALL_STEPS)
+    assert coverage["coverage"] == "unknown"
+
+
+# -- relative and unusual --scans-dir forms -----------------------------------------------------------
+
+
+def _path_forms(tmp: Path) -> list[tuple[str, str, Path]]:
+    scans = tmp / "scans"
+    dated = scans / "app" / "2026-10-19"
+    forms = [
+        ("relative", "scans", tmp),
+        ("dot-in-the-scan-dir", ".", dated),
+        ("relative-dated-dir", "app/2026-10-19", scans),
+        ("relative-dated-dir-dot-slash", "./app/2026-10-19", scans),
+        ("dotdot-segments", "scans/app/../app", tmp),
+        ("dotdot-out-and-back", "../../../scans", dated),
+        ("trailing-slash", str(scans) + "/", tmp),
+        ("absolute", str(scans), tmp),
+    ]
+    if sys.platform == "win32":
+        forms += [
+            ("trailing-backslash", str(scans) + "\\", tmp),
+            ("relative-backslashes", "app\\2026-10-19", scans),
+            ("case-differs", str(scans).swapcase(), tmp),
+        ]
+    return forms
+
+
+def _form_ids() -> list[str]:
+    return [f[0] for f in _path_forms(Path("x"))]
+
+
+@pytest.mark.parametrize("form", _form_ids())
+def test_scans_dir_given_in_any_path_form_gives_the_same_result_as_the_absolute_path(
+    form: str, tmp_path: Path
+):
+    scans = tmp_path / "scans"
+    _scan(scans, "app", {"steps": _steps()})
+    baseline, base_cov, _ = _run(scans, tmp_path)
+
+    _, arg, cwd = next(f for f in _path_forms(tmp_path) if f[0] == form)
+    findings, coverage, stderr = _run(arg, tmp_path, cwd=cwd)
+
+    assert "Traceback" not in stderr
+    assert sorted(f["fingerprint"] for f in findings) == sorted(f["fingerprint"] for f in baseline)
+    assert coverage["coverage"] == "complete" == base_cov["coverage"]
+    assert len(coverage["scans"]) == 1
+    assert coverage["scans"][0]["steps_read"] == list(ALL_STEPS)
+
+
+def test_scans_dir_reached_through_a_link_is_the_same_scan(tmp_path: Path):
+    real = tmp_path / "real"
+    _scan(real, "app", {"steps": _steps()})
+    link = tmp_path / "link"
+    try:
+        link.symlink_to(real, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        if sys.platform != "win32":
+            pytest.skip("cannot create a symlink here")
+        made = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(real)], capture_output=True, text=True
+        )
+        if made.returncode != 0:
+            pytest.skip("cannot create a symlink or junction here")
+
+    findings, coverage, stderr = _run(link, tmp_path)
+
+    assert "Traceback" not in stderr
+    assert {f["coverage"] for f in findings} == {"complete"}
+    assert len(coverage["scans"]) == 1
+
+
+def test_split_by_scan_dir_resolves_both_sides_with_an_injected_resolver(tmp_path: Path):
+    """Where links cannot be made: a resolver maps an alias prefix onto the real tree."""
+    real = tmp_path / "real"
+    d = _scan(real, "app", {"steps": _steps()})
+    alias = tmp_path / "alias"  # does not exist; only the resolver knows it is `real`
+
+    def resolve(p: Path) -> Path:
+        s = str(p)
+        return Path(s.replace(str(alias), str(real))) if s.startswith(str(alias)) else p
+
+    candidate = alias / "app" / "2026-10-19" / "checksec.json"
+    stale = alias / "app" / "2026-10-19" / "old" / "checksec.json"
+    (d / "old").mkdir()
+    kept, ignored = scan_coverage.split_by_scan_dir(alias, [candidate, stale], resolve=resolve)
+
+    assert kept == [candidate]
+    assert [p for paths in ignored.values() for p in paths] == [stale]
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [Path("checksec.json"), Path("a/b/../checksec.json"), Path("/nonexistent/x/checksec.json")],
+)
+def test_split_by_scan_dir_never_raises_on_an_odd_path(candidate: Path, tmp_path: Path):
+    scan_coverage.split_by_scan_dir(tmp_path, [candidate])
+    scan_coverage.split_by_scan_dir(Path("relative/scans"), [candidate])
+    scan_coverage.scan_dirs(Path("relative/scans"), [candidate])
+
+
+def test_an_unexpected_failure_in_discovery_still_writes_the_sidecar(tmp_path: Path, monkeypatch):
+    """Whatever goes wrong while reading results ends in a sidecar and exit 1, never a crash."""
+    import parse_binary
+
+    scans = tmp_path / "scans"
+    _scan(scans, "app", {"steps": _steps()})
+    cov = tmp_path / "cov.json"
+
+    def boom(*_a, **_k):
+        raise RuntimeError("simulated discovery failure \x1b[31m")
+
+    monkeypatch.setattr(parse_binary.scan_coverage, "split_by_scan_dir", boom)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["parse_binary.py", "--client", "c", "--scans-dir", str(scans), "--coverage-output", str(cov)],
+    )
+    with pytest.raises(SystemExit) as exit_info:
+        parse_binary.main()
+
+    assert exit_info.value.code == 1
+    sidecar = json.loads(cov.read_text("utf-8"))
+    assert sidecar["coverage"] == "unknown"
+    (lim,) = sidecar["scans"][0]["limitations"]
+    assert "simulated discovery failure" in lim and "\x1b" not in lim
+
+
+# -- a file that looks like a result but is not named like one is named -------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "step"),
+    [
+        ("checksec-old.json", "checksec"),
+        ("Checksec.JSON", "checksec"),
+        ("yara-notes.json", "yara"),
+        ("strings-notes.txt", "strings"),
+        ("header-analysis.bak.json", "header_analysis"),
+    ],
+)
+def test_a_wrongly_named_top_level_file_is_named_in_the_limitations(
+    name: str, step: str, tmp_path: Path
+):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "app", {"steps": _steps()}, outputs=tuple(s for s in ALL_STEPS if s != step))
+    (d / name).write_text("{}", encoding="utf-8")
+
+    _, coverage, _ = _run(scans, tmp_path)
+
+    scan = coverage["scans"][0]
+    assert scan["unread_steps"] == [step]
+    assert any(name in lim and "was ignored" in lim for lim in scan["limitations"])
+    assert not any("see the other limitations" in lim for lim in scan["limitations"])
+
+
+def test_ordinary_files_in_a_scan_directory_are_not_called_misnamed_results(tmp_path: Path):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "app", {"steps": _steps()})
+    for other in ("scan-meta.bak", "coverage.json", "hash.json", "notes.md", "binary.exe"):
+        (d / other).write_text("x", encoding="utf-8")
+
+    _, coverage, _ = _run(scans, tmp_path)
+
+    assert coverage["scans"][0]["limitations"] == []
+
+
+# -- names that collide after cleaning must not lose a finding ---------------------------------------------
+
+
+def test_header_check_names_that_clean_to_the_same_text_each_keep_their_finding(tmp_path: Path):
+    names = ["a", "a\n", "a\x00", "\x07a", "signed"]
+    content = {"format": "pe", "checks": {n: False for n in names}}
+
+    findings, _ = _header(tmp_path / "scans", tmp_path, content)
+
+    headers = [f for f in findings if f["scanner"] == "header_analysis"]
+    assert len(headers) == 5
+    assert len({f["rule_id"] for f in headers}) == 5
+    assert len({f["fingerprint"] for f in headers}) == 5
+
+
+def test_long_header_check_names_with_a_shared_prefix_each_keep_their_finding(tmp_path: Path):
+    prefix = "p" * 60
+    names = [prefix + "x" * 40, prefix + "y" * 40, "signed"]
+    content = {"format": "pe", "checks": {n: False for n in names}}
+
+    findings, _ = _header(tmp_path / "scans", tmp_path, content)
+
+    headers = [f for f in findings if f["scanner"] == "header_analysis"]
+    assert len({f["fingerprint"] for f in headers}) == 3
+
+
+# -- survivors from the third review -------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("findings", [5, "password=x", {"a": 1}, None, True])
+def test_a_strings_result_whose_findings_is_not_a_list_is_not_a_strings_result(
+    findings: object, tmp_path: Path
+):
+    """A string would otherwise be read as one finding per character."""
+    scans = tmp_path / "scans"
+    d = _scan(scans, "app", {"steps": _steps()}, outputs=("checksec", "yara", "header_analysis"))
+    (d / "strings-findings.json").write_text(json.dumps({"findings": findings}), encoding="utf-8")
+
+    _, coverage, _ = _run(scans, tmp_path)
+
+    assert coverage["scans"][0]["unread_steps"] == ["strings"]
+    assert any("strings-findings.json could not be read" in lim for lim in coverage["scans"][0]["limitations"])
+
+
+def test_directory_comparison_ignores_trailing_separators_and_dot_segments():
+    assert scan_coverage._norm("a/b/") == scan_coverage._norm("a/b")
+    assert scan_coverage._norm("a/./b") == scan_coverage._norm("a/b")
+    assert scan_coverage._norm("a/c/../b") == scan_coverage._norm("a/b")
+    assert scan_coverage._norm("a/b") != scan_coverage._norm("a/bb")
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="case folding applies to Windows paths")
+def test_directory_comparison_folds_case_on_windows():
+    assert scan_coverage._norm("C:\\Scans\\App") == scan_coverage._norm("c:\\scans\\app")
+
+
+def test_short_strips_control_characters_and_bounds_length():
+    text = scan_coverage.short("a\nb\x00c\x1b[31md e" + "x" * 500)
+
+    assert text.isprintable() and text.startswith("abc[31mde")
+    assert len(text) <= 203
+
+
+def test_notes_are_capped_and_the_overflow_is_counted(tmp_path: Path):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "app", {"steps": _steps()})
+    for i in range(30):  # 30 stale copies in subdirectories: 30 notes
+        sub = d / f"old{i:02d}"
+        sub.mkdir()
+        (sub / "checksec.json").write_text("{}", encoding="utf-8")
+
+    _, coverage, _ = _run(scans, tmp_path)
+
+    limitations = coverage["scans"][0]["limitations"]
+    assert len(limitations) == 21  # 20 notes and the overflow line
+    assert limitations[-1] == "... and 10 more notes"
 
 
 # -- the mode doc and the parser must agree ------------------------------------------------------------
@@ -900,6 +1300,15 @@ def test_documented_result_files_are_the_ones_the_parser_reads():
     for step, (name, _content) in OUTPUTS.items():
         assert name in text, f"examples.md never names {name}, the file read for {step}"
     assert "strings-findings.json" not in text
+
+
+def test_doc_tells_the_agent_to_write_utf8_and_says_what_ingest_accepts():
+    text = " ".join(EXAMPLES.read_text(encoding="utf-8").split())
+    assert "Write every result file as UTF-8" in text
+    assert "Out-File -Encoding utf8" in text
+    assert "UTF-16" in text and "BOM" in text
+    # the claim the doc makes about misnamed files is now true for top-level files too
+    assert "`checksec-old.json` is ignored and named" in text
 
 
 def test_doc_describes_unread_exactly_as_the_code_behaves():

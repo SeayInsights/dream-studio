@@ -144,7 +144,10 @@ For each target:
 ### Step R5: Store Results
 
 1. Create directory: `~/.dream-studio/security/scans/{client}/{target}/{date}/`
-2. Move `zap-report.json` and `nuclei-output.jsonl` into the directory.
+2. Move `zap-report.json` and `nuclei-output.jsonl` into the directory. Write them as
+   UTF-8 (Windows PowerShell 5.1's `>` writes UTF-16: use `| Out-File -Encoding utf8` or a
+   shell that writes UTF-8). Ingest also accepts a UTF-8 BOM and UTF-16/UTF-32, decodes
+   them, and names the encoding as a limitation; text it cannot decode reads `partial`.
 3. Write `scan-meta.json`:
    ```json
    {

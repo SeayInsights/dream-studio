@@ -476,8 +476,17 @@ HEADER_FORMAT_CHECKS = {
 
 
 def _clean_name(name: object, limit: int = 60) -> str:
-    """A check name made safe to put in a rule id or message: printable, single-line, short."""
-    return "".join(ch for ch in str(name) if ch.isprintable())[:limit] or "?"
+    """A check name made safe to put in a rule id or message: printable, single-line, short.
+
+    A name that needed cleaning or shortening gets a short hash of the original appended,
+    so two different names never clean to the same text and merge into one finding.
+    """
+    raw = str(name)
+    cleaned = "".join(ch for ch in raw if ch.isprintable())
+    if raw and cleaned == raw and len(raw) <= limit:
+        return raw
+    digest = hashlib.sha256(raw.encode("utf-8", "backslashreplace")).hexdigest()[:8]
+    return f"{cleaned[:40] or '?'}~{digest}"
 
 
 def parse_header_json(
@@ -622,6 +631,11 @@ RESULT_FILES = {
 }
 
 
+#: Name fragments that make a file in a scan directory look like a result of this mode, so one
+#: that is not named exactly as documented is reported as ignored rather than silently skipped.
+RESULT_HINTS = ("checksec", "yara", "strings", "header-analysis")
+
+
 def read_result_file(path: Path, target_name: str, binary_hash: str) -> scan_coverage.Read:
     """Parse one result file into a scan_coverage.Read.
 
@@ -632,19 +646,14 @@ def read_result_file(path: Path, target_name: str, binary_hash: str) -> scan_cov
     expected = RESULT_FILES[path.name]
     degraded: list[str] = []
     notes: list[str] = []
+    decoded = scan_coverage.decode_text(path.read_bytes(), path.name)
+    notes.extend(decoded.notes)
+    degraded.extend(decoded.degraded)
     if path.suffix == ".txt":
-        text = path.read_bytes().decode("utf-8", errors="replace")
-        lost = text.count("�")
-        if lost:
-            notes.append(
-                f"{path.name}: {lost} undecodable byte(s) were replaced; "
-                "the lines holding them may be misread"
-            )
         step: str | None = expected
-        findings = parse_strings_text(text, target_name, binary_hash, degraded)
+        findings = parse_strings_text(decoded.text, target_name, binary_hash, degraded)
     else:
-        with open(path, encoding="utf-8") as fh:
-            raw = json.load(fh)
+        raw = json.loads(decoded.text)
         step = detect_step(raw, path.name)
         findings = detect_and_parse(raw, path.name, target_name, binary_hash, degraded, notes)
     if step != expected:
@@ -827,7 +836,7 @@ def main() -> None:
             Path(args.scans_dir)
             if args.scans_dir
             else home_dir() / "security" / "scans" / args.client
-        )
+        ).resolve()
         if not scans_dir.exists():
             scan_reports.append(
                 scan_coverage.unknown_report(
@@ -847,42 +856,30 @@ def main() -> None:
             except Exception:
                 pass
 
-        candidates = sorted(f for f in scans_dir.rglob("*") if is_result_file(f))
-        scan_files, ignored = scan_coverage.split_by_scan_dir(scans_dir, candidates)
-        dirs = scan_coverage.scan_dirs(scans_dir, scan_files)
-
-        findings_by_key: dict[str, list[dict]] = {}
-        state_by_key: dict[str, scan_coverage.ScanRead] = {}
-        for key, paths in ignored.items():
-            state = state_by_key.setdefault(key, scan_coverage.ScanRead())
-            for path in paths:
-                rel = path.relative_to(key).as_posix()
-                state.notes.append(f"{rel} was ignored: results are read only from {key} itself")
-        for sf in scan_files:
-            target_name = (
-                sf.parent.parent.name if sf.parent.name.count("-") == 2 else sf.parent.name
+        try:
+            candidates = sorted(f for f in scans_dir.rglob("*") if is_result_file(f))
+            all_findings, reports, n_files = scan_coverage.collect(
+                "parse_binary",
+                scans_dir,
+                candidates,
+                PLANNED_STEPS,
+                lambda path, target: read_result_file(path, target, binary_hash),
+                RESULT_FILES,
+                RESULT_HINTS,
             )
-            key, _ = scan_coverage.scan_key(sf, scans_dir)
-            state = state_by_key.setdefault(key, scan_coverage.ScanRead())
-            print(f"[parse_binary] Parsing {sf.name} → target={target_name}", file=sys.stderr)
-            try:
-                result = read_result_file(sf, target_name, binary_hash)
-            except Exception as exc:
-                print(f"  [error] Failed to parse {sf.name}: {exc}", file=sys.stderr)
-                state.notes.append(f"{sf.name} could not be read: {scan_coverage.short(exc)}")
-                continue
-            state.add(result)
-            findings_by_key.setdefault(key, []).extend(result.findings)
-            print(f"  → {len(result.findings)} findings", file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001 - never exit without the coverage sidecar
+            print(f"[parse_binary] ERROR: reading results failed: {exc}", file=sys.stderr)
+            scan_reports.append(
+                scan_coverage.unknown_report(
+                    str(scans_dir),
+                    f"unexpected failure while reading results: {scan_coverage.short(exc)}",
+                )
+            )
+            scan_coverage.report("parse_binary", scan_reports, args.coverage_output)
+            sys.exit(1)
+        scan_reports.extend(reports)
 
-        reports = scan_coverage.assess_all(dirs, PLANNED_STEPS, state_by_key)
-        scan_reports.extend(reports.values())
-        all_findings: list[dict] = []
-        for key, found in findings_by_key.items():
-            scan_coverage.stamp(found, reports[key])
-            all_findings.extend(found)
-
-        if not scan_files:
+        if not n_files:
             print(
                 f"[parse_binary] No checksec/yara/strings files found in {scans_dir}",
                 file=sys.stderr,
