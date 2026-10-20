@@ -30,6 +30,11 @@ def _schema_version(db_path: Path) -> int:
 def test_canonical_db_path_uses_home_state_and_env_override(tmp_path, monkeypatch) -> None:
     DatabaseRuntime.reset_instance()
     monkeypatch.delenv(database.DB_PATH_ENV, raising=False)
+    # home_dir() reads DREAM_STUDIO_HOME before Path.home(), and tests/conftest.py sets it
+    # whenever DREAM_STUDIO_DB_PATH is not already in the environment. CI presets the DB
+    # path, so there it is never set and this passed; a local run set it and was ignored
+    # by the Path.home patch below.
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
 
     assert (
@@ -47,6 +52,7 @@ def test_fresh_temp_home_runtime_bootstrap_creates_db_and_applies_latest(
 ) -> None:
     DatabaseRuntime.reset_instance()
     monkeypatch.delenv(database.DB_PATH_ENV, raising=False)
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)  # see the first test
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "fresh-home"))
     # tests/conftest.py opts the session's test home in; this test is about the gate.
     monkeypatch.delenv("DREAM_STUDIO_APPLY_UNRELEASED", raising=False)
