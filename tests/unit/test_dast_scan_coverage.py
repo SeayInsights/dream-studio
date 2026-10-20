@@ -321,6 +321,79 @@ def test_partial_run_with_no_findings_is_still_reported_partial(tmp_path: Path):
     assert coverage["scans"][0]["skipped_steps"] == ["nuclei"]
 
 
+# -- result discovery: documented names, top level of the scan directory ------------------------------
+
+
+def test_stale_report_in_a_subdirectory_is_ignored_and_named(tmp_path: Path):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "web", {"steps": _steps()}, zap=None)
+    (d / "old").mkdir()
+    (d / "old" / "zap-report.json").write_text(json.dumps(ZAP_REPORT), encoding="utf-8")
+
+    findings, coverage, _ = _run(scans, tmp_path)
+
+    scan = coverage["scans"][0]
+    assert len(coverage["scans"]) == 1
+    assert scan["unread_steps"] == ["zap"]
+    assert {f["rule_id"].split("-")[1] for f in findings} == {"nuc"}
+    assert any("old" in lim and "zap-report.json" in lim and "ignored" in lim for lim in scan["limitations"])
+
+
+@pytest.mark.parametrize(
+    ("name", "content", "step"),
+    [
+        ("zap-config.json", json.dumps(ZAP_REPORT), "zap"),
+        ("zap-report-old.json", json.dumps(ZAP_REPORT), "zap"),
+        ("nuclei-notes.jsonl", json.dumps(NUCLEI_LINE) + "\n", "nuclei"),
+        ("nuclei-config.json", json.dumps(NUCLEI_LINE), "nuclei"),
+    ],
+)
+def test_a_wrongly_named_file_is_not_the_result_of_the_scanner(
+    name: str, content: str, step: str, tmp_path: Path
+):
+    scans = tmp_path / "scans"
+    d = _scan(
+        scans,
+        "web",
+        {"steps": _steps()},
+        zap=None if step == "zap" else "findings",
+        nuclei=None if step == "nuclei" else "findings",
+    )
+    (d / name).write_text(content, encoding="utf-8")
+
+    _, coverage, _ = _run(scans, tmp_path)
+
+    assert coverage["coverage"] == "partial"
+    assert coverage["scans"][0]["unread_steps"] == [step]
+
+
+@pytest.mark.parametrize(
+    "report",
+    [{"site": []}, {"site": [{"@name": "x", "alerts": []}]}, {"@version": "2"}, [], "zap", 5, None],
+    ids=lambda r: json.dumps(r)[:30],
+)
+def test_a_zap_report_without_the_zap_shape_is_unread_and_never_crashes(report: object, tmp_path: Path):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "web", {"steps": _steps()})
+    (d / "zap-report.json").write_text(json.dumps(report), encoding="utf-8")
+
+    findings, coverage, _ = _run(scans, tmp_path)
+
+    assert coverage["scans"][0]["unread_steps"] == ["zap"]
+    assert {f["rule_id"].split("-")[1] for f in findings} == {"nuc"}
+
+
+def test_a_ran_step_needs_a_real_tool_name():
+    sys.path.insert(0, str(ETL))
+    import scan_coverage
+
+    for tool in ["", "  ", 5, ["t"], {}, None, True]:
+        steps = _steps()
+        steps[0]["tool"] = tool
+        report = scan_coverage.assess({"steps": steps}, ALL_STEPS, set(ALL_STEPS))
+        assert report["coverage"] == "unknown", tool
+
+
 def test_documented_run_record_names_the_steps_the_parser_plans_for():
     sys.path.insert(0, str(ETL))
     sys.path.insert(0, str(REPO_ROOT))
@@ -334,3 +407,12 @@ def test_documented_run_record_names_the_steps_the_parser_plans_for():
     # the template must not hard-code `ran`: a scanner that errored is `failed`
     assert '"status": "ran"' not in text
     assert "`failed`" in text
+
+
+def test_doc_describes_unread_exactly_as_the_code_behaves():
+    """An empty nuclei-output.jsonl is a result (Nuclei found nothing), so the doc must not
+    list "empty" among the things that make a ran scanner partial."""
+    text = " ".join(EXAMPLES.read_text(encoding="utf-8").split())
+    assert "missing, empty" not in text and "empty or malformed" not in text
+    assert "missing or malformed" in text
+    assert "an empty file is a result" in text

@@ -121,11 +121,17 @@ leaves no usable output. One entry per step. A step never leaves the record, bec
 Step A8 writes it to `scan-meta.json` and the ingest step reads it back to mark the scan
 `complete`, `partial` or `unknown`.
 
-Every step that ran must also leave its result file in the scan directory (A4
-`checksec.json`, A5 `yara-matches.json`, A6 `strings-findings.txt`, A7
-`header-analysis.json`). Ingest marks a scan `complete` only when it read a result for
-each step; a step recorded `ran` whose file is missing, empty or unparseable reads
-`partial`.
+Every step that ran must also leave its result file, under exactly this name, directly in
+the scan directory (A4 `checksec.json`, A5 `yara-matches.json`, A6
+`strings-findings.txt`, A7 `header-analysis.json`). Ingest reads only those names, only
+at the top level of the scan directory (a stale `old/checksec.json` or a
+`checksec-old.json` is ignored and named), and marks a scan `complete` only when it read
+a result for each step. A step recorded `ran` whose file is missing or unparseable, or
+whose content is not that step's output, reads `partial`. A result that is legitimately
+empty counts as read: an empty `strings-findings.txt` is a result (grep matched
+nothing), and `[]` in `yara-matches.json` is a clean YARA run. A step read only in part
+is `partial` too: at most the first 50 strings entries become findings, and when the
+file holds more, ingest says how many were not parsed.
 
 ### Step A4: Run checksec
 
@@ -185,7 +191,12 @@ property holds and `false` when it does not (each `false` becomes a finding):
 
 PE checks: `signed`, `debug_symbols_stripped`, `no_known_vulnerable_compiler`. ELF
 checks: `interpreter_trusted`, `symbols_stripped`, `no_writable_executable_sections`.
-A check named anything else is still read and reported as a medium finding.
+`format` must be `pe` or `elf`, and the file counts as read only if it holds at least one
+of that format's checks with a boolean value; otherwise ingest leaves `header_analysis`
+unread (`partial`) and names why. A value that is not `true` or `false` (0, null,
+`"no"`) is ignored and reported, and makes the step `partial`. A check named anything
+else is still reported as a medium finding when `false`, and noted; it cannot make the
+file count as read on its own.
 
 ### Step A8: Store Results
 
@@ -247,8 +258,9 @@ py -3.12 templates/security/etl/parse_binary.py --client {client} --scans-dir {s
 Each finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`,
 read from the `steps` run record in `scan-meta.json` and from what the parser actually
 read: `complete` only when all four steps are recorded `ran` AND a result was read for
-each, `partial` naming each skipped, failed, or ran-but-unread step (missing, empty or
-unparseable result file), `unknown` when `scan-meta.json` has no usable run record (an
+each, `partial` naming each skipped, failed, ran-but-unread (missing or unparseable
+result file, or one that is not that step's output) or only partly read step (strings
+over the 50-entry cap, ignored header values), `unknown` when `scan-meta.json` has no usable run record (an
 older scan directory, a malformed entry, a step recorded twice). `coverage.json` holds
 the same per scan directory, with the limitations. It is the only place coverage shows
 when a scan produced no findings, and it is written even when ingest then exits 1

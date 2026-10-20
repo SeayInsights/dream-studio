@@ -366,23 +366,34 @@ def jsonl_is_clean(path: Path) -> bool:
     return True
 
 
-def read_result_file(path: Path, target_name: str) -> tuple[str | None, list[dict]]:
-    """Parse one result file: (the planned step it is the output of or None, findings).
+#: The result file each scanner leaves in the scan directory, by the exact name
+#: examples.md tells the agent to write (R3-R5), mapped to the step it is the output of.
+#: Only these names, only at the top level of the scan directory, are read: a stale
+#: `old/zap-report.json` or a `zap-config.json` holding ZAP-shaped JSON is not evidence
+#: that a scanner ran.
+RESULT_FILES = {"zap-report.json": "zap", "nuclei-output.jsonl": "nuclei"}
 
-    Raises on a file that cannot be read or parsed; the caller reports it and the step
-    stays unread.
+
+def read_result_file(path: Path, target_name: str) -> scan_coverage.Read:
+    """Parse one result file into a scan_coverage.Read.
+
+    A zap-report.json counts as ZAP's result only if it has the ZAP report shape, and a
+    nuclei-output.jsonl only if every line parses. Raises on a file that cannot be read
+    or parsed (the caller names it and the step stays unread).
     """
-    if path.suffix == ".jsonl":
+    expected = RESULT_FILES[path.name]
+    if expected == "nuclei":
         findings = parse_nuclei_jsonl(path, target_name)
-        return ("nuclei" if jsonl_is_clean(path) else None), findings
+        if jsonl_is_clean(path):
+            return scan_coverage.Read("nuclei", findings, [], [])
+        notes = [f"{path.name} has a line that is not valid JSON, so it is not a read result"]
+        return scan_coverage.Read(None, findings, [], notes)
     with open(path, encoding="utf-8") as fh:
         raw = json.load(fh)
     findings = detect_and_parse(raw, path, target_name)
     if isinstance(raw, dict) and "@version" in raw and "site" in raw:
-        return "zap", findings
-    if path.name.startswith("nuclei") and jsonl_is_clean(path):
-        return "nuclei", findings
-    return None, findings
+        return scan_coverage.Read("zap", findings, [], [])
+    return scan_coverage.Read(None, findings, [], [f"{path.name} does not have the ZAP report shape"])
 
 
 # ── Deduplication ────────────────────────────────────────────────────────────
@@ -567,34 +578,37 @@ def main() -> None:
             scan_coverage.report("parse_dast", scan_reports, args.coverage_output)
             sys.exit(1)
 
-        scan_files = sorted(
-            f
-            for f in scans_dir.rglob("*")
-            if f.suffix in (".json", ".jsonl")
-            and f.is_file()
-            and any(k in f.name.lower() for k in ("zap", "nuclei"))
+        candidates = sorted(
+            f for f in scans_dir.rglob("*") if f.name in RESULT_FILES and f.is_file()
         )
+        scan_files, ignored = scan_coverage.split_by_scan_dir(scans_dir, candidates)
         dirs = scan_coverage.scan_dirs(scans_dir, scan_files)
 
         findings_by_key: dict[str, list[dict]] = {}
-        read_by_key: dict[str, set[str]] = {}
+        state_by_key: dict[str, scan_coverage.ScanRead] = {}
+        for key, paths in ignored.items():
+            state = state_by_key.setdefault(key, scan_coverage.ScanRead())
+            for path in paths:
+                rel = path.relative_to(key).as_posix()
+                state.notes.append(f"{rel} was ignored: results are read only from {key} itself")
         for sf in scan_files:
             target_name = (
                 sf.parent.parent.name if sf.parent.name.count("-") == 2 else sf.parent.name
             )
             key, _ = scan_coverage.scan_key(sf, scans_dir)
+            state = state_by_key.setdefault(key, scan_coverage.ScanRead())
             print(f"[parse_dast] Parsing {sf.name} → target={target_name}", file=sys.stderr)
             try:
-                step, parsed = read_result_file(sf, target_name)
+                result = read_result_file(sf, target_name)
             except Exception as exc:
                 print(f"  [error] Failed to parse {sf.name}: {exc}", file=sys.stderr)
+                state.notes.append(f"{sf.name} could not be read: {scan_coverage.short(exc)}")
                 continue
-            if step is not None:
-                read_by_key.setdefault(key, set()).add(step)
-            findings_by_key.setdefault(key, []).extend(parsed)
-            print(f"  → {len(parsed)} findings", file=sys.stderr)
+            state.add(result)
+            findings_by_key.setdefault(key, []).extend(result.findings)
+            print(f"  → {len(result.findings)} findings", file=sys.stderr)
 
-        reports = scan_coverage.assess_all(dirs, PLANNED_STEPS, read_by_key)
+        reports = scan_coverage.assess_all(dirs, PLANNED_STEPS, state_by_key)
         scan_reports.extend(reports.values())
         all_findings: list[dict] = []
         for key, found in findings_by_key.items():

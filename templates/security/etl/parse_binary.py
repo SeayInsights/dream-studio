@@ -319,11 +319,30 @@ def parse_yara_json(data: object, target_name: str, binary_hash: str = "") -> li
 # ── Parser: strings analysis ─────────────────────────────────────────────────
 
 
-def parse_strings_findings(data: dict, target_name: str, binary_hash: str = "") -> list[dict]:
+#: At most this many strings entries become findings (a strings dump can be enormous).
+#: Entries beyond it are not parsed, and that is reported as a limitation that makes the
+#: strings step partial: a cap on what is read is never silent.
+MAX_STRINGS_FINDINGS = 50
+
+
+def parse_strings_findings(
+    data: dict,
+    target_name: str,
+    binary_hash: str = "",
+    degraded: list[str] | None = None,
+) -> list[dict]:
     findings_list = data.get("findings", [])
+    if not isinstance(findings_list, list):
+        raise ValueError("strings `findings` is not a list")
     results = []
 
-    for i, item in enumerate(findings_list[:50], 1):
+    if len(findings_list) > MAX_STRINGS_FINDINGS and degraded is not None:
+        degraded.append(
+            f"only the first {MAX_STRINGS_FINDINGS} of {len(findings_list)} strings entries "
+            f"were parsed; the other {len(findings_list) - MAX_STRINGS_FINDINGS} were not"
+        )
+
+    for i, item in enumerate(findings_list[:MAX_STRINGS_FINDINGS], 1):
         value = item.get("value", "") if isinstance(item, dict) else str(item)
         value = value.strip()
         if not value:
@@ -387,14 +406,19 @@ def parse_strings_findings(data: dict, target_name: str, binary_hash: str = "") 
 # ── Auto-detect format ───────────────────────────────────────────────────────
 
 
-def parse_strings_text(text: str, target_name: str, binary_hash: str = "") -> list[dict]:
+def parse_strings_text(
+    text: str,
+    target_name: str,
+    binary_hash: str = "",
+    degraded: list[str] | None = None,
+) -> list[dict]:
     """strings-findings.txt as examples.md A6 writes it: one grep match per line.
 
     An empty file is a real result (the grep matched nothing), not a missing one.
     """
     lines = [ln for ln in text.splitlines() if ln.strip()]
     return parse_strings_findings(
-        {"findings": [{"value": ln} for ln in lines]}, target_name, binary_hash
+        {"findings": [{"value": ln} for ln in lines]}, target_name, binary_hash, degraded
     )
 
 
@@ -443,14 +467,65 @@ HEADER_CHECK_META = {
 }
 
 
-def parse_header_json(data: dict, target_name: str, binary_hash: str = "") -> list[dict]:
+#: The check names examples.md A7 lists, per `format`. A header-analysis.json counts as
+#: read only if it has at least one of these for its format, with a boolean value.
+HEADER_FORMAT_CHECKS = {
+    "pe": ("signed", "debug_symbols_stripped", "no_known_vulnerable_compiler"),
+    "elf": ("interpreter_trusted", "symbols_stripped", "no_writable_executable_sections"),
+}
+
+
+def _clean_name(name: object, limit: int = 60) -> str:
+    """A check name made safe to put in a rule id or message: printable, single-line, short."""
+    return "".join(ch for ch in str(name) if ch.isprintable())[:limit] or "?"
+
+
+def parse_header_json(
+    data: dict,
+    target_name: str,
+    binary_hash: str = "",
+    degraded: list[str] | None = None,
+    notes: list[str] | None = None,
+) -> list[dict]:
+    """header-analysis.json -> findings; raises ValueError when it is not a usable result.
+
+    Usable means: `format` is `pe` or `elf`, and `checks` has at least one check the doc
+    lists for that format with a boolean value. A non-boolean value is never read as
+    pass or fail: it is ignored and reported (`degraded`, so the step is partial). A
+    name the doc does not list for the format keeps its documented medium finding when
+    false, and is noted; it cannot make the file count as read by itself.
+    """
+    fmt = data.get("format")
+    if not isinstance(fmt, str) or fmt not in HEADER_FORMAT_CHECKS:
+        raise ValueError(f"unrecognised header format {_clean_name(fmt)!r}; expected pe or elf")
+    checks = data["checks"]
+    known = HEADER_FORMAT_CHECKS[fmt]
+    if not any(isinstance(checks.get(k), bool) for k in known):
+        raise ValueError(
+            f"no recognised {fmt} check with a boolean value (expected one of {', '.join(known)})"
+        )
+
+    non_boolean = [_clean_name(k) for k, v in checks.items() if not isinstance(v, bool)]
+    if non_boolean and degraded is not None:
+        degraded.append(
+            f"check(s) with a non-boolean value were ignored, not read as pass or fail: "
+            f"{', '.join(non_boolean[:10])}" + (" ..." if len(non_boolean) > 10 else "")
+        )
+    unrecognised = [_clean_name(k) for k in checks if k not in known]
+    if unrecognised and notes is not None:
+        notes.append(
+            f"unrecognised {fmt} check name(s), reported as medium findings when false: "
+            f"{', '.join(unrecognised[:10])}" + (" ..." if len(unrecognised) > 10 else "")
+        )
+
     findings = []
-    for check_name, value in data["checks"].items():
+    for check_name, value in checks.items():
         if value is not False:
             continue
-        meta = HEADER_CHECK_META.get(str(check_name), {})
-        rule_id = f"BIN-hdr-{check_name}"
-        fp = _fingerprint(target_name, f"header{check_name}", rule_id)
+        safe = _clean_name(check_name)
+        meta = HEADER_CHECK_META.get(check_name, {}) if check_name in known else {}
+        rule_id = f"BIN-hdr-{safe}"
+        fp = _fingerprint(target_name, f"header{safe}", rule_id)
         severity = meta.get("severity", "medium")
         findings.append(
             {
@@ -460,9 +535,7 @@ def parse_header_json(data: dict, target_name: str, binary_hash: str = "") -> li
                 "line": None,
                 "rule_id": rule_id,
                 "severity": severity,
-                "message": meta.get(
-                    "message", f"Header check '{check_name}' failed ({data.get('format', '?')})"
-                ),
+                "message": meta.get("message", f"Header check '{safe}' failed ({fmt})"),
                 "cwe": meta.get("cwe", ""),
                 "owasp": meta.get("owasp", ""),
                 "scanner": "header_analysis",
@@ -512,48 +585,77 @@ def detect_step(data: object, filename: str = "") -> str | None:
 
 
 def detect_and_parse(
-    data: object, filename: str, target_name: str, binary_hash: str = ""
+    data: object,
+    filename: str,
+    target_name: str,
+    binary_hash: str = "",
+    degraded: list[str] | None = None,
+    notes: list[str] | None = None,
 ) -> list[dict]:
     step = detect_step(data, filename)
     if step == "header_analysis":
-        return parse_header_json(data, target_name, binary_hash)
+        return parse_header_json(data, target_name, binary_hash, degraded, notes)
     if step == "checksec":
         return parse_checksec_json(data, target_name, binary_hash)
     if step == "yara":
         return parse_yara_json(data, target_name, binary_hash)
     if step == "strings":
-        return parse_strings_findings(data, target_name, binary_hash)
+        return parse_strings_findings(data, target_name, binary_hash, degraded)
     if isinstance(data, dict) and "error" in data and len(data) == 1:
         return []
     print(f"  [warn] Could not detect binary analysis format for {filename}", file=sys.stderr)
     return []
 
 
-def read_result_file(
-    path: Path, target_name: str, binary_hash: str
-) -> tuple[str | None, list[dict]]:
-    """Parse one result file: (the planned step it is the output of or None, findings).
+#: The result file each planned step leaves in the scan directory, by the exact name
+#: examples.md tells the agent to write (A4-A7), mapped to the step it is the output of.
+#: Only these names, only at the top level of the scan directory, are read: a stale
+#: `old/checksec.json`, a `checksec-old.json` or a `strings-notes.txt` is not evidence
+#: that a step ran. `strings-findings.json` is the name an earlier version of the doc
+#: gave for strings; old scan directories may hold it.
+RESULT_FILES = {
+    "checksec.json": "checksec",
+    "yara-matches.json": "yara",
+    "strings-findings.txt": "strings",
+    "strings-findings.json": "strings",
+    "header-analysis.json": "header_analysis",
+}
 
-    Raises on a file that cannot be read or parsed; the caller reports it and the step
-    stays unread.
+
+def read_result_file(path: Path, target_name: str, binary_hash: str) -> scan_coverage.Read:
+    """Parse one result file into a scan_coverage.Read.
+
+    The file counts for a step only if its content is that step's output: a checksec.json
+    holding YARA output, or an error object, reads as no step. Raises on a file that
+    cannot be read or parsed (the caller names it and the step stays unread).
     """
+    expected = RESULT_FILES[path.name]
+    degraded: list[str] = []
+    notes: list[str] = []
     if path.suffix == ".txt":
-        text = path.read_text(encoding="utf-8")
-        return "strings", parse_strings_text(text, target_name, binary_hash)
-    with open(path, encoding="utf-8") as fh:
-        raw = json.load(fh)
-    step = detect_step(raw, path.name)
-    return step, detect_and_parse(raw, path.name, target_name, binary_hash)
+        text = path.read_bytes().decode("utf-8", errors="replace")
+        lost = text.count("�")
+        if lost:
+            notes.append(
+                f"{path.name}: {lost} undecodable byte(s) were replaced; "
+                "the lines holding them may be misread"
+            )
+        step: str | None = expected
+        findings = parse_strings_text(text, target_name, binary_hash, degraded)
+    else:
+        with open(path, encoding="utf-8") as fh:
+            raw = json.load(fh)
+        step = detect_step(raw, path.name)
+        findings = detect_and_parse(raw, path.name, target_name, binary_hash, degraded, notes)
+    if step != expected:
+        notes.append(f"{path.name} is not a {expected} result (content reads as {step or 'none'})")
+        return scan_coverage.Read(None, findings, [], notes)
+    return scan_coverage.Read(step, findings, degraded, notes)
 
 
 def is_result_file(path: Path) -> bool:
-    """Result files this parser reads: checksec/yara/strings/header-analysis JSON, strings .txt."""
-    name = path.name.lower()
-    if not path.is_file():
-        return False
-    if path.suffix == ".json":
-        return any(k in name for k in ("checksec", "yara", "strings", "header-analysis"))
-    return path.suffix == ".txt" and "strings" in name
+    """Result files this parser reads: the documented names, files only."""
+    return path.name in RESULT_FILES and path.is_file()
 
 
 # ── Deduplication ────────────────────────────────────────────────────────────
@@ -745,28 +847,35 @@ def main() -> None:
             except Exception:
                 pass
 
-        scan_files = sorted(f for f in scans_dir.rglob("*") if is_result_file(f))
+        candidates = sorted(f for f in scans_dir.rglob("*") if is_result_file(f))
+        scan_files, ignored = scan_coverage.split_by_scan_dir(scans_dir, candidates)
         dirs = scan_coverage.scan_dirs(scans_dir, scan_files)
 
         findings_by_key: dict[str, list[dict]] = {}
-        read_by_key: dict[str, set[str]] = {}
+        state_by_key: dict[str, scan_coverage.ScanRead] = {}
+        for key, paths in ignored.items():
+            state = state_by_key.setdefault(key, scan_coverage.ScanRead())
+            for path in paths:
+                rel = path.relative_to(key).as_posix()
+                state.notes.append(f"{rel} was ignored: results are read only from {key} itself")
         for sf in scan_files:
             target_name = (
                 sf.parent.parent.name if sf.parent.name.count("-") == 2 else sf.parent.name
             )
             key, _ = scan_coverage.scan_key(sf, scans_dir)
+            state = state_by_key.setdefault(key, scan_coverage.ScanRead())
             print(f"[parse_binary] Parsing {sf.name} → target={target_name}", file=sys.stderr)
             try:
-                step, parsed = read_result_file(sf, target_name, binary_hash)
+                result = read_result_file(sf, target_name, binary_hash)
             except Exception as exc:
                 print(f"  [error] Failed to parse {sf.name}: {exc}", file=sys.stderr)
+                state.notes.append(f"{sf.name} could not be read: {scan_coverage.short(exc)}")
                 continue
-            if step is not None:
-                read_by_key.setdefault(key, set()).add(step)
-            findings_by_key.setdefault(key, []).extend(parsed)
-            print(f"  → {len(parsed)} findings", file=sys.stderr)
+            state.add(result)
+            findings_by_key.setdefault(key, []).extend(result.findings)
+            print(f"  → {len(result.findings)} findings", file=sys.stderr)
 
-        reports = scan_coverage.assess_all(dirs, PLANNED_STEPS, read_by_key)
+        reports = scan_coverage.assess_all(dirs, PLANNED_STEPS, state_by_key)
         scan_reports.extend(reports.values())
         all_findings: list[dict] = []
         for key, found in findings_by_key.items():

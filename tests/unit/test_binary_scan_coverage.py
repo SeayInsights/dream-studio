@@ -618,6 +618,262 @@ def test_overall_partial_beats_unknown_beats_complete():
     assert scan_coverage.overall([]) == "unknown"
 
 
+# -- truncation: a cap on what is parsed is a limitation, never silent ---------------------------------
+
+
+def _write_strings(d: Path, lines: list[str]) -> None:
+    (d / "strings-findings.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _strings_findings(findings: list[dict]) -> list[dict]:
+    return [f for f in findings if f["scanner"] == "strings"]
+
+
+@pytest.mark.parametrize(
+    ("lines", "total"),
+    [
+        ([f"https://host{i}.example/x" for i in range(500)], 500),
+        (["password=same"] * 200_000, 200_000),
+        ([f"https://host{i}.example/x" for i in range(51)], 51),
+    ],
+    ids=["500-distinct-urls", "200k-duplicate-lines", "just-over-the-cap"],
+)
+def test_strings_over_the_cap_is_partial_and_says_how_much_was_kept(
+    lines: list[str], total: int, tmp_path: Path
+):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "app", {"steps": _steps()})
+    _write_strings(d, lines)
+
+    findings, coverage, _ = _run(scans, tmp_path)
+
+    assert len(_strings_findings(findings)) == 50
+    scan = coverage["scans"][0]
+    assert coverage["coverage"] == "partial"
+    assert scan["degraded_steps"] == ["strings"]
+    expected = f"first 50 of {total}"
+    assert any(expected in lim for lim in scan["limitations"]), scan["limitations"]
+    # the same words reach every finding, not just the sidecar
+    assert {f["coverage"] for f in findings} == {"partial"}
+    assert all(any(expected in lim for lim in f["limitations"]) for f in findings)
+
+
+@pytest.mark.parametrize("count", [0, 1, 50])
+def test_strings_at_or_under_the_cap_is_not_truncated(count: int, tmp_path: Path):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "app", {"steps": _steps()})
+    _write_strings(d, [f"https://host{i}.example/x" for i in range(count)])
+
+    findings, coverage, _ = _run(scans, tmp_path)
+
+    assert len(_strings_findings(findings)) == count
+    assert coverage["coverage"] == "complete"
+    assert coverage["scans"][0]["degraded_steps"] == []
+
+
+def test_strings_json_over_the_cap_is_partial_too(tmp_path: Path):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "app", {"steps": _steps()})
+    (d / "strings-findings.txt").unlink()
+    items = [{"value": f"https://host{i}.example/x"} for i in range(60)]
+    (d / "strings-findings.json").write_text(json.dumps({"findings": items}), encoding="utf-8")
+
+    _, coverage, _ = _run(scans, tmp_path)
+
+    assert coverage["coverage"] == "partial"
+    assert any("first 50 of 60" in lim for lim in coverage["scans"][0]["limitations"])
+
+
+# -- header analysis: junk is not a read result ------------------------------------------------------
+
+
+def _header(scans: Path, tmp: Path, content: object) -> tuple[list[dict], dict]:
+    s = scans / "app" / "2026-10-19"
+    s.mkdir(parents=True)
+    for step in ("checksec", "yara", "strings"):
+        name, body = OUTPUTS[step]
+        (s / name).write_text(body if isinstance(body, str) else json.dumps(body), encoding="utf-8")
+    (s / "header-analysis.json").write_text(json.dumps(content), encoding="utf-8")
+    (s / "scan-meta.json").write_text(json.dumps({"steps": _steps()}), encoding="utf-8")
+    findings, coverage, _ = _run(scans, tmp)
+    return findings, coverage
+
+
+JUNK_HEADERS = [
+    {"format": "pe", "checks": {}},
+    {"format": "banana", "checks": {"signed": False}},
+    {"format": "elf", "checks": {"signed": False}},  # a PE check under elf
+    {"format": "pe", "checks": {"interpreter_trusted": False}},  # an ELF check under pe
+    {"format": "pe", "checks": {"signed": 0}},
+    {"format": "pe", "checks": {"signed": None, "debug_symbols_stripped": "false"}},
+    {"format": "pe", "checks": {"signed": "no"}},
+    {"format": "pe", "checks": {"made_up_check": False}},
+    {"format": ["pe"], "checks": {"signed": False}},
+    {"format": {"a": 1}, "checks": {"signed": False}},
+    {"checks": {"signed": False}},  # no format key
+    {"format": "pe", "checks": ["signed"]},
+    {"format": "PE", "checks": {"signed": False}},
+]
+
+
+@pytest.mark.parametrize("content", JUNK_HEADERS, ids=lambda c: json.dumps(c)[:50])
+def test_junk_header_analysis_is_unread_partial_and_says_why(content: object, tmp_path: Path):
+    findings, coverage = _header(tmp_path / "scans", tmp_path, content)
+
+    scan = coverage["scans"][0]
+    assert coverage["coverage"] == "partial"
+    assert "header_analysis" in scan["unread_steps"]
+    assert "header_analysis" not in scan["steps_read"]
+    assert not [f for f in findings if f["scanner"] == "header_analysis"]
+    # the other three steps still read, and the reason header-analysis.json was refused is named
+    assert scan["steps_read"] == ["checksec", "yara", "strings"]
+    assert any("header-analysis.json" in lim for lim in scan["limitations"])
+
+
+def test_header_check_with_a_non_boolean_value_is_reported_not_silently_ignored(tmp_path: Path):
+    content = {"format": "pe", "checks": {"signed": False, "debug_symbols_stripped": 0}}
+
+    findings, coverage = _header(tmp_path / "scans", tmp_path, content)
+
+    scan = coverage["scans"][0]
+    assert "header_analysis" in scan["steps_read"]
+    assert scan["degraded_steps"] == ["header_analysis"]
+    assert coverage["coverage"] == "partial"
+    assert any("non-boolean" in lim and "debug_symbols_stripped" in lim for lim in scan["limitations"])
+    assert {f["rule_id"] for f in findings if f["scanner"] == "header_analysis"} == {"BIN-hdr-signed"}
+
+
+def test_header_check_name_the_doc_does_not_list_is_a_medium_finding_but_never_the_read(
+    tmp_path: Path,
+):
+    """Unknown names keep the documented medium finding; they cannot make the step read alone."""
+    content = {"format": "pe", "checks": {"signed": True, "zzz_custom": False}}
+
+    findings, coverage = _header(tmp_path / "scans", tmp_path, content)
+
+    scan = coverage["scans"][0]
+    custom = [f for f in findings if f["rule_id"] == "BIN-hdr-zzz_custom"]
+    assert [f["severity"] for f in custom] == ["medium"]
+    assert "header_analysis" in scan["steps_read"]
+    assert coverage["coverage"] == "complete"
+    assert any("zzz_custom" in lim and "unrecognised" in lim for lim in scan["limitations"])
+
+
+def test_header_check_names_cannot_inject_control_characters_or_unbounded_text(tmp_path: Path):
+    evil = "evil\nname\x1b[31m " + "x" * 5000
+    content = {"format": "pe", "checks": {"signed": True, evil: False}}
+
+    findings, coverage = _header(tmp_path / "scans", tmp_path, content)
+
+    (f,) = [f for f in findings if f["scanner"] == "header_analysis"]
+    for text in (f["rule_id"], f["message"], f["id"]):
+        assert text.isprintable() and "\n" not in text
+    assert len(f["rule_id"]) < 100 and len(f["message"]) < 300
+    assert all(len(lim) < 1000 and lim.isprintable() for lim in coverage["scans"][0]["limitations"])
+
+
+# -- result discovery: documented names, top level of the scan directory ------------------------------
+
+
+def test_stale_result_in_a_subdirectory_is_ignored_and_named(tmp_path: Path):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "app", {"steps": _steps()}, outputs=("yara", "strings", "header_analysis"))
+    old = d / "old"
+    old.mkdir()
+    (old / "checksec.json").write_text(json.dumps(OUTPUTS["checksec"][1]), encoding="utf-8")
+
+    findings, coverage, _ = _run(scans, tmp_path)
+
+    scan = coverage["scans"][0]
+    assert len(coverage["scans"]) == 1
+    assert scan["unread_steps"] == ["checksec"]
+    assert coverage["coverage"] == "partial"
+    assert not [f for f in findings if f["scanner"] == "checksec"]
+    assert any("old" in lim and "checksec.json" in lim and "ignored" in lim for lim in scan["limitations"])
+
+
+@pytest.mark.parametrize(
+    ("name", "content", "step"),
+    [
+        ("checksec-old.json", json.dumps(OUTPUTS["checksec"][1]), "checksec"),
+        ("yara-notes.json", json.dumps(OUTPUTS["yara"][1]), "yara"),
+        ("strings-notes.txt", "this is prose about password handling\n", "strings"),
+        ("header-analysis.bak.json", json.dumps(OUTPUTS["header_analysis"][1]), "header_analysis"),
+    ],
+)
+def test_a_wrongly_named_file_is_not_the_result_of_the_step(
+    name: str, content: str, step: str, tmp_path: Path
+):
+    scans = tmp_path / "scans"
+    d = _scan(
+        scans, "app", {"steps": _steps()}, outputs=tuple(s for s in ALL_STEPS if s != step)
+    )
+    (d / name).write_text(content, encoding="utf-8")
+
+    _, coverage, _ = _run(scans, tmp_path)
+
+    assert coverage["coverage"] == "partial"
+    assert coverage["scans"][0]["unread_steps"] == [step]
+
+
+def test_a_result_file_holding_another_steps_output_does_not_count_for_its_own(tmp_path: Path):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "app", {"steps": _steps()})
+    (d / "checksec.json").write_text(json.dumps(OUTPUTS["yara"][1]), encoding="utf-8")
+
+    _, coverage, _ = _run(scans, tmp_path)
+
+    assert coverage["scans"][0]["unread_steps"] == ["checksec"]
+
+
+def test_an_empty_list_is_a_clean_yara_result_only_in_the_yara_file(tmp_path: Path):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "app", {"steps": _steps()})
+    (d / "checksec.json").write_text("[]", encoding="utf-8")  # not yara output
+
+    _, coverage, _ = _run(scans, tmp_path)
+
+    assert coverage["scans"][0]["unread_steps"] == ["checksec"]
+
+
+def test_detect_step_reads_an_empty_list_as_yara_only_by_the_yara_name():
+    sys.path.insert(0, str(REPO_ROOT))
+    import parse_binary
+
+    assert parse_binary.detect_step([], "yara-matches.json") == "yara"
+    assert parse_binary.detect_step([], "checksec.json") is None
+    assert parse_binary.detect_step([], "") is None
+    assert parse_binary.detect_step({"checks": {"signed": True}}, "header-analysis.json") is None
+    assert parse_binary.detect_step({"format": "pe", "checks": {}}, "x") == "header_analysis"
+
+
+@pytest.mark.parametrize("tool", ["", "   ", 5, ["t"], {}, None, True])
+def test_a_ran_step_needs_a_real_tool_name(tool):
+    steps = _steps()
+    steps[0]["tool"] = tool
+
+    report = scan_coverage.assess({"steps": steps}, ALL_STEPS, set(ALL_STEPS))
+
+    assert report["coverage"] == "unknown"
+    assert any("without naming the tool" in lim for lim in report["limitations"])
+
+
+# -- undecodable bytes ----------------------------------------------------------------------------------
+
+
+def test_strings_with_undecodable_bytes_are_still_read_and_the_loss_is_named(tmp_path: Path):
+    scans = tmp_path / "scans"
+    d = _scan(scans, "app", {"steps": _steps()})
+    (d / "strings-findings.txt").write_bytes(b"password=ok\nsecret=\xff\xfe\xfd\n")
+
+    findings, coverage, _ = _run(scans, tmp_path)
+
+    assert len(_strings_findings(findings)) == 2
+    scan = coverage["scans"][0]
+    assert "strings" in scan["steps_read"]
+    assert any("undecodable" in lim and "3" in lim for lim in scan["limitations"])
+
+
 # -- the mode doc and the parser must agree ------------------------------------------------------------
 
 
@@ -640,3 +896,13 @@ def test_documented_result_files_are_the_ones_the_parser_reads():
     for step, (name, _content) in OUTPUTS.items():
         assert name in text, f"examples.md never names {name}, the file read for {step}"
     assert "strings-findings.json" not in text
+
+
+def test_doc_describes_unread_exactly_as_the_code_behaves():
+    """An empty strings-findings.txt is a result (grep matched nothing), so the doc must not
+    list "empty" among the things that make a ran step partial."""
+    text = " ".join(EXAMPLES.read_text(encoding="utf-8").split())
+    assert "missing, empty" not in text and "empty or unparseable" not in text
+    assert "missing or unparseable" in text
+    assert "an empty `strings-findings.txt` is a result" in text
+    assert "first 50" in text  # the strings cap and its `partial` are documented

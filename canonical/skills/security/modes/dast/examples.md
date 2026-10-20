@@ -203,9 +203,12 @@ Extract from user input:
 2. This normalizes ZAP + Nuclei outputs to unified findings with `target_type: webapp`.
    Each finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`,
    read from the `steps` run record in `scan-meta.json`: `complete` only when both scanners
-   ran and a result was read for each (`zap-report.json`, `nuclei-output.jsonl`),
-   `partial` naming each skipped, failed, or ran-but-unread scanner (missing, empty or
-   malformed output), `unknown` when there is no usable run record (an older scan
+   ran and a result was read for each (`zap-report.json`, `nuclei-output.jsonl`: exactly
+   these names, directly in the scan directory; a stale `old/zap-report.json` or a
+   `zap-config.json` is ignored and named), `partial` naming each skipped, failed, or
+   ran-but-unread scanner (output missing or malformed, or `zap-report.json` without the
+   ZAP report shape). An empty `nuclei-output.jsonl` is a read result (Nuclei found
+   nothing). `unknown` when there is no usable run record (an older scan
    directory, a malformed or duplicated entry). `coverage.json` holds the same per scan
    directory, the only place coverage shows when a scan produced no findings; it is
    written even when ingest exits 1 because there was nothing to parse.
