@@ -87,9 +87,9 @@ control/context/repo.py|283|bare-except-pass
 control/context/repo.py|311|bare-except-pass
 control/context/repo.py|336|bare-except-pass
 control/execution/dispatch_helpers.py|33|bare-except-pass
-control/execution/dispatch_tracking.py|62|bare-except-pass
-control/execution/dispatch_tracking.py|76|bare-except-pass
-control/execution/dispatch_tracking.py|94|bare-except-pass
+control/execution/dispatch_tracking.py|65|bare-except-pass
+control/execution/dispatch_tracking.py|79|bare-except-pass
+control/execution/dispatch_tracking.py|97|bare-except-pass
 control/execution/models/selector.py|169|bare-except-pass
 control/execution/models/selector.py|206|falsy-return
 control/execution/models/selector.py|231|bare-except-pass
@@ -797,8 +797,8 @@ runtime/hooks/meta/on-skill-metrics.py|69|bare-except-pass
 runtime/hooks/meta/on-skill-telemetry.py|17|bare-except-pass
 runtime/hooks/meta/on-skill-telemetry.py|39|falsy-return
 runtime/hooks/meta/on-skill-telemetry.py|51|bare-except-pass
-runtime/hooks/meta/on-stop-dispatch.py|130|bare-except-pass
-runtime/hooks/meta/on-stop-dispatch.py|141|bare-except-pass
+runtime/hooks/meta/on-stop-dispatch.py|131|bare-except-pass
+runtime/hooks/meta/on-stop-dispatch.py|142|bare-except-pass
 runtime/hooks/meta/on-stop-dispatch.py|19|bare-except-pass
 runtime/hooks/meta/on-stop-dispatch.py|72|bare-except-pass
 runtime/hooks/meta/on-stop-enforce.py|358|falsy-return

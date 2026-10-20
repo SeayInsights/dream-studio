@@ -394,6 +394,8 @@ know this side was examined and found unaffected, not merely unmentioned. -->
 
 <!-- Reviewed 2026-10-16 -- feat/installable-runtime: added "Where node prompts are written" (workflow_context_dir: the checkout's .planning/workflow, or <home>/planning/workflow in an installed app). No workflow YAML, engine, state, gate or retry contract change. -->
 
+<!-- 2026-10-19: fix/stop-hook-timeouts-and-inflight-log. Hook dispatchers (control/execution/dispatch_tracking.py, runtime/hooks/meta/on-stop-dispatch.py) now mark each running handler with a state/hook-inflight/ file, and the Stop hooks in hooks_template.json carry a timeout (see docs/HOOK_RUNTIME.md). No workflow YAML, engine, state, validator, cost, registry, or retry contract change. Workflow runtime contract unchanged. -->
+
 <!-- 2026-10-19: fix/session-end-analyzers-background. runtime/hooks/meta/on-session-end.py now closes the session row and hands the learning-loop analyzers to a detached worker (`--analyze`) instead of running them inside the Stop hook (see docs/HOOK_RUNTIME.md). No workflow YAML, engine, state, validator, cost, registry, or retry contract change. Workflow runtime contract unchanged. -->
 
 <!-- 2026-10-19: fix/route-bare-phrase-triggers. runtime/hooks/meta/on-prompt-route.py now gives every trigger from mode metadata a trailing colon, so a quoted trigger such as "why does" no longer matches ordinary prose (see docs/HOOK_RUNTIME.md). No workflow YAML, engine, state, validator, cost, registry, or retry contract change. Workflow runtime contract unchanged. -->
