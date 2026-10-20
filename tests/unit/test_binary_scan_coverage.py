@@ -739,8 +739,12 @@ def test_header_check_with_a_non_boolean_value_is_reported_not_silently_ignored(
     assert "header_analysis" in scan["steps_read"]
     assert scan["degraded_steps"] == ["header_analysis"]
     assert coverage["coverage"] == "partial"
-    assert any("non-boolean" in lim and "debug_symbols_stripped" in lim for lim in scan["limitations"])
-    assert {f["rule_id"] for f in findings if f["scanner"] == "header_analysis"} == {"BIN-hdr-signed"}
+    assert any(
+        "non-boolean" in lim and "debug_symbols_stripped" in lim for lim in scan["limitations"]
+    )
+    assert {f["rule_id"] for f in findings if f["scanner"] == "header_analysis"} == {
+        "BIN-hdr-signed"
+    }
 
 
 def test_header_check_name_the_doc_does_not_list_is_a_medium_finding_but_never_the_read(
@@ -789,7 +793,9 @@ def test_stale_result_in_a_subdirectory_is_ignored_and_named(tmp_path: Path):
     assert scan["unread_steps"] == ["checksec"]
     assert coverage["coverage"] == "partial"
     assert not [f for f in findings if f["scanner"] == "checksec"]
-    assert any("old" in lim and "checksec.json" in lim and "ignored" in lim for lim in scan["limitations"])
+    assert any(
+        "old" in lim and "checksec.json" in lim and "ignored" in lim for lim in scan["limitations"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -805,9 +811,7 @@ def test_a_wrongly_named_file_is_not_the_result_of_the_step(
     name: str, content: str, step: str, tmp_path: Path
 ):
     scans = tmp_path / "scans"
-    d = _scan(
-        scans, "app", {"steps": _steps()}, outputs=tuple(s for s in ALL_STEPS if s != step)
-    )
+    d = _scan(scans, "app", {"steps": _steps()}, outputs=tuple(s for s in ALL_STEPS if s != step))
     (d / name).write_text(content, encoding="utf-8")
 
     _, coverage, _ = _run(scans, tmp_path)

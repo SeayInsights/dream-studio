@@ -393,7 +393,9 @@ def read_result_file(path: Path, target_name: str) -> scan_coverage.Read:
     findings = detect_and_parse(raw, path, target_name)
     if isinstance(raw, dict) and "@version" in raw and "site" in raw:
         return scan_coverage.Read("zap", findings, [], [])
-    return scan_coverage.Read(None, findings, [], [f"{path.name} does not have the ZAP report shape"])
+    return scan_coverage.Read(
+        None, findings, [], [f"{path.name} does not have the ZAP report shape"]
+    )
 
 
 # ── Deduplication ────────────────────────────────────────────────────────────

@@ -336,7 +336,10 @@ def test_stale_report_in_a_subdirectory_is_ignored_and_named(tmp_path: Path):
     assert len(coverage["scans"]) == 1
     assert scan["unread_steps"] == ["zap"]
     assert {f["rule_id"].split("-")[1] for f in findings} == {"nuc"}
-    assert any("old" in lim and "zap-report.json" in lim and "ignored" in lim for lim in scan["limitations"])
+    assert any(
+        "old" in lim and "zap-report.json" in lim and "ignored" in lim
+        for lim in scan["limitations"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -372,7 +375,9 @@ def test_a_wrongly_named_file_is_not_the_result_of_the_scanner(
     [{"site": []}, {"site": [{"@name": "x", "alerts": []}]}, {"@version": "2"}, [], "zap", 5, None],
     ids=lambda r: json.dumps(r)[:30],
 )
-def test_a_zap_report_without_the_zap_shape_is_unread_and_never_crashes(report: object, tmp_path: Path):
+def test_a_zap_report_without_the_zap_shape_is_unread_and_never_crashes(
+    report: object, tmp_path: Path
+):
     scans = tmp_path / "scans"
     d = _scan(scans, "web", {"steps": _steps()})
     (d / "zap-report.json").write_text(json.dumps(report), encoding="utf-8")
