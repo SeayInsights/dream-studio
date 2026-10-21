@@ -24,7 +24,13 @@ from pathlib import Path
 
 def _checkout_root() -> Path | None:
     """The dream-studio checkout these scripts sit in, or None when they are installed."""
-    root = Path(__file__).resolve().parents[3]
+    parents = Path(__file__).resolve().parents
+    if len(parents) < 4:
+        # A directory like /etl or /app/etl (or tools/etl on a Windows drive root) is too close
+        # to the filesystem root to sit three levels inside a checkout: the scripts are
+        # installed there, not in a checkout.
+        return None
+    root = parents[3]
     return root if (root / "core" / "config" / "paths.py").is_file() else None
 
 

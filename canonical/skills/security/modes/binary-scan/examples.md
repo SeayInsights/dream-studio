@@ -189,24 +189,32 @@ Its exit status is the run record for this step:
   "pefile is not installed" or "pyelftools is not installed", is the reason). Record
   `header_analysis` as `skipped` with that reason -- do not just move on, because nothing
   downstream can tell a skipped header analysis from one that found nothing.
-- It exits 2: the file is not a PE or ELF binary (record `skipped`, reason from stderr) or
-  could not be read (record `failed`, reason from stderr). No file is written.
+- It exits 2: the file is not a PE or ELF binary (record `skipped`, reason from stderr), could
+  not be read, or is truncated: its headers point past the end of the file (record `failed`,
+  reason from stderr). No file is written. A missing `--output` directory is created; one that
+  cannot be written also exits 2.
 
 The file is one boolean per check, `true` when the property holds and `false` when it does
 not (each `false` becomes a finding), plus the caveats the writer attaches, which ingest
 carries into the limitations:
 
 ```json
-{"format": "pe", "checks": {"signed": false, "debug_symbols_stripped": true},
- "notes": ["signed: an Authenticode signature block is present; the signature was not verified"]}
+{"format": "pe", "checks": {"signed": true, "debug_symbols_stripped": true},
+ "notes": ["signed: an embedded Authenticode signature block is present; the signature was not verified"]}
 ```
 
-PE checks written: `signed` (a signature block is present; it is not verified, and a
-Windows binary signed with a revoked or broken signature still reads `true`) and
+PE checks written: `signed`, only ever as `true` (an embedded Authenticode signature block is
+present; it is not verified, and a binary signed with a revoked or broken signature still reads
+`true`). No embedded block is NOT written as `false`: Windows system files (notepad.exe,
+cmd.exe) are signed through catalogs that pefile cannot see, so the absence says nothing, and
+the file's `notes` say the check was not made, which ingest carries into the limitations. And
 `debug_symbols_stripped` (no embedded COFF symbol table; the PDB path an MSVC build leaves in
 the debug directory does not count). ELF checks written: `interpreter_trusted` (no
 interpreter, or a standard loader in a system directory), `symbols_stripped` (no `.symtab`)
-and `no_writable_executable_sections` (no section both writable and executable). A PE check
+and `no_writable_executable_sections` (no section both writable and executable); the
+interpreter must be one a real distribution ships (`ld-linux-x86-64.so.2`, `ld-linux-aarch64.so.1`,
+`ld.so.1`, `ld-musl-<arch>.so.1`, ...) in a system directory, not just a name that starts
+the same way. A PE check
 this doc used to list, `no_known_vulnerable_compiler`, is not computed: it needs a list of
 defective compiler versions and none ships, so it is never written (a `true` would be a
 claim nothing checked). Ingest still accepts it from a hand-written file.

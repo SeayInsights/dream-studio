@@ -9,13 +9,17 @@ Writes exactly what parse_binary.py reads for the `header_analysis` step:
 Only checks this script can actually compute are written; a check it cannot decide is left
 out, never written as `true`.
 
-    PE  (needs pefile):         signed, debug_symbols_stripped
+    PE  (needs pefile):         signed (only ever `true`), debug_symbols_stripped
     ELF (needs pyelftools):     interpreter_trusted, symbols_stripped,
                                 no_writable_executable_sections
 
 `no_known_vulnerable_compiler` (examples.md used to list it for PE) is not computed: it would
-need a list of defective compiler versions, and none ships. `signed` means an Authenticode
-signature block is present; the signature is NOT verified, and `notes` says so.
+need a list of defective compiler versions, and none ships. `signed` is written only when an
+embedded Authenticode signature block is present, and then as `true` (the signature is NOT
+verified). Its absence proves nothing: Windows system files (notepad.exe, cmd.exe) are signed
+through catalogs that pefile cannot see, so "no embedded block" is never written as `false`;
+`notes` says the check was not made. A PE or ELF whose headers point past the end of the
+file (a truncated copy) is refused, not analysed.
 
 Usage:
     py -3.12 header_analysis.py <binary> --output <scan-dir>/header-analysis.json
@@ -39,11 +43,22 @@ from pathlib import Path
 
 EXIT_OK, EXIT_UNREADABLE, EXIT_NO_LIBRARY = 0, 2, 3
 
-#: Directories a system dynamic loader lives in, and the file names of the loaders.
+#: Where a system dynamic loader lives, and what real distributions call it. Derived from
+#: glibc and musl's own naming, not from a pattern that "looks like a loader": a name that
+#: merely starts with `ld-linux` (`/lib64/ld-linux-evil`, `ld-linux-x86-64.so.2.evil`) is NOT one.
 TRUSTED_LOADER_DIRS = frozenset(
     {"/lib", "/lib32", "/lib64", "/libx32", "/usr/lib", "/usr/lib32", "/usr/lib64", "/usr/libx32"}
 )
-_LOADER_NAME = re.compile(r"^ld(-linux[\w.+-]*|-musl[\w.+-]*|\.so)(\.\d+)?$")
+#: Debian/Ubuntu multiarch: /lib/x86_64-linux-gnu, /usr/lib/aarch64-linux-gnu, ...
+_MULTIARCH_DIR = re.compile(r"/(?:usr/)?lib(?:32|64|x32)?/[a-z0-9_]+-linux-[a-z0-9]+")
+_LOADER_NAME = re.compile(
+    r"ld-linux(?:-(?:x86-64|aarch64|armhf|x32|mipsn8|riscv64-lp64d?|loongarch-lp64[ds]))?"
+    r"\.so\.[0-9]+"
+    r"|ld64\.so\.[12]"
+    r"|ld\.so\.1"
+    r"|ld-musl-(?:x86_64|aarch64|armhf|arm|i386|s390x|powerpc64le|powerpc|riscv64|mips|mipsel"
+    r"|mips64|loongarch64)\.so\.1"
+)
 
 SHF_WRITE, SHF_EXECINSTR = 0x1, 0x4
 
@@ -64,27 +79,63 @@ def interpreter_is_trusted(interp: str | None) -> bool:
     """No interpreter (a static binary) or a standard system loader is trusted."""
     if not interp:
         return True
-    return posixpath.dirname(interp) in TRUSTED_LOADER_DIRS and bool(
-        _LOADER_NAME.match(posixpath.basename(interp))
+    directory = posixpath.dirname(interp)
+    return bool(
+        (directory in TRUSTED_LOADER_DIRS or _MULTIARCH_DIR.fullmatch(directory))
+        and _LOADER_NAME.fullmatch(posixpath.basename(interp))
     )
 
 
-def pe_checks(pe) -> tuple[dict[str, bool], list[str]]:
-    """Checks from an open pefile.PE. `pe` needs OPTIONAL_HEADER.DATA_DIRECTORY (a list of
-    entries with VirtualAddress and Size) and FILE_HEADER.NumberOfSymbols."""
-    directories = pe.OPTIONAL_HEADER.DATA_DIRECTORY
-    security = directories[IMAGE_DIRECTORY_ENTRY_SECURITY]
-    checks = {
-        "signed": bool(security.VirtualAddress and security.Size),
-        # A PDB path in the debug directory is not embedded symbols (an MSVC build has one);
-        # a COFF symbol table is.
-        "debug_symbols_stripped": not pe.FILE_HEADER.NumberOfSymbols,
-    }
-    notes = [
-        "signed: an Authenticode signature block is present; the signature was not verified",
+def pe_extent_problem(pe, file_size: int) -> str | None:
+    """Why this PE cannot be analysed because it runs past the end of the file; None if it
+    does not. A truncated copy still parses its headers, and its directory offsets point
+    past EOF: reading `signed` or the symbol table from it would be reading nothing."""
+    security = pe.OPTIONAL_HEADER.DATA_DIRECTORY[IMAGE_DIRECTORY_ENTRY_SECURITY]
+    if security.VirtualAddress and security.VirtualAddress + security.Size > file_size:
+        return "the certificate table lies past the end of the file"
+    header = pe.FILE_HEADER
+    symbols = header.NumberOfSymbols
+    if symbols and header.PointerToSymbolTable + 18 * symbols > file_size:
+        return "the COFF symbol table lies past the end of the file"
+    for section in getattr(pe, "sections", ()):
+        if section.SizeOfRawData and section.PointerToRawData + section.SizeOfRawData > file_size:
+            return "a section's data lies past the end of the file"
+    return None
+
+
+def pe_checks(pe, file_size: int) -> tuple[dict[str, bool], list[str]]:
+    """Checks from an open pefile.PE of a file of `file_size` bytes. `pe` needs
+    OPTIONAL_HEADER.DATA_DIRECTORY (entries with VirtualAddress and Size), FILE_HEADER
+    (NumberOfSymbols, PointerToSymbolTable) and `sections` (PointerToRawData, SizeOfRawData).
+    Raises ValueError for a PE that runs past the end of the file."""
+    problem = pe_extent_problem(pe, file_size)
+    if problem:
+        raise ValueError(f"the PE file is truncated or malformed: {problem}")
+    security = pe.OPTIONAL_HEADER.DATA_DIRECTORY[IMAGE_DIRECTORY_ENTRY_SECURITY]
+    embedded = bool(security.VirtualAddress and security.Size)
+    checks: dict[str, bool] = {}
+    notes: list[str] = []
+    if embedded:
+        checks["signed"] = True
+        notes.append(
+            "signed: an embedded Authenticode signature block is present; the signature was "
+            "not verified"
+        )
+    else:
+        # Not `signed: false`. Windows system files are signed through catalogs, which
+        # pefile cannot see, so the absence of an embedded block says nothing.
+        notes.append(
+            "signed: not reported. No embedded Authenticode signature block was found, which "
+            "does not mean the file is unsigned: catalog signatures (Windows system files) "
+            "are not checked by this script"
+        )
+    # A PDB path in the debug directory is not embedded symbols (an MSVC build has one);
+    # a COFF symbol table is.
+    checks["debug_symbols_stripped"] = not pe.FILE_HEADER.NumberOfSymbols
+    notes.append(
         "debug_symbols_stripped: a PDB path in the debug directory is not counted, "
-        "only an embedded COFF symbol table",
-    ]
+        "only an embedded COFF symbol table"
+    )
     return checks, notes
 
 
@@ -121,7 +172,7 @@ def analyze(path: Path) -> tuple[str, str, dict[str, bool], list[str]]:
             raise ImportError("pefile is not installed") from None
         pe = pefile.PE(str(path), fast_load=True)
         try:
-            checks, notes = pe_checks(pe)
+            checks, notes = pe_checks(pe, path.stat().st_size)
         finally:
             pe.close()
         return "pe", "pefile", checks, notes
@@ -155,7 +206,13 @@ def main(argv: list[str] | None = None) -> int:
     out = {"format": fmt, "checks": checks}
     if notes:
         out["notes"] = notes
-    Path(args.output).write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
+    try:
+        target = Path(args.output)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        print(f"[header_analysis] could not write {args.output}: {exc}", file=sys.stderr)
+        return EXIT_UNREADABLE
     print(f"[header_analysis] {fmt} checks by {tool} -> {args.output}", file=sys.stderr)
     return EXIT_OK
 

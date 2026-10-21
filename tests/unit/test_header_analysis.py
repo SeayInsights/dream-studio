@@ -20,6 +20,7 @@ written in: UNVERIFIED against the real libraries until they run somewhere that 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import types
@@ -40,13 +41,26 @@ import parse_binary  # noqa: E402
 # -- stand-ins shaped like the libraries --------------------------------------------------------
 
 
-def _fake_pe(signed: bool, symbols: int) -> SimpleNamespace:
+#: Big enough that every offset the fakes use lies inside the file.
+FILE_SIZE = 0xA000
+
+
+def _fake_pe(
+    signed: bool,
+    symbols: int,
+    sections: tuple[tuple[int, int], ...] = ((0x400, 0x1000),),
+    symbol_pointer: int = 0x8000,
+) -> SimpleNamespace:
     directories = [SimpleNamespace(VirtualAddress=0, Size=0) for _ in range(16)]
     if signed:
         directories[4] = SimpleNamespace(VirtualAddress=0x9000, Size=0x2E0)
     return SimpleNamespace(
         OPTIONAL_HEADER=SimpleNamespace(DATA_DIRECTORY=directories),
-        FILE_HEADER=SimpleNamespace(NumberOfSymbols=symbols),
+        FILE_HEADER=SimpleNamespace(NumberOfSymbols=symbols, PointerToSymbolTable=symbol_pointer),
+        sections=[
+            SimpleNamespace(PointerToRawData=pointer, SizeOfRawData=size)
+            for pointer, size in sections
+        ],
         close=lambda: None,
     )
 
@@ -77,20 +91,69 @@ def _fake_elf(
 # -- the checks -----------------------------------------------------------------------------------
 
 
-def test_pe_checks_signed_and_symbols():
-    checks, notes = header_analysis.pe_checks(_fake_pe(signed=True, symbols=0))
+def test_pe_checks_a_signature_block_reads_signed_true():
+    checks, notes = header_analysis.pe_checks(_fake_pe(signed=True, symbols=0), FILE_SIZE)
     assert checks == {"signed": True, "debug_symbols_stripped": True}
-    checks, _ = header_analysis.pe_checks(_fake_pe(signed=False, symbols=1200))
-    assert checks == {"signed": False, "debug_symbols_stripped": False}
-    assert any("not verified" in n for n in notes)  # a signature block is not a valid signature
+    assert any("not verified" in n and "present" in n for n in notes)
+
+
+def test_no_embedded_signature_is_never_written_as_signed_false():
+    """notepad.exe and cmd.exe are Authenticode-valid through a catalog pefile cannot see:
+    `signed: false` would become a finding about a signed file."""
+    checks, notes = header_analysis.pe_checks(_fake_pe(signed=False, symbols=40), FILE_SIZE)
+    assert checks == {"debug_symbols_stripped": False}
+    assert "signed" not in checks
+    text = " ".join(notes)
+    assert "signed: not reported" in text and "catalog signatures" in text
+    assert "block is present" not in text  # no claim of a block next to the absent check
 
 
 def test_pe_signed_needs_both_an_address_and_a_size():
     pe = _fake_pe(signed=False, symbols=0)
     pe.OPTIONAL_HEADER.DATA_DIRECTORY[4] = SimpleNamespace(VirtualAddress=0x9000, Size=0)
-    assert header_analysis.pe_checks(pe)[0]["signed"] is False
+    assert "signed" not in header_analysis.pe_checks(pe, FILE_SIZE)[0]
     pe.OPTIONAL_HEADER.DATA_DIRECTORY[4] = SimpleNamespace(VirtualAddress=0, Size=0x2E0)
-    assert header_analysis.pe_checks(pe)[0]["signed"] is False
+    assert "signed" not in header_analysis.pe_checks(pe, FILE_SIZE)[0]
+
+
+# -- a truncated PE is refused, not analysed ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "pe, what",
+    [
+        (_fake_pe(signed=True, symbols=0), "certificate table"),
+        (_fake_pe(signed=False, symbols=10, symbol_pointer=0x9FF8), "COFF symbol table"),
+        (_fake_pe(signed=False, symbols=0, sections=((0x9800, 0x1000),)), "section"),
+    ],
+    ids=["certificate-table", "symbol-table", "section-data"],
+)
+def test_offsets_past_the_end_of_the_file_are_refused(pe, what):
+    with pytest.raises(ValueError, match=what):
+        header_analysis.pe_checks(pe, 0x9000 if what == "certificate table" else 0xA000)
+
+
+def test_offsets_exactly_at_the_end_of_the_file_are_fine():
+    pe = _fake_pe(signed=True, symbols=0, sections=((0x400, 0x8C00),))
+    # certificate table ends at 0x9000 + 0x2E0 = 0x92E0; the section at 0x400 + 0x8C00 = 0x9000
+    header_analysis.pe_checks(pe, 0x92E0)
+    with pytest.raises(ValueError):
+        header_analysis.pe_checks(pe, 0x92DF)
+
+
+def test_a_section_with_no_raw_data_is_not_a_truncation():
+    header_analysis.pe_checks(_fake_pe(False, 0, sections=((0x9999999, 0),)), FILE_SIZE)
+
+
+def test_a_truncated_pe_exits_2_through_main_and_writes_nothing(tmp_path, monkeypatch, capsys):
+    _install_fake_libs(monkeypatch, _fake_pe(signed=True, symbols=0), None)
+    binary = tmp_path / "trunc.exe"
+    binary.write_bytes(b"MZ" + b"\x00" * 998)  # 1000 bytes: the fake's offsets are past EOF
+    out = tmp_path / "h.json"
+    assert header_analysis.main([str(binary), "--output", str(out)]) == 2
+    err = capsys.readouterr().err
+    assert "truncated" in err and "certificate table" in err
+    assert not out.exists()
 
 
 def test_elf_checks_for_a_hardened_binary():
@@ -118,18 +181,72 @@ def test_a_static_elf_has_no_interpreter_and_that_is_trusted():
     assert header_analysis.elf_checks(_fake_elf(interp=None))[0]["interpreter_trusted"] is True
 
 
+REAL_LOADERS = [
+    "/lib64/ld-linux-x86-64.so.2",
+    "/lib/ld-linux.so.2",
+    "/lib/ld-linux-aarch64.so.1",
+    "/lib/ld-linux-armhf.so.3",
+    "/lib/ld-linux-riscv64-lp64d.so.1",
+    "/lib/ld-linux-riscv64-lp64.so.1",
+    "/lib/ld-linux-mipsn8.so.1",
+    "/libx32/ld-linux-x32.so.2",
+    "/lib64/ld-linux-loongarch-lp64d.so.1",
+    "/lib64/ld64.so.2",
+    "/lib/ld64.so.1",
+    "/usr/lib/ld.so.1",
+    "/lib/ld-musl-x86_64.so.1",
+    "/lib/ld-musl-aarch64.so.1",
+    "/lib/ld-musl-armhf.so.1",
+    "/lib/ld-musl-s390x.so.1",
+    "/usr/lib64/ld-linux-x86-64.so.2",
+    "/usr/lib/ld-linux-aarch64.so.1",
+    # Debian and Ubuntu multiarch
+    "/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+    "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+    "/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1",
+    "/lib/arm-linux-gnueabihf/ld-linux-armhf.so.3",
+    "/lib/i386-linux-gnu/ld-linux.so.2",
+    "/lib/powerpc64le-linux-gnu/ld64.so.2",
+    "/lib/s390x-linux-gnu/ld64.so.1",
+    "/lib32/ld-linux.so.2",
+]
+LOOKALIKES = [
+    "/lib64/ld-linux-evil",
+    "/lib64/ld-linux-evil.so.2",
+    "/lib64/ld-linux-x86-64.so.2.evil",
+    "/lib64/ld-linux-x86-64.so.2/../../tmp/x",
+    "/lib64/../tmp/ld-linux-x86-64.so.2",
+    "/tmp/ld-linux-x86-64.so.2",
+    "/lib64/evil.so",
+    "/lib64/ld-linux-x86-64.so.",
+    "/lib64/ld-linux-x86-64.so.2 ",
+    "/lib64/ld-linux-x86-64.so.2\n",
+    "/lib64/ld-musl-evil.so.1",
+    "/lib64/ld-musl-x86_64.so.2",
+    "/lib64/ld.so.2",
+    "/lib64/ld64.so.3",
+    "/lib/evil-linux-gnu/../ld-linux-x86-64.so.2",
+    "/lib/x86_64-linux-gnu/sub/ld-linux-x86-64.so.2",
+    "/opt/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+    "/nix/store/abc-glibc/lib/ld-linux-x86-64.so.2",
+    "ld-linux-x86-64.so.2",
+    "/lib64/LD-LINUX-X86-64.SO.2",
+]
+
+
+@pytest.mark.parametrize("interp", REAL_LOADERS)
+def test_every_real_loader_in_a_system_directory_is_trusted(interp: str):
+    assert header_analysis.interpreter_is_trusted(interp) is True
+
+
+@pytest.mark.parametrize("interp", LOOKALIKES)
+def test_lookalikes_and_other_directories_are_not_trusted(interp: str):
+    assert header_analysis.interpreter_is_trusted(interp) is False
+
+
 @pytest.mark.parametrize(
     "interp, trusted",
     [
-        ("/lib64/ld-linux-x86-64.so.2", True),
-        ("/lib/ld-linux.so.2", True),
-        ("/lib/ld-linux-aarch64.so.1", True),
-        ("/lib/ld-musl-x86_64.so.1", True),
-        ("/usr/lib/ld.so.1", True),
-        ("/lib64/ld-linux-x86-64.so.2/../../tmp/x", False),
-        ("/tmp/ld-linux-x86-64.so.2", False),
-        ("/lib64/evil.so", False),
-        ("ld-linux-x86-64.so.2", False),
         ("", True),
         (None, True),
     ],
@@ -173,12 +290,12 @@ def _install_fake_libs(monkeypatch, pe: SimpleNamespace | None, elf: SimpleNames
 
 def _binary(tmp_path: Path, magic: bytes, name: str = "app.bin") -> Path:
     path = tmp_path / name
-    path.write_bytes(magic + b"\x00" * 64)
+    path.write_bytes(magic + b"\x00" * (FILE_SIZE - len(magic)))
     return path
 
 
 def test_pe_output_is_read_by_parse_binary(tmp_path: Path, monkeypatch):
-    _install_fake_libs(monkeypatch, _fake_pe(signed=False, symbols=0), None)
+    _install_fake_libs(monkeypatch, _fake_pe(signed=False, symbols=40), None)
     out = tmp_path / "header-analysis.json"
     assert header_analysis.main([str(_binary(tmp_path, b"MZ")), "--output", str(out)]) == 0
 
@@ -192,9 +309,10 @@ def test_pe_output_is_read_by_parse_binary(tmp_path: Path, monkeypatch):
     degraded: list[str] = []
     notes: list[str] = []
     findings = parse_binary.parse_header_json(data, "app", "", degraded, notes)
-    assert [f["rule_id"] for f in findings] == ["BIN-hdr-signed"]  # signed=false is the finding
+    # only what was established is a finding: symbols are embedded; "unsigned" is not claimed
+    assert [f["rule_id"] for f in findings] == ["BIN-hdr-debug_symbols_stripped"]
     assert degraded == []  # every value was a boolean the parser could read
-    assert any("not verified" in n for n in notes)  # and the caveat reaches the limitations
+    assert any("catalog signatures" in n for n in notes)  # and the caveat reaches the limitations
 
 
 def test_elf_output_is_read_by_parse_binary(tmp_path: Path, monkeypatch):
@@ -217,7 +335,7 @@ def test_elf_output_is_read_by_parse_binary(tmp_path: Path, monkeypatch):
 
 
 def test_every_check_the_script_can_write_is_one_the_parser_lists():
-    pe = set(header_analysis.pe_checks(_fake_pe(True, 0))[0])
+    pe = set(header_analysis.pe_checks(_fake_pe(True, 0), FILE_SIZE)[0])
     elf = set(header_analysis.elf_checks(_fake_elf())[0])
     assert pe <= set(parse_binary.HEADER_FORMAT_CHECKS["pe"])
     assert elf == set(parse_binary.HEADER_FORMAT_CHECKS["elf"])
@@ -289,6 +407,83 @@ def test_a_binary_the_library_cannot_parse_exits_2(tmp_path: Path, monkeypatch, 
     assert "DOS Header magic not found" in capsys.readouterr().err
 
 
+def test_a_missing_output_directory_is_created(tmp_path: Path, monkeypatch):
+    _install_fake_libs(monkeypatch, _fake_pe(signed=True, symbols=0), None)
+    out = tmp_path / "does" / "not" / "exist" / "header-analysis.json"
+    assert header_analysis.main([str(_binary(tmp_path, b"MZ")), "--output", str(out)]) == 0
+    assert json.loads(out.read_text(encoding="utf-8"))["format"] == "pe"
+
+
+def test_an_output_that_cannot_be_written_exits_2_not_with_a_traceback(
+    tmp_path: Path, monkeypatch, capsys
+):
+    _install_fake_libs(monkeypatch, _fake_pe(signed=True, symbols=0), None)
+    blocker = tmp_path / "a-file"
+    blocker.write_text("x", encoding="utf-8")
+    code = header_analysis.main(
+        [str(_binary(tmp_path, b"MZ")), "--output", str(blocker / "sub" / "h.json")]
+    )
+    assert code == 2
+    assert "could not write" in capsys.readouterr().err
+
+
+def test_the_documented_exit_codes_hold_from_a_fresh_interpreter(tmp_path: Path):
+    """No traceback, only 0, 2 or 3, for the three ways a run can end."""
+    missing_dir = tmp_path / "nope" / "h.json"
+    text = tmp_path / "t.txt"
+    text.write_text("hello", encoding="utf-8")
+    run = [sys.executable, str(ETL / "header_analysis.py")]
+    for args, expected in (
+        ([str(text), "--output", str(missing_dir)], 2),
+        ([str(tmp_path / "absent.exe"), "--output", str(missing_dir)], 2),
+    ):
+        proc = subprocess.run(
+            run + args, capture_output=True, text=True, encoding="utf-8", errors="replace"
+        )
+        assert proc.returncode == expected, proc.stderr
+        assert "Traceback" not in proc.stderr
+
+
+# -- etl_home near the root of the filesystem ---------------------------------------------------------
+
+
+def _checkout_root_for(location: Path):
+    """etl_home's `_checkout_root` as if the file lived at `location` (a path that need not
+    exist), run from a copy of the module source with its __file__ replaced."""
+    source = (ETL / "etl_home.py").read_text(encoding="utf-8")
+    namespace = {"__file__": str(location), "__name__": "etl_home_probe"}
+    exec(compile(source, str(ETL / "etl_home.py"), "exec"), namespace)  # noqa: S102
+    return namespace["_checkout_root"]()
+
+
+@pytest.mark.parametrize(
+    "parts",
+    [("etl",), ("app", "etl"), ("tools", "etl"), ("a", "b", "etl")],
+    ids=["root/etl", "root/app/etl", "root/tools/etl", "root/a/b/etl"],
+)
+def test_an_etl_directory_near_the_filesystem_root_is_installed_not_a_checkout(parts):
+    anchor = Path(Path.cwd().anchor)
+    location = anchor.joinpath(*parts, "etl_home.py")
+    assert _checkout_root_for(location) is None  # no IndexError
+
+
+def test_a_shallow_install_falls_back_to_the_environment(monkeypatch, tmp_path):
+    anchor = Path(Path.cwd().anchor)
+    source = (ETL / "etl_home.py").read_text(encoding="utf-8")
+    namespace = {"__file__": str(anchor / "etl" / "etl_home.py"), "__name__": "etl_home_probe"}
+    exec(compile(source, str(ETL / "etl_home.py"), "exec"), namespace)  # noqa: S102
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "h"))
+    assert namespace["home_dir"]() == tmp_path / "h"
+    monkeypatch.delenv("DREAM_STUDIO_HOME")
+    assert namespace["home_dir"]() == Path.home() / ".dream-studio"
+
+
+def test_the_real_location_is_still_recognised_as_a_checkout():
+    import etl_home
+
+    assert etl_home._checkout_root() == REPO_ROOT
+
+
 # -- the doc ------------------------------------------------------------------------------------------
 
 
@@ -299,6 +494,10 @@ def test_step_a7_documents_the_script_and_its_exit_codes():
     assert "exits 0" in a7 and "exits 3" in a7 and "exits 2" in a7
     assert "no_known_vulnerable_compiler" in a7 and "not computed" in a7
     assert "not verified" in a7  # `signed` is a signature block, not a valid signature
+    assert "`signed`, only ever as `true`" in a7
+    assert "not written as `false`" in a7 and "catalogs that pefile cannot see" in a7
+    assert "is truncated" in a7 and "missing `--output` directory is created" in a7
+    assert '"signed": false' not in a7  # the example must not show the claim we refuse to make
 
 
 # -- real libraries, when present --------------------------------------------------------------------
@@ -311,8 +510,43 @@ def test_real_library_pe_on_the_running_interpreter(tmp_path: Path):
     out = tmp_path / "header-analysis.json"
     assert header_analysis.main([sys.executable, "--output", str(out)]) == 0
     data = json.loads(out.read_text(encoding="utf-8"))
-    assert data["format"] == "pe" and set(data["checks"]) == {"signed", "debug_symbols_stripped"}
+    assert data["format"] == "pe" and "debug_symbols_stripped" in data["checks"]
+    assert set(data["checks"]) <= {"signed", "debug_symbols_stripped"}
     parse_binary.parse_header_json(data, "python", "", [], [])
+
+
+def _windows_system_binary(name: str) -> Path:
+    path = Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32" / name
+    if sys.platform != "win32" or not path.is_file():
+        pytest.skip(f"{name} is not available here")
+    return path
+
+
+@pytest.mark.parametrize("name", ["notepad.exe", "cmd.exe"])
+def test_real_library_catalog_signed_system_binaries_are_never_reported_unsigned(
+    tmp_path: Path, name: str
+):
+    """notepad.exe and cmd.exe are Authenticode-valid through a catalog: pefile sees no embedded
+    block, and the script must not turn that into `signed: false`."""
+    pytest.importorskip("pefile")
+    out = tmp_path / "header-analysis.json"
+    assert header_analysis.main([str(_windows_system_binary(name)), "--output", str(out)]) == 0
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["checks"].get("signed") is not False
+    findings = parse_binary.parse_header_json(data, name, "", [], [])
+    assert "BIN-hdr-signed" not in {f["rule_id"] for f in findings}
+
+
+def test_real_library_a_truncated_pe_is_refused(tmp_path: Path, capsys):
+    pytest.importorskip("pefile")
+    if sys.platform != "win32":
+        pytest.skip("the interpreter is not a PE file here")
+    truncated = tmp_path / "python-trunc.exe"
+    truncated.write_bytes(Path(sys.executable).read_bytes()[:1000])
+    out = tmp_path / "h.json"
+    assert header_analysis.main([str(truncated), "--output", str(out)]) == 2
+    assert "truncated" in capsys.readouterr().err
+    assert not out.exists()
 
 
 def test_real_library_elf_on_a_system_binary(tmp_path: Path):
