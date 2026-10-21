@@ -110,10 +110,10 @@ def test_an_oversize_value_is_reported_not_swallowed(db: Path, caplog):
 
 
 def test_the_log_names_the_class_and_never_the_data(db: Path, caplog):
-    secret = "api-key-AKIA0123456789"
+    secret = "customer-record-7731-do-not-log"
     conn = sqlite3.connect(db)
     conn.execute(
-        "CREATE TRIGGER leak BEFORE INSERT ON security_events WHEN NEW.title LIKE '%AKIA%' "
+        "CREATE TRIGGER leak BEFORE INSERT ON security_events WHEN NEW.title LIKE '%7731%' "
         "BEGIN SELECT RAISE(ABORT, 'rejected value ' || NEW.title); END"
     )
     conn.commit()
@@ -122,7 +122,7 @@ def test_the_log_names_the_class_and_never_the_data(db: Path, caplog):
         result = _emit(db, description=secret)
     assert result.failed
     everything = " ".join(r.getMessage() for r in caplog.records) + (result.error or "")
-    assert secret not in everything and "AKIA" not in everything
+    assert secret not in everything and "7731" not in everything
 
 
 def test_a_disabled_emitter_reports_disabled_not_failed(db: Path, monkeypatch):
