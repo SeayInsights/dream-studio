@@ -30,6 +30,21 @@ def test_atomic_write_overwrites_existing(tmp_path):
     assert target.read_text(encoding="utf-8") == "new"
 
 
+def test_atomic_write_writes_lf_by_default_on_every_os(tmp_path):
+    target = tmp_path / "lf.txt"
+    atomic_write(target, "a\nb\n")
+    assert target.read_bytes() == b"a\nb\n"
+
+
+def test_atomic_write_writes_the_newline_it_is_given(tmp_path):
+    """`newline` is the file's own line ending, for a merge into an operator's file."""
+    target = tmp_path / "crlf.txt"
+    atomic_write(target, "a\nb\n", newline="\r\n")
+    assert target.read_bytes() == b"a\r\nb\r\n"
+    atomic_write(target, "a\nb\n", newline="\n")
+    assert target.read_bytes() == b"a\nb\n"
+
+
 def test_backup_before_write_copies_existing_file(tmp_path):
     target = tmp_path / "settings.json"
     target.write_text('{"key": "value"}', encoding="utf-8")
