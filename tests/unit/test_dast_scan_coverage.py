@@ -855,18 +855,32 @@ def test_a_hostile_reason_is_bounded_and_printable(tmp_path: Path):
     assert "\x1b" not in text and len(text) < 2000
 
 
-def test_a_not_scanned_record_beside_a_real_scan_is_reported_separately(tmp_path: Path):
+def test_a_not_scanned_record_beside_a_same_day_real_scan_leaves_that_scan_alone(tmp_path: Path):
+    """The record goes in `{date}-not-scanned`, never into `{date}`: writing its scan-meta.json
+    into the day's scan directory would replace the real scan's run record."""
     scans = tmp_path / "scans"
     real = _scan(scans, "web", {"schema_version": 1, "steps": _steps()})
-    skipped = scans / "web" / "2026-10-20"
+    real_meta = (real / "scan-meta.json").read_bytes()
+    skipped = scans / "web" / "2026-10-19-not-scanned"  # the same day as the real scan
     skipped.mkdir()
     (skipped / "scan-meta.json").write_text(json.dumps(_not_scanned()), encoding="utf-8")
-    assert real.is_dir()
 
-    _, coverage, _ = _run(scans / "web", tmp_path)
+    findings, coverage, _ = _run(scans / "web", tmp_path)
 
+    assert (real / "scan-meta.json").read_bytes() == real_meta
     by_dir = {Path(s["scan_dir"]).name: s["coverage"] for s in coverage["scans"]}
-    assert by_dir == {"2026-10-19": "complete", "2026-10-20": "partial"}
+    assert by_dir == {"2026-10-19": "complete", "2026-10-19-not-scanned": "partial"}
+    assert findings and {f["coverage"] for f in findings} == {"complete"}  # real findings unharmed
+
+
+def test_the_doc_puts_the_record_in_its_own_directory_and_never_in_the_scan_directory():
+    text = " ".join(EXAMPLES.read_text(encoding="utf-8").split())
+    record = text.split("#### Not-scanned record")[1].split("```json")[0]
+    assert "`~/.dream-studio/security/scans/{client}/{target}/{date}-not-scanned/`" in record
+    assert "never written into `{date}`" in record and "replace" in record
+    # a scan's own directory is still `{date}` and ingest skips the record directory
+    locate = text.split("### Step I1: Locate Results")[1].split("### Step I2")[0]
+    assert "`{date}-not-scanned` directory" in locate and "skip" in locate
 
 
 def _documented_not_scanned(reason: str) -> dict:

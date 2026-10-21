@@ -114,9 +114,11 @@ For each target:
 
 #### Not-scanned record
 
-A target the run did not scan has no results, but it still gets a scan directory,
-`~/.dream-studio/security/scans/{client}/{target}/{date}/`, holding only this
-`scan-meta.json` (no result files):
+A target the run did not scan has no results, but it still gets a directory of its own,
+`~/.dream-studio/security/scans/{client}/{target}/{date}-not-scanned/`, holding only this
+`scan-meta.json` (no result files). It is never written into `{date}`: a scan taken the same
+day already has its `scan-meta.json` there, and writing this one would replace the real
+scan's run record. Writing the record again the same day just replaces the record.
 
 ```json
 {
@@ -226,7 +228,7 @@ Extract from user input:
 ### Step I1: Locate Results
 
 1. If `--file` provided: use that file.
-2. Else: find most recent `~/.dream-studio/security/scans/{client}/{target}/{date}/` directory.
+2. Else: find most recent `~/.dream-studio/security/scans/{client}/{target}/{date}/` directory that holds results; skip a `{date}-not-scanned` directory (it is a record, not a scan).
 3. Look for `zap-report.json` and/or `nuclei-output.jsonl`.
 
 ### Step I2: Parse Results
@@ -268,8 +270,8 @@ Show: the coverage (when it is not `complete`, say so first and name the skipped
 ### Step T1: Inventory DAST Scan Store
 
 1. List all target directories under `~/.dream-studio/security/dast/{client}/`.
-2. For each target: read `scan-meta.json` of its scan directories under `~/.dream-studio/security/scans/{client}/{target}/`. The last scan that ran is the most recent one whose `outcome` is not `not_scanned`; check its staleness (>7 days = STALE).
-3. If the most recent directory is a not-scanned record (`outcome: not_scanned`), mark the target **NOT SCANNED** with its `reason`, and show the date of the last scan that ran beside it: a stale or old scan must not read CURRENT when the latest attempt did not scan.
+2. For each target: read `scan-meta.json` of its directories under `~/.dream-studio/security/scans/{client}/{target}/` (`{date}` scans and `{date}-not-scanned` records). The last scan that ran is the most recent one whose `outcome` is not `not_scanned`; check its staleness (>7 days = STALE).
+3. If the most recent directory is a not-scanned record (`outcome: not_scanned`, a `{date}-not-scanned` directory), mark the target **NOT SCANNED** with its `reason`, and show the date of the last scan that ran beside it: a stale or old scan must not read CURRENT when the latest attempt did not scan.
 4. For targets in profile but not scanned: mark NO RESULTS.
 
 ### Step T2: Render Coverage Report

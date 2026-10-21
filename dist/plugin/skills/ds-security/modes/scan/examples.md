@@ -50,7 +50,7 @@ ingest) is `unknown`. Both are the vocabulary of `binary-scan` and `dast`.
 
 ## Anti-patterns
 
-- **Running scanners directly** — this skill generates configuration and ingests results. It never executes `semgrep`, `trivy`, or other tools locally. Scanning happens in GitHub Actions.
+- **Running scanners directly** — this skill generates configuration and ingests results. It never executes `semgrep`, `bandit`, or other tools locally. Scanning happens in GitHub Actions.
 - **Pushing to GitHub** — never push generated workflow or rule files. Output them for the user to commit. The user controls what goes into client repos.
 - **Inlining secrets from profile** — client profiles may contain tenant keys or API tokens. Never render these into workflow YAML or Semgrep rule files. Reference them as GitHub Actions secrets (`${{ secrets.KEY }}`).
 - **Treating stale results as current** — results older than 7 days are STALE. Do not surface stale findings to `secure` or `ship` without a freshness warning.

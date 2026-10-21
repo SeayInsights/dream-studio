@@ -546,3 +546,34 @@ def test_the_ingest_steps_tell_the_agent_to_record_the_run_and_the_scanners() ->
     assert "with `source` `github-actions` and no `run` it reads `unknown`" in flat
     assert "Write `run.status` as `completed`" in flat
     assert '"no runs in the SARIF"' in flat
+
+
+def test_scan_status_knows_a_not_scanned_directory_and_the_other_modes_directories():
+    """`scan status` lists what is under scans/{client}/, where dast and binary-scan also write.
+    A fresh `{date}-not-scanned` directory must never read as the latest scan (CURRENT), and a
+    dast or binary target is not a repo."""
+    text = " ".join(SCAN_SKILL.read_text(encoding="utf-8").split())
+    status = text.split("### Mode: `status`")[1]
+    inventory = status.split("#### Step T2")[1].split("#### Step T3")[0]
+    assert (
+        "Skip a directory whose `scan-meta.json` has `target_type` `webapp` or `binary`"
+        in inventory
+    )
+    assert "never the most recent scan" in inventory
+    assert "`outcome` `not_scanned`" in inventory and "{date}-not-scanned" in inventory
+    assert "NOT SCANNED" in inventory and "last scan that ran" in inventory
+    # and the example row shows it
+    assert "NOT SCANNED" in status.split("#### Step T4")[1]
+
+
+def test_the_profile_schema_lists_the_scanners_the_workflow_runs() -> None:
+    """docs/client-profile-schema.md listed trivy, codeql and zap, none of which the workflow
+    template runs; the template's own `extra_scanners` conditions are the source of truth."""
+    template = (ETL.parent / "github-actions" / "security-scan.yml.j2").read_text(encoding="utf-8")
+    runs = sorted(set(re.findall(r"'([a-z-]+)' in client\.scan\.extra_scanners", template)))
+    assert runs == ["bandit", "cyclonedx", "npm-audit", "pip-audit", "trufflehog"]
+    schema = (REPO_ROOT / "docs" / "client-profile-schema.md").read_text(encoding="utf-8")
+    line = next(ln for ln in schema.splitlines() if "extra_scanners:" in ln)
+    listed = sorted(re.findall(r'"([a-z-]+)"', line))
+    assert listed == runs, line
+    assert not {"trivy", "codeql", "zap"} & set(listed)

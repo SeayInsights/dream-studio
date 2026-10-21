@@ -169,7 +169,8 @@ Extract from user input:
 
 1. List all directories under `~/.dream-studio/security/scans/{client}/`.
 2. For each repo directory found:
-   - Find the most recent `{date}/` subdirectory.
+   - Skip a directory whose `scan-meta.json` has `target_type` `webapp` or `binary`: dast and binary-scan write under `scans/{client}/` too, and `dast status` and `binary-scan status` report them. A target is not a repo.
+   - Find the most recent `{date}/` subdirectory whose `scan-meta.json` does not say `outcome` `not_scanned`: a `{date}-not-scanned` directory is a record that a scan did not happen (see `dast`), never the most recent scan, so it must not read CURRENT. When the newest directory is one, mark the repo **NOT SCANNED** with its `reason`, and show the date of the last scan that ran beside it.
    - Read `scan-meta.json` if present, and `coverage.json` beside it.
    - Determine staleness: if most recent scan date is >7 days ago, mark **STALE**.
    - Coverage: when `coverage.json` (or the `run` / `steps` of `scan-meta.json`) says `partial` (the run did not conclude `success`, or a scanner failed, was skipped or was not read) or `unknown` (no run record), say so in the Status column next to CURRENT or STALE, for example `CURRENT (partial: run concluded failure)`. A partial scan is not a clean one.
@@ -194,6 +195,7 @@ Output as a markdown table:
 | repo-b | ✓ | 2026-04-10 | 12d | 2 | 3 | STALE |
 | repo-c | ✗ | — | — | — | — | NO SCANNER |
 | repo-d | ✓ | — | — | — | — | NO RESULTS |
+| repo-e | ✓ | 2026-04-02 | 20d | 0 | 4 | NOT SCANNED (target unreachable; last scan that ran 2026-04-02) |
 
 **Summary:** {N} repos total | {N} current | {N} stale | {N} no scanner | {N} no results
 
