@@ -218,19 +218,28 @@ def _resolve_event_project_id(raw_project_id: Any, conn: sqlite3.Connection) -> 
         return raw_project_id
 
 
-def record_execution_event(conn: sqlite3.Connection, **values: Any) -> None:
+def _as_list(v: Any) -> list:
+    if v is None:
+        return []
+    if isinstance(v, str):
+        try:
+            return json.loads(v)
+        except Exception:
+            return []
+    return list(v)
+
+
+def record_execution_event(conn: sqlite3.Connection, *, spool: bool = True, **values: Any) -> None:
+    """Write the execution_events row and, by default, spool its canonical envelope.
+
+    spool=False writes the row only; the caller then owns announcing it with
+    spool_execution_event(**values) once whatever the row belongs to is known to have been
+    stored. emit_security_finding does this so a finding that failed to store is not
+    announced.
+    """
     # Direct DB write: keeps execution_events populated so FK-constrained tables
     # (agent_invocations, route_decision_records, etc.) remain valid with
     # PRAGMA foreign_keys = ON.  Uses INSERT OR IGNORE to be idempotent.
-    def _as_list(v: Any) -> list:
-        if v is None:
-            return []
-        if isinstance(v, str):
-            try:
-                return json.loads(v)
-            except Exception:
-                return []
-        return list(v)
 
     # Resolve project key → UUID at write time so new events carry UUIDs.
     raw_project_id = values.get("project_id")
@@ -274,6 +283,12 @@ def record_execution_event(conn: sqlite3.Connection, **values: Any) -> None:
         pass
 
     # Also spool as canonical envelope for the v2 event pipeline.
+    if spool:
+        spool_execution_event(**values)
+
+
+def spool_execution_event(**values: Any) -> None:
+    """Spool the canonical envelope for an execution event (best-effort)."""
     if CanonicalEventEnvelope is None or _write_envelopes is None:
         return
     try:
@@ -366,8 +381,18 @@ def record_invocation(conn: sqlite3.Connection, invocation_type: str, **values: 
 #: a skip, not a failure, so callers that distinguish the two can.
 FINDING_DUPLICATE = "duplicate finding id"
 
+#: A plain INSERT that raised nothing and wrote nothing: a trigger's RAISE(IGNORE). It is a
+#: failed write, and says so, rather than being mistaken for a duplicate.
+INSERT_IGNORED = "insert ignored by a trigger"
 
-def _failure_reason(exc: BaseException) -> str:
+#: resolve_security_finding_reason's answer for an id that has no finding.recorded row.
+FINDING_NOT_FOUND = "finding not found"
+
+#: SQLite's extended codes for a primary-key or unique conflict: an id already present.
+_ID_CONFLICT_CODES = frozenset({1555, 2067})
+
+
+def failure_reason(exc: BaseException) -> str:
     """A short reason naming the exception class (and SQLite's error code), never its message
     or any value: the message can carry the data that failed to write."""
     code = getattr(exc, "sqlite_errorname", None)
@@ -412,27 +437,44 @@ def record_security_finding(conn: sqlite3.Connection, **values: Any) -> str | No
                 values.get("limitations"),
             )
         )
+        # A plain INSERT, not INSERT OR IGNORE: OR IGNORE also swallows a CHECK, NOT NULL or
+        # trigger failure and reports rowcount 0, which is indistinguishable from "already
+        # there". A real duplicate raises a primary-key conflict (handled below), which is
+        # also what a concurrent writer of the same id between a caller's own pre-check
+        # and this INSERT produces.
         cursor = conn.execute(
-            f"INSERT OR IGNORE INTO security_events ({', '.join(columns)}) "
+            f"INSERT INTO security_events ({', '.join(columns)}) "
             f"VALUES ({', '.join('?' * len(columns))})",
             tuple(columns.values()),
         )
-        reason = None if cursor.rowcount else FINDING_DUPLICATE
+        if cursor.rowcount:
+            reason = None
+        else:
+            # No error and no row: only a trigger's RAISE(IGNORE) does this. If the id is
+            # nonetheless there it is a duplicate; if not, the write failed.
+            present = conn.execute(
+                "SELECT 1 FROM security_events WHERE event_id = ?", (values["finding_id"],)
+            ).fetchone()
+            reason = FINDING_DUPLICATE if present else INSERT_IGNORED
+    except sqlite3.IntegrityError as exc:
+        if getattr(exc, "sqlite_errorcode", None) in _ID_CONFLICT_CODES:
+            reason = FINDING_DUPLICATE
+        else:
+            reason = failure_reason(exc)
     except Exception as exc:  # noqa: BLE001
-        reason = _failure_reason(exc)
+        reason = failure_reason(exc)
+    if reason not in (None, FINDING_DUPLICATE):
         logger.warning("security finding was not written to security_events: %s", reason)
 
     # If a non-open status was supplied, immediately write a status_changed event
     # so FindingsProjection sees the correct current_status (not the default 'open').
     initial_status = values.get("status", "open")
     if reason is None and initial_status and initial_status != "open":
-        try:
-            recorded = resolve_security_finding(
-                conn, finding_id=values["finding_id"], resolution=initial_status
-            )
-            reason = None if recorded else "status event not written"
-        except Exception as exc:  # noqa: BLE001
-            reason = _failure_reason(exc)
+        reason = resolve_security_finding_reason(
+            conn, finding_id=values["finding_id"], resolution=initial_status
+        )
+        if reason == FINDING_NOT_FOUND:
+            reason = "status event not written"
         if reason is not None:
             logger.warning("security finding status was not recorded: %s", reason)
 
@@ -443,22 +485,26 @@ def record_security_finding(conn: sqlite3.Connection, **values: Any) -> str | No
     return reason
 
 
-def resolve_security_finding(
+def resolve_security_finding_reason(
     conn: sqlite3.Connection, *, finding_id: str, resolution: str | None = None
-) -> bool:
+) -> str | None:
     """Record a finding.status_changed event on the security_events spine.
 
     findings table retired in migration 112 (WO-Y). Checks the spine directly
-    (findings_current_status, dropped migration 140, was always derived from
-    this same spine and could never disagree with it). Writes the status
-    event via the provided conn to avoid cross-connection writes. Returns
-    True if the finding exists and the status event was written.
+    (findings_current_status, dropped migration 140, was always derived from this same
+    spine and could never disagree with it) and writes the status event via the provided
+    conn to avoid cross-connection writes.
+
+    Returns None when the status event was written, FINDING_NOT_FOUND when there is no
+    such finding, and otherwise a short reason the write failed (see failure_reason): a
+    failure is distinct from not-found, and nothing is swallowed. The caller logs.
     """
     import uuid as _uuid
     from datetime import datetime as _dt
 
     valid_resolutions = {"fixed", "mitigated", "accepted", "false_positive", "resolved", "closed"}
     new_status = resolution if resolution in valid_resolutions else "fixed"
+    reason: str | None
     try:
         row = conn.execute(
             "SELECT event_id FROM security_events"
@@ -466,17 +512,19 @@ def resolve_security_finding(
             (finding_id,),
         ).fetchone()
         if row is None:
-            return False
-        now = _dt.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
-        conn.execute(
-            "INSERT INTO security_events"
-            " (event_id, parent_event_id, event_kind, body, created_at)"
-            " VALUES (?, ?, 'finding.status_changed', ?, ?)",
-            (str(_uuid.uuid4()), finding_id, new_status, now),
-        )
-        return True
-    except Exception:
-        return False
+            reason = FINDING_NOT_FOUND
+        else:
+            now = _dt.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+            cursor = conn.execute(
+                "INSERT INTO security_events"
+                " (event_id, parent_event_id, event_kind, body, created_at)"
+                " VALUES (?, ?, 'finding.status_changed', ?, ?)",
+                (str(_uuid.uuid4()), finding_id, new_status, now),
+            )
+            reason = None if cursor.rowcount else INSERT_IGNORED
+    except Exception as exc:  # noqa: BLE001
+        reason = failure_reason(exc)
+    return reason
 
 
 # record_dashboard_attention() removed: dashboard_attention_items dropped
