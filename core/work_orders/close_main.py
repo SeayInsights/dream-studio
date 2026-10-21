@@ -12,7 +12,7 @@ extracted verbatim from the original module.
 
 from __future__ import annotations
 
-from core.work_orders.type_registry import is_verification_exempt
+from core.work_orders.type_registry import is_dashboard_truth_gated, is_verification_exempt
 
 import json
 from datetime import UTC, datetime
@@ -867,21 +867,16 @@ def close_work_order(
             except Exception:
                 _symptom_checks = []
 
-        # WO-LIVE-DATA-GATE T3: Dashboard truth gate — runs for telemetry/dashboard WO
-        # types only.  A fresh/empty authority always vacuously passes, so this gate
-        # does not affect unrelated PRs.  Non-telemetry/dashboard types are not gated.
+        # WO-LIVE-DATA-GATE T3: Dashboard truth gate — runs for the types the registry flags
+        # `dashboard_truth_gated` (data_pipeline and saas_feature among the built-ins, and any
+        # type a pack declares with the flag).  A fresh/empty authority always vacuously
+        # passes, so this gate does not affect unrelated PRs.  Every other type is not gated.
         #
-        # No 'dashboard' or 'telemetry' type_ids exist in business_work_order_types as
-        # of this migration set; we gate on the explicit set below and document the
-        # intent so that future type additions are opt-in.
-        _DASHBOARD_TRUTH_GATED_TYPES: set[str] = {
-            "dashboard",
-            "telemetry",
-            "data_pipeline",
-            "saas_feature",
-        }
-        _wo_type_id = meta.get("type_id") or ""
-        if _wo_type_id in _DASHBOARD_TRUTH_GATED_TYPES:
+        # This was a literal set that also named 'dashboard' and 'telemetry'. Neither was
+        # ever a declared type, a seeded business_work_order_types row, or a value any door
+        # accepts (create refuses an undeclared type), so those two names could not be
+        # reached; the flag is the opt-in the old comment promised for future types.
+        if is_dashboard_truth_gated(meta.get("type_id")):
             from core.gates.dashboard_truth import run_dashboard_truth as _run_dt
 
             _dt_result = _run_dt(db_path)

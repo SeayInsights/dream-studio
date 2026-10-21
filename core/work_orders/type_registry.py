@@ -17,16 +17,48 @@ This module holds, per type, exactly the facts those subsets encoded:
   API, so it stales a brief without owing a CWV result.
 - ``exempt_from_verification``: independent review is not run by default at close
   (``close_main``).
+- ``dashboard_truth_gated``: closing the type is held to the live-authority dashboard
+  invariants (``close_main``).
+- ``description`` and ``order``: the sentence on when to use the type and the position it
+  takes in a presentation, which the generated operator AGENTS.md renders.
 
-Registration is a Python API only. Nothing here reads a pack manifest, touches a
-database, or persists: the registry is rebuilt from the built-ins on every import, so a
-type registered at runtime is process-local until a loader exists to re-register it.
+WHERE A PACK'S TYPES COME FROM. A pack declares them in ``packs.yaml`` under
+``contributes.work_order_types`` and ``type_manifest.load_pack_work_order_types`` registers
+them. Nothing persists a registration: it is process-local, rebuilt from the built-ins and the
+manifest of the running checkout or installed app in every process.
+
+The manifest is read lazily, by ``ensure_loaded``, which every accessor and
+``register_work_order_type`` calls first. That is the call site, and it is chosen over three
+alternatives on purpose:
+
+- Not at import. An import that reads a file and mutates a global makes the answer depend on
+  import order and on the working directory of whoever imported first, and a failing manifest
+  would break unrelated imports. The built-ins are constants and are registered at import; the
+  manifest is not.
+- Not by a loader every entry point must remember to call. The CLI, the MCP server, the
+  hooks and the tests each read the registry; one that forgot would see only the built-ins
+  and refuse a pack's type as undeclared. Here the first read does it.
+- Not a write to the database. A row holds a snapshot; the manifest is the declaration.
+
+``ensure_loaded`` is idempotent, thread-safe, and raises ``PackManifestError`` (naming the
+file and the pack) when the manifest cannot be read or declares something invalid, on every
+call until it is fixed: a registry that silently fell back to the built-ins would refuse the
+pack's type as "not declared" with no hint that a manifest was the cause.
+
+A type declared by a manifest that is later removed is simply undeclared again. Work orders
+of that type stay readable (nothing on the read path asks the registry), and close treats them
+as an undeclared type (strictest default: independent review required, reviewed as code);
+start refuses them with a message that says why.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, replace
+from pathlib import Path
 
 #: What a work-order type delivers. ``review_rules`` selects its review standards by these.
 CODE = "code"
@@ -42,6 +74,9 @@ _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 #: keeps a loader from registering a paragraph.
 MAX_NAME_LENGTH = 64
 
+#: A description is one row of a markdown table in the generated AGENTS.md.
+MAX_DESCRIPTION_LENGTH = 200
+
 
 @dataclass(frozen=True)
 class WorkOrderType:
@@ -52,32 +87,58 @@ class WorkOrderType:
     ui_bearing: bool = False
     stales_design_brief: bool = False
     exempt_from_verification: bool = False
+    dashboard_truth_gated: bool = False
+    description: str = ""
+    #: Position in a presentation (the generated AGENTS.md table), ascending.
+    order: int = 0
+    #: The pack key whose manifest declared this type; None for a built-in or an API call.
+    declared_by: str | None = None
+
+    @property
+    def label(self) -> str:
+        """A human label derived from the name, for a type that has no seeded row to carry one."""
+        return self.name.replace("_", " ").title()
+
+
+class PackManifestError(ValueError):
+    """A pack manifest could not be read or declares something the registry refuses.
+
+    A ValueError, like every refusal the registry itself makes, so a caller catches one thing.
+    """
 
 
 # Insertion order is the declared order: it is what ``--type``'s choices and the refusal
 # message list. The built-ins below keep the alphabetical order the old tuple had.
 _REGISTRY: dict[str, WorkOrderType] = {}
 
+#: The built-in names, in declaration order. Filled once, below, and never changed.
+_BUILTIN_NAMES: list[str] = []
 
-def register_work_order_type(
-    name: str,
+#: Process-local: has the running checkout's manifest been applied, and is a load in progress
+#: (so the registrations the loader itself makes do not recurse into ensure_loaded).
+_STATE = {"loaded": False, "loading": False}
+_LOCK = threading.RLock()
+
+
+def _build(
+    name: object,
     *,
-    artifact_class: str,
-    ui_bearing: bool = False,
-    stales_design_brief: bool | None = None,
-    exempt_from_verification: bool = False,
+    artifact_class: object,
+    ui_bearing: object = False,
+    stales_design_brief: object = None,
+    exempt_from_verification: object = False,
+    dashboard_truth_gated: object = False,
+    description: object = "",
+    order: object = None,
+    declared_by: str | None = None,
 ) -> WorkOrderType:
-    """Declare a work-order type. Refuses, always with ValueError, a duplicate, a malformed
-    or overlong name, a non-bool flag, an unknown artifact class, and a UI-bearing type that
-    does not stale the design brief.
+    """Validate one declaration and return it, touching no registry state.
 
-    ``stales_design_brief`` defaults to ``ui_bearing``: a type that ships a surface moves
-    the design surface. Pass it explicitly to declare a type that moves the surface
-    without owing a CWV result (as ``saas_feature`` does).
+    Every refusal is a ValueError. See ``register_work_order_type`` for the rules.
     """
     # `type(x) is str`, not isinstance: a str subclass can override __len__ (to slip past the
     # cap below) or __eq__ and __hash__ (to pose as a member of ARTIFACT_CLASSES). The
-    # API is about to be fed manifest data, and a plain str is the only thing it declares.
+    # API is fed manifest data, and a plain str is the only thing it declares.
     if type(name) is not str or not _NAME_RE.fullmatch(name):
         raise ValueError(
             f"work-order type name {name!r} must be lowercase letters, digits and underscores,"
@@ -88,21 +149,39 @@ def register_work_order_type(
             f"work-order type name {name[:20]!r}... is {len(name)} characters;"
             f" it must be at most {MAX_NAME_LENGTH}"
         )
-    for flag, value in (
-        ("ui_bearing", ui_bearing),
-        ("stales_design_brief", stales_design_brief),
-        ("exempt_from_verification", exempt_from_verification),
-    ):
+    flags = {
+        "ui_bearing": ui_bearing,
+        "stales_design_brief": stales_design_brief,
+        "exempt_from_verification": exempt_from_verification,
+        "dashboard_truth_gated": dashboard_truth_gated,
+    }
+    for flag, value in flags.items():
         # `type is bool`, not isinstance or truthiness: "no" is truthy and 1 is not a flag.
         # stales_design_brief alone may be None, meaning "follow ui_bearing".
         if type(value) is not bool and not (flag == "stales_design_brief" and value is None):
             raise ValueError(f"work-order type {name!r}: {flag} must be a bool, got {value!r}")
-    if name in _REGISTRY:
-        raise ValueError(f"work-order type {name!r} is already registered")
     if type(artifact_class) is not str or artifact_class not in ARTIFACT_CLASSES:
         raise ValueError(
             f"work-order type {name!r} names unknown artifact class {artifact_class!r}."
             f" Known: {', '.join(sorted(ARTIFACT_CLASSES))}."
+        )
+    if type(description) is not str:
+        raise ValueError(
+            f"work-order type {name!r}: description must be a string, got {description!r}"
+        )
+    if (
+        len(description) > MAX_DESCRIPTION_LENGTH
+        or "\n" in description
+        or "\r" in description
+        or "|" in description
+    ):
+        raise ValueError(
+            f"work-order type {name!r}: description must be one line of at most"
+            f" {MAX_DESCRIPTION_LENGTH} characters with no '|' (it is a table row)"
+        )
+    if order is not None and (type(order) is not int or order < 0):
+        raise ValueError(
+            f"work-order type {name!r}: order must be a non-negative integer, got {order!r}"
         )
     stales = ui_bearing if stales_design_brief is None else stales_design_brief
     if ui_bearing and not stales:
@@ -110,26 +189,182 @@ def register_work_order_type(
             f"work-order type {name!r} is ui_bearing but does not stale the design brief;"
             " a type that ships a surface moves the design surface"
         )
-    declared = WorkOrderType(
+    return WorkOrderType(
         name=name,
         artifact_class=artifact_class,
-        ui_bearing=ui_bearing,
-        stales_design_brief=stales,
-        exempt_from_verification=exempt_from_verification,
+        ui_bearing=bool(ui_bearing),
+        stales_design_brief=bool(stales),
+        exempt_from_verification=bool(exempt_from_verification),
+        dashboard_truth_gated=bool(dashboard_truth_gated),
+        description=description,
+        # Placeholder; _store assigns the next position when none was given.
+        order=-1 if order is None else order,
+        declared_by=declared_by,
     )
-    _REGISTRY[name] = declared
+
+
+def _store(declared: WorkOrderType) -> WorkOrderType:
+    """Add a validated declaration. A type with no explicit order goes after every other."""
+    if declared.name in _REGISTRY:
+        raise ValueError(f"work-order type {declared.name!r} is already registered")
+    if declared.order < 0:
+        last = max((t.order for t in _REGISTRY.values()), default=0)
+        declared = replace(declared, order=last + 10)
+    _REGISTRY[declared.name] = declared
     return declared
+
+
+def register_work_order_type(
+    name: str,
+    *,
+    artifact_class: str,
+    ui_bearing: bool = False,
+    stales_design_brief: bool | None = None,
+    exempt_from_verification: bool = False,
+    dashboard_truth_gated: bool = False,
+    description: str = "",
+    order: int | None = None,
+    declared_by: str | None = None,
+) -> WorkOrderType:
+    """Declare a work-order type. Refuses, always with ValueError, a duplicate, a malformed
+    or overlong name, a non-bool flag, an unknown artifact class, a bad description or order,
+    and a UI-bearing type that does not stale the design brief.
+
+    ``stales_design_brief`` defaults to ``ui_bearing``: a type that ships a surface moves
+    the design surface. Pass it explicitly to declare a type that moves the surface
+    without owing a CWV result (as ``saas_feature`` does).
+
+    ``order`` defaults to after every type already declared. The manifest is applied first, so
+    a name a pack declared is a duplicate here whichever call came first.
+    """
+    ensure_loaded()
+    with _LOCK:
+        return _store(
+            _build(
+                name,
+                artifact_class=artifact_class,
+                ui_bearing=ui_bearing,
+                stales_design_brief=stales_design_brief,
+                exempt_from_verification=exempt_from_verification,
+                dashboard_truth_gated=dashboard_truth_gated,
+                description=description,
+                order=order,
+                declared_by=declared_by,
+            )
+        )
+
+
+def ensure_loaded() -> None:
+    """Apply the running checkout's (or installed app's) ``packs.yaml`` to the registry, once.
+
+    Called by every accessor below and by ``register_work_order_type``; nothing else needs to
+    remember to. Idempotent and thread-safe. Raises ``PackManifestError`` if the manifest is
+    unreadable or invalid, on every call until it is fixed, and leaves the registry as it was.
+    """
+    if _STATE["loaded"]:
+        return
+    with _LOCK:
+        if _STATE["loaded"] or _STATE["loading"]:
+            return
+        from .type_manifest import load_pack_work_order_types
+
+        load_pack_work_order_types()
+        _STATE["loaded"] = True
+
+
+@contextmanager
+def loading() -> Iterator[None]:
+    """Mark a manifest load in progress, so its own registrations do not recurse.
+
+    For ``type_manifest`` only. Rolls the registry back if the load raises, so a manifest is
+    applied whole or not at all.
+    """
+    with _LOCK:
+        if _STATE["loading"]:
+            yield
+            return
+        saved = dict(_REGISTRY)
+        _STATE["loading"] = True
+        try:
+            yield
+        except BaseException:
+            _REGISTRY.clear()
+            _REGISTRY.update(saved)
+            raise
+        finally:
+            _STATE["loading"] = False
+
+
+@contextmanager
+def scoped_registration() -> Iterator[None]:
+    """Let a test register types and have them gone afterwards.
+
+    The registry is a process-global with no public unregister, on purpose: nothing at runtime
+    should be able to remove a declaration other code has already read. A test that registers
+    one wraps the registering in this and the registry is exactly what it was on the way out,
+    whether the block returned or raised.
+    """
+    ensure_loaded()
+    with _LOCK:
+        saved = dict(_REGISTRY)
+    try:
+        yield
+    finally:
+        with _LOCK:
+            _REGISTRY.clear()
+            _REGISTRY.update(saved)
+
+
+@contextmanager
+def scoped_pack_manifest(packs_yaml_path: Path) -> Iterator[None]:
+    """Run a block against the built-ins plus ONE manifest, then restore everything.
+
+    For tests of the loader and of a pack-declared type end to end: the real checkout's
+    manifest is set aside inside the block, ``packs_yaml_path`` is applied in its place, and
+    on the way out the registry and its loaded/unloaded state are what they were.
+    """
+    from .type_manifest import load_pack_work_order_types
+
+    with _LOCK:
+        saved = dict(_REGISTRY)
+        saved_state = dict(_STATE)
+    try:
+        with _LOCK:
+            for name in [n for n in _REGISTRY if n not in _BUILTIN_NAMES]:
+                del _REGISTRY[name]
+            _STATE["loaded"] = True
+        load_pack_work_order_types(packs_yaml_path=packs_yaml_path)
+        yield
+    finally:
+        with _LOCK:
+            _REGISTRY.clear()
+            _REGISTRY.update(saved)
+            _STATE.update(saved_state)
 
 
 def work_order_type_names() -> tuple[str, ...]:
     """Every declared type name, in declaration order."""
+    ensure_loaded()
     return tuple(_REGISTRY)
+
+
+def builtin_work_order_type_names() -> tuple[str, ...]:
+    """The ten types the platform itself declares, in declaration order. Fixed: no manifest
+    and no registration changes it. For tests and generators that mean the built-in subset."""
+    return tuple(_BUILTIN_NAMES)
+
+
+def work_order_types_in_presentation_order() -> tuple[WorkOrderType, ...]:
+    """Every declared type, by ``order`` then name: the order the generated AGENTS.md lists."""
+    ensure_loaded()
+    return tuple(sorted(_REGISTRY.values(), key=lambda t: (t.order, t.name)))
 
 
 def get_work_order_type(name: str | None) -> WorkOrderType | None:
     """The declaration for ``name``, or None when it is not declared."""
     if not name:
         return None
+    ensure_loaded()
     return _REGISTRY.get(name)
 
 
@@ -149,19 +384,89 @@ def is_verification_exempt(name: str | None) -> bool:
     return bool(declared and declared.exempt_from_verification)
 
 
+def is_dashboard_truth_gated(name: str | None) -> bool:
+    """Closing ``name`` is held to the live-authority dashboard invariants."""
+    declared = get_work_order_type(name)
+    return bool(declared and declared.dashboard_truth_gated)
+
+
 def design_brief_staling_types() -> tuple[str, ...]:
     """The declared types whose closing means the design surface moved, sorted."""
+    ensure_loaded()
     return tuple(sorted(t.name for t in _REGISTRY.values() if t.stales_design_brief))
 
 
-# The ten built-ins, in the alphabetical order the closed tuple declared them.
-register_work_order_type("api_endpoint", artifact_class=CODE)
-register_work_order_type("authentication", artifact_class=CODE)
-register_work_order_type("data_pipeline", artifact_class=DATA)
-register_work_order_type("deployment", artifact_class=CONFIG)
-register_work_order_type("documentation", artifact_class=DOCUMENT, exempt_from_verification=True)
-register_work_order_type("game_mechanic", artifact_class=CODE)
-register_work_order_type("infrastructure", artifact_class=CONFIG)
-register_work_order_type("saas_feature", artifact_class=CODE, stales_design_brief=True)
-register_work_order_type("ui_component", artifact_class=CODE, ui_bearing=True)
-register_work_order_type("ui_page", artifact_class=CODE, ui_bearing=True)
+def _register_builtin(order: int, name: str, description: str, **facts: object) -> None:
+    _store(_build(name, description=description, order=order, **facts))  # type: ignore[arg-type]
+    _BUILTIN_NAMES.append(name)
+
+
+# The ten built-ins, in the alphabetical order the closed tuple declared them. ``order`` is
+# the order the generated AGENTS.md presents them in (UI first, documentation last), and the
+# description is the sentence it prints.
+_register_builtin(
+    30,
+    "api_endpoint",
+    "Adding or modifying a backend route, including request/response contract",
+    artifact_class=CODE,
+)
+_register_builtin(
+    40,
+    "authentication",
+    "Implementing login, session management, OAuth, or token handling",
+    artifact_class=CODE,
+)
+_register_builtin(
+    60,
+    "data_pipeline",
+    "ETL, ingestion, transformation, or batch processing work",
+    artifact_class=DATA,
+    dashboard_truth_gated=True,
+)
+_register_builtin(
+    80,
+    "deployment",
+    "CI/CD pipeline, containerization, infrastructure-as-code, release automation",
+    artifact_class=CONFIG,
+)
+_register_builtin(
+    100,
+    "documentation",
+    "Technical specs, API references, architecture decision records",
+    artifact_class=DOCUMENT,
+    exempt_from_verification=True,
+)
+_register_builtin(
+    70,
+    "game_mechanic",
+    "A gameplay rule, interaction system, or physics behavior",
+    artifact_class=CODE,
+)
+_register_builtin(
+    90,
+    "infrastructure",
+    "Database schema, cloud resource provisioning, network configuration",
+    artifact_class=CONFIG,
+)
+_register_builtin(
+    50,
+    "saas_feature",
+    "A user-facing product capability that spans UI + API (e.g., billing)",
+    artifact_class=CODE,
+    stales_design_brief=True,
+    dashboard_truth_gated=True,
+)
+_register_builtin(
+    10,
+    "ui_component",
+    "Building a reusable UI element (button, card, modal, chart)",
+    artifact_class=CODE,
+    ui_bearing=True,
+)
+_register_builtin(
+    20,
+    "ui_page",
+    "Building a complete screen/view with navigation and layout",
+    artifact_class=CODE,
+    ui_bearing=True,
+)

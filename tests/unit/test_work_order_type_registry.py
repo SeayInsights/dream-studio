@@ -72,9 +72,10 @@ NOW = "2026-10-19T00:00:00+00:00"
 
 
 @pytest.fixture
-def clean_registry(monkeypatch):
-    """A private copy of the registry, restored when the test ends."""
-    monkeypatch.setattr(type_registry, "_REGISTRY", dict(type_registry._REGISTRY))
+def clean_registry():
+    """Whatever the test registers is gone when it ends. Scoped, never a global unregister."""
+    with type_registry.scoped_registration():
+        yield
 
 
 # ── equivalence ───────────────────────────────────────────────────────────────
@@ -96,6 +97,72 @@ def test_the_derived_subsets_equal_the_old_subsets():
     assert {t for t in work_order_type_names() if is_ui_bearing(t)} == OLD_UI_BEARING
     assert set(design_brief_staling_types()) == OLD_BRIEF_STALING
     assert {t for t in work_order_type_names() if is_verification_exempt(t)} == OLD_VERIFY_EXEMPT
+
+
+#: The presentation order and sentences of the hand-kept list in integrations/compiler/agents_md.py
+#: (`_WO_TYPES`) the registry now owns. Copied from it, not derived from the registry.
+OLD_PRESENTATION = (
+    ("ui_component", "Building a reusable UI element (button, card, modal, chart)"),
+    ("ui_page", "Building a complete screen/view with navigation and layout"),
+    (
+        "api_endpoint",
+        "Adding or modifying a backend route, including request/response contract",
+    ),
+    ("authentication", "Implementing login, session management, OAuth, or token handling"),
+    ("saas_feature", "A user-facing product capability that spans UI + API (e.g., billing)"),
+    ("data_pipeline", "ETL, ingestion, transformation, or batch processing work"),
+    ("game_mechanic", "A gameplay rule, interaction system, or physics behavior"),
+    (
+        "deployment",
+        "CI/CD pipeline, containerization, infrastructure-as-code, release automation",
+    ),
+    ("infrastructure", "Database schema, cloud resource provisioning, network configuration"),
+    ("documentation", "Technical specs, API references, architecture decision records"),
+)
+
+
+def test_the_registry_holds_the_old_presentation_order_and_sentences():
+    from core.work_orders.type_registry import work_order_types_in_presentation_order
+
+    built_in = [t for t in work_order_types_in_presentation_order() if t.declared_by is None][:10]
+    assert tuple((t.name, t.description) for t in built_in) == OLD_PRESENTATION
+    assert tuple(type_registry.builtin_work_order_type_names()) == OLD_TYPES
+
+
+def test_a_registered_type_follows_every_built_in_in_presentation_order(clean_registry):
+    from core.work_orders.type_registry import work_order_types_in_presentation_order
+
+    register_work_order_type("first_added", artifact_class=CODE, description="One")
+    register_work_order_type("second_added", artifact_class=CODE, description="Two")
+    names = [t.name for t in work_order_types_in_presentation_order()]
+    assert names[-2:] == ["first_added", "second_added"]
+    assert names[:10] == [name for name, _ in OLD_PRESENTATION]
+
+
+def test_an_explicit_order_places_a_type_among_the_built_ins(clean_registry):
+    from core.work_orders.type_registry import work_order_types_in_presentation_order
+
+    register_work_order_type("early", artifact_class=CODE, order=5, description="Before UI")
+    assert work_order_types_in_presentation_order()[0].name == "early"
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"description": 5}, "description must be a string"),
+        ({"description": "two\nlines"}, "one line"),
+        ({"description": "has | pipe"}, "no '|'"),
+        ({"description": "x" * 201}, "at most 200"),
+        ({"order": -1}, "non-negative integer"),
+        ({"order": True}, "non-negative integer"),
+        ({"order": "1"}, "non-negative integer"),
+        ({"dashboard_truth_gated": "yes"}, "dashboard_truth_gated must be a bool"),
+    ],
+)
+def test_the_new_fields_are_validated_like_the_old_ones(clean_registry, kwargs, match):
+    with pytest.raises(ValueError, match=match):
+        register_work_order_type("poster", artifact_class=CODE, **kwargs)
+    assert get_work_order_type("poster") is None
 
 
 def test_artifact_kind_matches_the_old_map_for_every_built_in_and_unknowns_stay_code():
@@ -281,11 +348,40 @@ def test_create_work_order_accepts_a_registered_type_and_still_names_the_valid_o
 
 
 def test_the_mcp_tool_enum_is_the_declared_set():
-    """Read when integrations.mcp.tools is imported; a loader must register before then."""
+    """The enum is computed when the tool is listed, not when the module is imported."""
     from integrations.mcp.tools import TOOLS_BY_NAME
 
-    schema = TOOLS_BY_NAME["ds_work_order_create"].input_schema
+    schema = TOOLS_BY_NAME["ds_work_order_create"].schema()
     assert tuple(schema["properties"]["work_order_type"]["enum"]) == work_order_type_names()
+
+
+def test_a_type_registered_after_import_is_advertised_by_tools_list(clean_registry):
+    """The snapshot defect (issue #897 item 3): the enum was a list built once at import, so a
+    type registered afterwards was accepted by the server but never advertised. tools/list is
+    what a client reads, so that is where it is asserted."""
+    from integrations.mcp.server import _handle_tools_list
+
+    def advertised() -> list[str]:
+        tools = _handle_tools_list(1, {})["result"]["tools"]
+        create = next(t for t in tools if t["name"] == "ds_work_order_create")
+        return create["inputSchema"]["properties"]["work_order_type"]["enum"]
+
+    assert "legal_review" not in advertised()
+    register_work_order_type("legal_review", artifact_class=DOCUMENT)
+    assert "legal_review" in advertised()
+    assert tuple(advertised()) == work_order_type_names()
+
+
+def test_the_live_enum_does_not_mutate_the_static_schema(clean_registry):
+    """schema() copies: listing the tools must not write a type name into the shared dict."""
+    from integrations.mcp.tools import TOOLS_BY_NAME
+
+    tool = TOOLS_BY_NAME["ds_work_order_create"]
+    assert "enum" not in tool.input_schema["properties"]["work_order_type"]
+    register_work_order_type("legal_review", artifact_class=DOCUMENT)
+    tool.schema()["properties"]["work_order_type"]["enum"].append("scribble")
+    assert "scribble" not in tool.schema()["properties"]["work_order_type"]["enum"]
+    assert "enum" not in tool.input_schema["properties"]["work_order_type"]
 
 
 @pytest.fixture
@@ -412,14 +508,6 @@ def test_start_reads_the_design_brief_only_for_registered_ui_bearing_types(
 
     register_work_order_type("poster", artifact_class=CODE, ui_bearing=True)
     register_work_order_type("legal_review", artifact_class=DOCUMENT)
-    conn = sqlite3.connect(str(db))
-    for type_id in ("poster", "legal_review"):
-        conn.execute(
-            "INSERT INTO business_work_order_types (type_id, label) VALUES (?, ?)",
-            (type_id, type_id),
-        )
-    conn.commit()
-    conn.close()
     project_id = _insert_project(db)
     poster = _insert_wo(db, project_id, "poster")
     legal = _insert_wo(db, project_id, "legal_review")
@@ -435,6 +523,61 @@ def test_start_reads_the_design_brief_only_for_registered_ui_bearing_types(
     assert brief_warning(legal) is False, "a type the registry does not mark UI is not asked"
 
 
+def test_start_derives_a_profile_for_a_declared_type_with_no_row_and_writes_none(
+    db, tmp_path, clean_registry
+):
+    """The profile of a type with no business_work_order_types row comes from its declaration:
+    a label, and no gates, executor or workflow (a manifest carries none yet). Nothing is
+    written, so a manifest that changes is read as it now stands rather than as a stale row."""
+    from core.work_orders.start_brief import read_work_order_brief
+
+    register_work_order_type("legal_review", artifact_class=DOCUMENT)
+    project_id = _insert_project(db)
+    wo = _insert_wo(db, project_id, "legal_review")
+    result = read_work_order_brief(
+        work_order_id=wo, source_root=tmp_path, dream_studio_home=tmp_path
+    )
+    assert result["ok"] is True, result
+    assert result["type_id"] == "legal_review" and result["label"] == "Legal Review"
+    assert [result[k] for k in ("pre_gate", "build_exec", "post_gate", "workflow_template")] == [
+        None,
+        None,
+        None,
+        None,
+    ]
+    conn = sqlite3.connect(str(db))
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM business_work_order_types").fetchone()[0] == 10
+    finally:
+        conn.close()
+
+
+def test_start_refuses_an_undeclared_type_and_says_a_manifest_may_be_the_cause(db, tmp_path):
+    from core.work_orders.start_brief import read_work_order_brief
+
+    project_id = _insert_project(db)
+    wo = _insert_wo(db, project_id, "legal_review")
+    result = read_work_order_brief(
+        work_order_id=wo, source_root=tmp_path, dream_studio_home=tmp_path
+    )
+    assert result["ok"] is False
+    assert "legal_review" in result["error"] and "manifest" in result["error"]
+
+
+def test_a_seeded_row_still_wins_over_the_derived_profile(db, tmp_path, clean_registry):
+    """A built-in's real gates are read from its row, as before; derivation only fills a gap."""
+    from core.work_orders.start_brief import read_work_order_brief
+
+    project_id = _insert_project(db)
+    wo = _insert_wo(db, project_id, "ui_page")
+    result = read_work_order_brief(
+        work_order_id=wo, source_root=tmp_path, dream_studio_home=tmp_path
+    )
+    assert result["ok"] is True
+    assert result["pre_gate"] == "design_brief_locked"
+    assert result["build_exec"] == "website:page"
+
+
 def test_close_runs_independent_review_unless_the_registry_exempts_the_type(
     db, tmp_path, monkeypatch, capsys, clean_registry
 ):
@@ -447,14 +590,6 @@ def test_close_runs_independent_review_unless_the_registry_exempts_the_type(
 
     register_work_order_type("memo", artifact_class=DOCUMENT, exempt_from_verification=True)
     register_work_order_type("audit_report", artifact_class=DOCUMENT)
-    conn = sqlite3.connect(str(db))
-    for type_id in ("memo", "audit_report"):
-        conn.execute(
-            "INSERT INTO business_work_order_types (type_id, label) VALUES (?, ?)",
-            (type_id, type_id),
-        )
-    conn.commit()
-    conn.close()
     project_id = _insert_project(db)
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
 

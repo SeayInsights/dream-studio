@@ -16,7 +16,28 @@ from typing import Any
 from core.event_store.studio_db import _connect
 
 from .models import TERMINAL_WO_STATUSES, terminal_wo_status_placeholders
-from .type_registry import is_ui_bearing
+from .type_registry import WorkOrderType, get_work_order_type, is_ui_bearing
+
+
+def derived_type_row(declared: WorkOrderType) -> tuple[Any, ...]:
+    """The ``business_work_order_types`` columns for a type that has no row, from its declaration.
+
+    Same column order as the SELECT in ``read_work_order_brief``: type_id, label, pre_build_gate,
+    build_executor, post_build_gate, workflow_template, precondition_skill. A declared type names
+    no gates, no executor and no workflow, so those are None: the work order is held to the
+    universal close gates (tasks done, executable acceptance criteria, independent review unless
+    exempt) and to the registry's own flags, and a pack gate waits on ``gate:register``.
+    """
+    return (declared.name, declared.label, None, None, None, None, None)
+
+
+def _unrecognized_type_message(wo_type: str) -> str:
+    return (
+        f"Unrecognized work order type: {wo_type}. It is not a built-in type and no loaded pack"
+        " manifest (packs.yaml contributes.work_order_types) declares it. If a pack declared it"
+        " and was removed or is not installed here, restore that pack's manifest entry to start"
+        " this work order; it can still be read and closed meanwhile."
+    )
 
 
 def read_work_order_brief(
@@ -97,7 +118,14 @@ def read_work_order_brief(
             (wo_type,),
         ).fetchone()
         if type_row is None:
-            return {"ok": False, "error": f"Unrecognized work order type: {wo_type}"}
+            # A type the registry declares (a pack's, via its manifest) has no seeded row: the
+            # row holds gates, an executor and a workflow template, which a manifest does
+            # not carry yet. Derive the profile from the declaration instead of writing a row
+            # (no migration, no write at import, nothing to drift from the manifest).
+            declared = get_work_order_type(wo_type)
+            if declared is None:
+                return {"ok": False, "error": _unrecognized_type_message(wo_type)}
+            type_row = derived_type_row(declared)
 
         (
             type_id,

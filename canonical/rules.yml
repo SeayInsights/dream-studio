@@ -144,13 +144,41 @@ rules:
       - tests/unit/test_work_order_types_one_definition.py::test_no_module_carries_a_second_full_list
       - tests/unit/test_work_order_type_registry.py::test_each_built_in_yields_what_the_old_tables_yielded
       - tests/unit/test_work_order_type_registry.py::test_create_work_order_accepts_a_registered_type_and_still_names_the_valid_ones
+      - tests/unit/test_work_order_type_registry.py::test_start_derives_a_profile_for_a_declared_type_with_no_row_and_writes_none
+      - tests/unit/test_pack_declared_work_order_type.py::test_a_pack_declared_type_is_created_started_reviewed_and_closed
     note: >
       `--type` accepted any string and stored it, defaulting to infrastructure, while its
       help said "one of the declared work-order types" -- nothing declared them anywhere
       the CLI could ask. That is the same shape as an unrecognised gate name one rule up:
       a typo became a work order whose gates nothing could run. The seeded rows in
-      business_work_order_types carry each type's gates, so a type you can create is
-      checked to be a type that can be started and closed.
+      business_work_order_types carry each built-in's gates; a type that has no row (one a
+      pack declares in its manifest) is started on a profile derived from its declaration,
+      so a type you can create is a type that can be started and closed. The one exception
+      is a type whose manifest was removed after work orders of it were created: those stay
+      readable and closable, and start refuses them naming the manifest.
+  - id: a-pack-declares-work-order-types-in-its-manifest
+    statement: >
+      A pack declares work-order types under contributes.work_order_types in packs.yaml; a
+      manifest that declares something invalid, unreadable or unsupported is an explicit
+      error naming the pack, and is never applied in part.
+    source: core/work_orders/type_manifest.py
+    enforced_by:
+      - tests/unit/test_work_order_type_manifest.py::test_a_bad_declaration_is_refused_naming_the_file_and_the_pack
+      - tests/unit/test_work_order_type_manifest.py::test_a_manifest_with_one_bad_entry_registers_none_of_its_entries
+      - tests/unit/test_work_order_type_manifest.py::test_an_unreadable_running_manifest_is_an_explicit_error_on_every_read_until_fixed
+      - tests/unit/test_work_order_type_manifest.py::test_every_reader_loads_the_manifest_before_answering
+      - tests/unit/test_work_order_type_manifest.py::test_importing_the_registry_reads_no_manifest_and_the_first_read_does
+      - tests/unit/test_work_order_type_registry.py::test_a_type_registered_after_import_is_advertised_by_tools_list
+      - tests/unit/test_dashboard_truth_gate_is_a_registry_flag.py::test_a_type_a_pack_flags_is_gated_and_one_it_does_not_flag_is_not
+    note: >
+      Issue #897. The registry was a Python API no pack could reach. The manifest is read
+      lazily by the registry's own accessors, once per process, rather than at import (an
+      import that reads a file makes the answer depend on import order and working
+      directory) or by a loader each entry point must remember: a consumer that read the
+      registry first would otherwise refuse a pack's type as undeclared. The schema is
+      closed -- contributes.gates is refused today, not ignored -- because nothing reads
+      it, and a pack that declared one and was accepted would believe it had a gate. Gates
+      themselves wait on gate:register.
   - id: a-work-order-is-not-done-until-main-is-green
     statement: >
       A work order closes only when the default branch is green; a known-red main refuses

@@ -1029,12 +1029,14 @@ def create_work_order(
         }
 
     # REFUSED HERE TOO, for the same reason priority is: the column that would catch it
-    # cannot refuse out loud. `start_work_order` (start_brief.py) already looks this up
-    # against business_work_order_types and refuses "Unrecognized work order type" --
-    # but only once the work order has already been created, carries tasks, and someone
-    # tries to start it. A type nobody can start should never have been written, the
-    # same way a priority nobody sorts by never is. The type registry (core.work_orders.
-    # type_registry) is the one declared set both doors now read -- `work_order_type=None` is a
+    # cannot refuse out loud. `start_work_order` (start_brief.py) already refuses an
+    # "Unrecognized work order type" -- but only once the work order has already been
+    # created, carries tasks, and someone tries to start it. A type nobody can start
+    # should never have been written, the same way a priority nobody sorts by never is.
+    # What start accepts is a seeded business_work_order_types row OR a type the registry
+    # declares (it derives the profile), so a type that passes this check can be started.
+    # The type registry (core.work_orders.type_registry) is the one declared set both
+    # doors now read -- `work_order_type=None` is a
     # different, already-handled question (start_brief.py's own "has no type assigned"),
     # so only a NAMED, unrecognized type is refused here.
     declared_types = work_order_type_names()

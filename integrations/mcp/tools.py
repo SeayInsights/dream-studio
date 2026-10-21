@@ -23,6 +23,7 @@ CLI uses, and avoids a second, drifting way to invoke Dream Studio.
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -49,6 +50,20 @@ class Tool:
     #: a standing test in test_mcp_server.py, not at construction here -- this dataclass
     #: has no reason to validate against that set itself).
     required_capability: str | None = None
+    #: Property name -> a callable returning that property's CURRENT enum. `input_schema` is
+    #: built once at import, so an enum that can change afterwards (the work-order types a
+    #: pack declares) is left out of it and supplied here; `schema()` is the schema as of now.
+    live_enums: dict[str, Callable[[], list[str]]] | None = None
+
+    def schema(self) -> dict[str, Any]:
+        """`input_schema` with each live enum filled in as it stands now. What tools/list
+        advertises; anything validating arguments against a schema must read this."""
+        if not self.live_enums:
+            return self.input_schema
+        schema = copy.deepcopy(self.input_schema)
+        for prop, current in self.live_enums.items():
+            schema["properties"][prop]["enum"] = list(current())
+        return schema
 
 
 def _project_list(*, status_filter: str = "active", dream_studio_home: Path | None = None) -> Any:
@@ -765,9 +780,9 @@ TOOLS: list[Tool] = [
                 "description": {"type": "string"},
                 "work_order_type": {
                     "type": "string",
-                    # Read from the type registry when this module is imported; a type
-                    # registered after that is accepted by create_work_order but not listed.
-                    "enum": list(work_order_type_names()),
+                    # The enum is supplied by `live_enums` below, read from the type
+                    # registry when the tool is listed rather than when this module is
+                    # imported, so a type a pack declares is advertised.
                     "description": (
                         "Refused if not one of these -- checked here, not just later"
                         " when ds_work_order_start looks it up (the gap this enum"
@@ -785,6 +800,7 @@ TOOLS: list[Tool] = [
         },
         handler=_work_order_create,
         required_capability="work_order:create",
+        live_enums={"work_order_type": lambda: list(work_order_type_names())},
     ),
     Tool(
         name="ds_work_order_add_task",

@@ -63,7 +63,7 @@ def _handle_tools_list(request_id: Any, _params: dict[str, Any]) -> dict[str, An
                 {
                     "name": t.name,
                     "description": t.description,
-                    "inputSchema": t.input_schema,
+                    "inputSchema": t.schema(),
                 }
                 for t in TOOLS
             ]
