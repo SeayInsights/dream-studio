@@ -111,6 +111,270 @@ def test_a_rule_with_neither_enforcement_nor_a_declaration_is_refused(tmp_path):
 
 
 # --------------------------------------------------------------------------
+# A node id is resolved to the test pytest would collect, not just to the file
+# --------------------------------------------------------------------------
+#
+# `file::name` used to count as resolved when `file` existed. A test renamed or deleted
+# underneath a rule left the rule claiming enforcement by something no longer there, and
+# the gate printed OK (#896; found on `a-work-order-type-is-refused-at-the-door` and on
+# `detector-lane-declares-what-it-leaves-undecided`, the latter dangling for weeks).
+# What counts as collectable, and the agreement with pytest's own collection on a fixture
+# tree, is held by tests/unit/test_pytest_node_resolver.py; this section holds the gate.
+
+_SAMPLE = """\
+def test_plain():
+    pass
+
+
+class TestOuter:
+    def test_method(self):
+        pass
+"""
+
+
+@pytest.fixture
+def fake_repo(tmp_path, monkeypatch):
+    """A throwaway tree the gate resolves against, so each case controls the file."""
+    from core.gates import rule_enforcement
+
+    monkeypatch.setattr(rule_enforcement, "REPO_ROOT", tmp_path)
+    (tmp_path / "test_t.py").write_text(_SAMPLE, encoding="utf-8")
+    return tmp_path
+
+
+def test_a_missing_file_still_says_no_such_test_file(fake_repo):
+    assert _resolve("test_gone.py::test_plain") == "no such test file"
+
+
+def test_a_directory_named_like_a_test_file_is_not_a_test_file(fake_repo):
+    """`is_file()`, not `exists()`: a directory called test_dir.py holds no tests."""
+    (fake_repo / "test_dir.py").mkdir()
+    assert _resolve("test_dir.py::test_plain") == "no such test file"
+
+
+def test_a_node_that_exists_resolves_and_one_that_does_not_is_named(fake_repo):
+    assert _resolve("test_t.py::test_plain") is None
+    assert _resolve("test_t.py::TestOuter::test_method[1]") is None
+    why = _resolve("test_t.py::test_plain_renamed")
+    assert why is not None and "`test_plain_renamed` defined in test_t.py" in why
+
+
+def test_a_path_reference_cannot_leave_the_repository(fake_repo):
+    outside = fake_repo.parent / "outside.txt"
+    outside.write_text("x", encoding="utf-8")
+    assert _resolve("../outside.txt") == "path escapes the repository"
+    assert _resolve("test_t.py") is None
+
+
+@pytest.mark.parametrize("reference", [3, {"file": "x"}, None, ["a"]])
+def test_a_reference_that_is_not_a_string_is_refused(reference):
+    assert "not a string" in (_resolve(reference) or "")
+
+
+def test_a_dangling_node_fails_the_audit_with_the_rule_the_reference_and_the_gap(fake_repo):
+    path = _registry(
+        fake_repo,
+        """\
+        rules:
+          - id: a-rule-whose-test-was-renamed
+            statement: Something ought to be true.
+            source: nowhere.py
+            enforced_by:
+              - test_t.py::test_plain
+              - test_t.py::test_plain_but_renamed
+        """,
+    )
+    report = audit(path)
+    assert report["references_checked"] == 2
+    assert [(b["rule"], b["reference"]) for b in report["broken"]] == [
+        ("a-rule-whose-test-was-renamed", "test_t.py::test_plain_but_renamed")
+    ]
+    assert "`test_plain_but_renamed` defined in test_t.py" in report["broken"][0]["why"]
+
+
+def test_the_command_exits_nonzero_and_names_a_dangling_node(fake_repo, monkeypatch, capsys):
+    from core.gates import rule_enforcement
+
+    path = _registry(
+        fake_repo,
+        """\
+        rules:
+          - id: a-rule-whose-test-was-renamed
+            statement: Something ought to be true.
+            source: nowhere.py
+            enforced_by:
+              - test_t.py::test_plain_but_renamed
+        """,
+    )
+    monkeypatch.setattr(rule_enforcement, "REGISTRY", path)
+    assert rule_enforcement.main() == 1
+    out = capsys.readouterr().out
+    assert "a-rule-whose-test-was-renamed" in out
+    assert "test_t.py::test_plain_but_renamed" in out
+    assert "`test_plain_but_renamed` defined in test_t.py" in out
+
+
+def test_the_known_dangling_reference_fails_the_real_register_when_it_comes_back(tmp_path):
+    """The register as shipped passes; the same register with a node that does not exist
+    added to the rule that dangled for weeks is refused, naming that rule. Kept as a test
+    so the real register, not only a fixture, is shown to be reachable by the check."""
+    shipped = (REPO_ROOT / "canonical" / "rules.yml").read_text(encoding="utf-8")
+    assert audit()["broken"] == []
+
+    anchor = "      - core/gates/review_lane_registry.py\n"
+    mutated = shipped.replace(
+        anchor,
+        anchor
+        + "      - tests/unit/test_round_table.py::test_no_lane_asks_more_than_its_enforcement_x\n",
+        1,
+    )
+    assert mutated != shipped, "the mutation did not apply; the rule moved"
+    path = tmp_path / "rules.yml"
+    path.write_text(mutated, encoding="utf-8")
+    broken = audit(path)["broken"]
+    assert [b["rule"] for b in broken] == ["detector-lane-declares-what-it-leaves-undecided"]
+    assert broken[0]["reference"].endswith("test_no_lane_asks_more_than_its_enforcement_x")
+
+
+def test_the_resolver_agrees_with_pytest_collection_on_the_real_register():
+    """The oracle. Every node the register names is handed to pytest itself, which must
+    collect it (`--collect-only` exits 4 on a node it cannot find), and the ast resolver
+    must have said yes to exactly the same set. Two independent answers to "does this test
+    exist"; a disagreement means one of them is wrong about a rule that claims enforcement."""
+    import subprocess
+    import sys
+
+    import yaml
+
+    rules = yaml.safe_load((REPO_ROOT / "canonical" / "rules.yml").read_text(encoding="utf-8"))
+    nodes = sorted(
+        {
+            ref.strip().split("[", 1)[0]
+            for rule in rules["rules"]
+            for ref in rule.get("enforced_by") or []
+            if "::" in ref
+        }
+    )
+    assert len(nodes) >= 100
+
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"]
+        + ["-o", "addopts="]
+        + nodes,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=600,
+    )
+    assert result.returncode == 0, (result.stdout + result.stderr)[-3000:]
+    collected = {
+        line.split("[", 1)[0].strip()
+        for line in result.stdout.splitlines()
+        if "::" in line and not line.startswith((" ", "="))
+    }
+    uncollected = [
+        n
+        for n in nodes
+        if n not in collected and not any(c.startswith(n + "::") for c in collected)
+    ]
+    assert uncollected == [], f"pytest does not collect: {uncollected}"
+
+    from core.gates.pytest_node_resolver import NodeResolver
+
+    resolver = NodeResolver(REPO_ROOT)
+    refused = {n: resolver.resolve(n) for n in nodes if resolver.resolve(n)}
+    assert refused == {}, f"the resolver refuses nodes pytest collects: {refused}"
+
+
+# --------------------------------------------------------------------------
+# A register that cannot be read, or reads as empty, must fail -- not report OK
+# --------------------------------------------------------------------------
+
+
+def test_a_missing_register_is_a_one_line_failure_not_a_traceback(tmp_path, monkeypatch, capsys):
+    from core.gates import rule_enforcement
+
+    monkeypatch.setattr(rule_enforcement, "REGISTRY", tmp_path / "nope.yml")
+    assert rule_enforcement.main() == 1
+    out = capsys.readouterr().out
+    assert out.startswith("[rule-enforcement] FAIL - cannot read")
+    assert "Traceback" not in out and len(out.strip().splitlines()) == 1
+
+
+def test_a_malformed_register_is_a_one_line_failure_not_a_traceback(tmp_path, monkeypatch, capsys):
+    from core.gates import rule_enforcement
+
+    path = tmp_path / "rules.yml"
+    path.write_text("rules: [unclosed\n  - id: x\n", encoding="utf-8")
+    monkeypatch.setattr(rule_enforcement, "REGISTRY", path)
+    assert rule_enforcement.main() == 1
+    out = capsys.readouterr().out
+    assert "cannot parse" in out and "Traceback" not in out
+
+
+@pytest.mark.parametrize(
+    "body,fragment",
+    [
+        ("", "no `rules` list"),
+        ("rules:\n", "no `rules` list"),
+        ("rules: []\n", "holds no rules"),
+        ("[]\n", "holds no rules"),
+        ("rules: some words\n", "no `rules` list"),
+        ("rules:\n  - just a string\n", "not a mapping"),
+    ],
+)
+def test_a_register_with_nothing_in_it_fails_rather_than_passing_with_zero_references(
+    tmp_path, monkeypatch, capsys, body, fragment
+):
+    from core.gates import rule_enforcement
+    from core.gates.rule_enforcement import RegistryError
+
+    path = tmp_path / "rules.yml"
+    path.write_text(body, encoding="utf-8")
+    with pytest.raises(RegistryError, match=fragment):
+        audit(path)
+
+    monkeypatch.setattr(rule_enforcement, "REGISTRY", path)
+    assert rule_enforcement.main() == 1
+    assert "[rule-enforcement] FAIL" in capsys.readouterr().out
+
+
+def test_a_string_valued_enforced_by_is_one_clear_failure_not_one_per_character(tmp_path):
+    path = _registry(
+        tmp_path,
+        """\
+        rules:
+          - id: a-rule-with-a-bare-string
+            statement: Something ought to be true.
+            source: nowhere.py
+            enforced_by: canonical/rules.yml
+        """,
+    )
+    broken = audit(path)["broken"]
+    assert len(broken) == 1
+    assert broken[0]["rule"] == "a-rule-with-a-bare-string"
+    assert "must be a list, got str" in broken[0]["why"]
+
+
+def test_a_non_string_item_in_enforced_by_is_refused(tmp_path):
+    path = _registry(
+        tmp_path,
+        """\
+        rules:
+          - id: a-rule-with-a-mapping-item
+            statement: Something ought to be true.
+            source: nowhere.py
+            enforced_by:
+              - canonical/rules.yml
+              - file: canonical/rules.yml
+        """,
+    )
+    broken = audit(path)["broken"]
+    assert [b["why"] for b in broken] == ["reference is a dict, not a string"]
+
+
+# --------------------------------------------------------------------------
 # The declaration, and that it is not a bypass
 # --------------------------------------------------------------------------
 
@@ -359,3 +623,27 @@ def test_the_gate_is_registered_in_the_pre_push_manifest():
     assert entry["command"] == ["py", "-m", "core.gates.rule_enforcement"]
     assert entry["tier"] == "blocking"
     assert "fail_hint" in entry
+
+
+def test_a_pytest_config_that_cannot_be_read_fails_the_gate_in_one_line(
+    tmp_path, monkeypatch, capsys
+):
+    from core.gates import rule_enforcement
+
+    (tmp_path / "pytest.ini").write_text("[pytest\n", encoding="utf-8")
+    registry = _registry(
+        tmp_path,
+        """\
+        rules:
+          - id: a-rule
+            statement: Something ought to be true.
+            source: nowhere.py
+            enforced_by:
+              - canonical/rules.yml
+        """,
+    )
+    monkeypatch.setattr(rule_enforcement, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(rule_enforcement, "REGISTRY", registry)
+    assert rule_enforcement.main() == 1
+    out = capsys.readouterr().out
+    assert "cannot read pytest config" in out and "Traceback" not in out

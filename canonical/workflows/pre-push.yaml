@@ -190,12 +190,16 @@ gates:
     tier: blocking
     description: |
       Every enforced_by reference in canonical/rules.yml must resolve, or the rule must
-      declare itself unenforced with a reason. The register exists to separate the
+      declare itself unenforced with a reason. A pytest node (file::Class::test) must
+      resolve to a test pytest would collect, found by reading the file's source
+      (core/gates/pytest_node_resolver.py; nothing is imported), not only to the file:
+      a renamed test, a helper, a fixture or a class pytest skips does not count. An
+      empty or unreadable register fails. The register exists to separate the
       statements something enforces from the ones nothing does; its previous checker
       (core/gates/rule_registry.py) was culled in the same sweep that removed several of
       the enforcers it would have been checking, and 21 of 102 references went stale.
     command: [py, -m, core.gates.rule_enforcement]
-    fail_hint: "A rule names an enforcer that is not there. Point it at the one that survived, or add `unenforced: <20+ characters saying what is gone and why>` and remove its enforced_by."
+    fail_hint: "A rule names an enforcer that is not there (a missing file, module, or a test that was renamed or deleted). Point it at the one that survived, or add `unenforced: <20+ characters saying what is gone and why>` and remove its enforced_by."
 
   - id: agent-coverage
     tier: blocking

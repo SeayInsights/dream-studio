@@ -837,6 +837,62 @@ def test_the_shipped_skill_carries_the_same_dispatch_rule():
     )
 
 
+def test_no_lane_asks_more_than_its_enforcement_answers():
+    """A detector's question must not be wider than the detector, silently.
+
+    Rule `detector-lane-declares-what-it-leaves-undecided`. Every detector lane in the
+    real registry states what its check does not decide (`defers`, possibly empty), and
+    the registry gate accepts the registry as it stands. This test was deleted in #752
+    together with the lane it was written against, and the rule kept naming it for weeks
+    because the rule-enforcement gate resolved only the file, never the test.
+    """
+    from core.gates import review_lane_registry as reg
+
+    lanes = yaml.safe_load(
+        (REPO_ROOT / "canonical" / "review_lanes.yml").read_text(encoding="utf-8")
+    )["lanes"]
+    detectors = [ln for ln in lanes if "detector" in ln]
+    assert detectors, "no detector lanes found -- the fixture is wrong, not the registry"
+
+    for lane in detectors:
+        assert "defers" in lane, f"{lane['id']} runs a check and does not say what it leaves out"
+        assert isinstance(lane["defers"], list), lane["id"]
+
+    errors = reg.validate_lanes(lanes, closed_seats=reg.SEATS)
+    assert not [e for e in errors if "defers" in e], errors
+
+
+def _detector_lane(**extra):
+    lane = {
+        "id": "a-detector-lane",
+        "seat": "Chair and verdict owner",
+        "model": "sonnet",
+        "question": "A question long enough to clear the forty character minimum.",
+        "signature": "A signature long enough to clear the forty character minimum.",
+        "precedent": "A precedent long enough to clear the forty character minimum.",
+        "measurement": "A measurement long enough to clear the forty character minimum.",
+        "detector": "py -m core.gates.shipped_artifact_hygiene",
+    }
+    lane.update(extra)
+    return lane
+
+
+def test_a_detector_lane_must_declare_what_it_defers_and_an_empty_list_is_a_claim():
+    """The mechanism the rule rests on, driven directly: an absent `defers` is refused,
+    a non-list is refused, and `defers: []` -- the positive claim that the check decides
+    the whole question -- is accepted. Without the first, "nothing deferred" and "nobody
+    considered it" look the same."""
+    from core.gates import review_lane_registry as reg
+
+    def errors_for(lane):
+        return [e for e in reg.validate_lanes([lane], closed_seats=reg.SEATS) if "defers" in e]
+
+    assert errors_for(_detector_lane()), "a detector lane with no `defers` was accepted"
+    assert errors_for(_detector_lane(defers="the sync half")), "a non-list `defers` was accepted"
+    assert errors_for(_detector_lane(defers=[])) == []
+    assert errors_for(_detector_lane(defers=["whether anyone asked it to sync"])) == []
+
+
 def test_the_deferred_half_is_printed_beside_the_clean_mark():
     """A declaration nobody renders is a comment.
 
