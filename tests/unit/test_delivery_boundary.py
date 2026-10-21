@@ -16,6 +16,7 @@ import json
 import os
 import subprocess
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1601,18 +1602,41 @@ def test_a_neighbour_that_landed_elsewhere_is_not_reported_as_unmappable(db, tmp
     ), "a target outside the range must not be added to the ownership index either"
 
 
-def _dated_repo_with_side_commits(tmp_path: Path):
-    """A repo whose every timestamp is fixed, plus two commits no branch reaches.
+#: The range's oldest commit is c1 (the range is `c0..c3`), so this is the floor
+#: `_partition_by_range_floor` compares a neighbour commit against.
+_FLOOR = datetime(2025, 6, 2, 12, 0, 0, tzinfo=timezone.utc)
+_FLOOR_EPOCH = int(_FLOOR.timestamp())
+_DEFAULT_RANGE_DATES = [
+    "2025-06-01T12:00:00+00:00",  # c0, excluded from `c0..c3`
+    "2025-06-02T12:00:00+00:00",  # c1, the floor
+    "2025-06-03T12:00:00+00:00",  # c2
+    "2025-06-04T12:00:00+00:00",  # c3, the newest in range
+]
 
-    Returns ``(root, range_expr, old_side_sha, new_side_sha)``. The range's commits are
-    dated mid-2025. ``old_side_sha`` is dated 2020 and ``new_side_sha`` 2030, and both are
-    committed on a detached HEAD that is then abandoned: the objects stay readable (so a
-    timestamp can be read) while no commit on HEAD descends from them and no squash commit
-    names their subject (so they are neither reachable nor mappable).
 
-    Every date is passed explicitly. The test this replaces read ``origin/main...HEAD`` of
-    the checkout and the operator's live authority, so what it saw depended on which
-    commits happened to sit above main on the machine running it.
+def _iso(epoch: int, hours_east: int = 0) -> str:
+    """An instant as an ISO-8601 string in a fixed UTC offset, so a wall-clock reading of it
+    differs from its epoch value whenever the offset is not zero."""
+    zone = timezone(timedelta(hours=hours_east))
+    return datetime.fromtimestamp(epoch, zone).isoformat()
+
+
+def _dated_repo(
+    tmp_path: Path,
+    sides: dict[str, tuple[str, str]] | None = None,
+    range_dates: list[str] | None = None,
+):
+    """A repo whose every timestamp is fixed, plus commits that no branch reaches.
+
+    Returns ``(root, range_expr, side_shas)``. The range is ``c0..c3``, so its oldest commit
+    is c1. ``sides`` maps a name to ``(author_date, committer_date)``; each is committed on a
+    detached HEAD that is then abandoned. The objects stay readable (so a timestamp can be
+    read) while no commit on HEAD descends from them and no squash commit names their subject
+    (so they are neither reachable nor mappable).
+
+    Every date is passed explicitly. The test this replaced read ``origin/main...HEAD`` of the
+    checkout and the operator's live authority, so what it saw depended on which commits
+    happened to sit above main on the machine running it.
     """
     root = tmp_path / "dated-repo"
     root.mkdir()
@@ -1624,10 +1648,12 @@ def _dated_repo_with_side_commits(tmp_path: Path):
         "GIT_COMMITTER_EMAIL": "t@example.com",
     }
 
-    def git(*args: str, when: str | None = None) -> str:
+    def git(*args: str, authored: str | None = None, committed: str | None = None) -> str:
         env = dict(base_env)
-        if when:
-            env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = when
+        if authored:
+            env["GIT_AUTHOR_DATE"] = authored
+        if committed:
+            env["GIT_COMMITTER_DATE"] = committed
         out = subprocess.run(
             ["git", "-c", "commit.gpgsign=false", *args],
             cwd=str(root),
@@ -1641,29 +1667,38 @@ def _dated_repo_with_side_commits(tmp_path: Path):
         assert out.returncode == 0, f"git {args}: {out.stderr}"
         return out.stdout.strip()
 
-    def commit(name: str, when: str) -> str:
+    def commit(name: str, authored: str, committed: str) -> str:
         (root / f"{name}.txt").write_text(name, encoding="utf-8")
         git("add", "-A")
-        git("commit", "-q", "-m", f"commit {name}", when=when)
+        git("commit", "-q", "-m", f"commit {name}", authored=authored, committed=committed)
         return git("rev-parse", "HEAD")
 
     git("init", "-q")
-    shas = [commit(f"c{i}", f"2025-06-0{i + 1}T12:00:00+00:00") for i in range(4)]
+    dates = range_dates or _DEFAULT_RANGE_DATES
+    shas = [commit(f"c{i}", when, when) for i, when in enumerate(dates)]
     tip = git("rev-parse", "HEAD")
 
-    git("checkout", "-q", "--detach", shas[0])
-    old_side = commit("side-old", "2020-01-01T12:00:00+00:00")
-    git("checkout", "-q", "--detach", shas[0])
-    new_side = commit("side-new", "2030-01-01T12:00:00+00:00")
+    side_shas: dict[str, str] = {}
+    for name, (authored, committed) in (sides or {}).items():
+        git("checkout", "-q", "--detach", shas[0])
+        side_shas[name] = commit(f"side-{name}", authored, committed)
     git("checkout", "-q", "--detach", tip)
 
     # The fixture's premise, asserted rather than assumed: a side commit that turned out to
-    # be reachable would make both tests below vacuous.
+    # be reachable would make every test built on it vacuous.
     from core.work_orders.range_attribution import _is_reachable
 
-    assert not _is_reachable(old_side, root)
-    assert not _is_reachable(new_side, root)
-    return root, f"{shas[0]}..{shas[3]}", old_side, new_side
+    for name, sha in side_shas.items():
+        assert not _is_reachable(sha, root), f"side commit {name} is reachable"
+    return root, f"{shas[0]}..{shas[3]}", side_shas
+
+
+def _dated_repo_with_side_commits(tmp_path: Path):
+    """The two extremes: ``(root, range_expr, old_side_sha, new_side_sha)``, dated 2020 and
+    2030 against a range dated mid-2025."""
+    old, new = "2020-01-01T12:00:00+00:00", "2030-01-01T12:00:00+00:00"
+    root, expr, side = _dated_repo(tmp_path, {"old": (old, old), "new": (new, new)})
+    return root, expr, side["old"], side["new"]
 
 
 def test_a_neighbour_commit_that_predates_the_range_is_not_a_standing_caveat(db, tmp_path):
@@ -1718,6 +1753,142 @@ def test_a_neighbour_commit_that_could_be_in_the_range_still_raises_the_caveat(d
         f"harmless: {result.note}"
     )
     assert "predate this range's oldest commit" not in result.note, result.note
+
+
+# THE EDGES OF THE FLOOR. The two extremes above (2020, 2030) are satisfied by many wrong
+# implementations -- a floor taken from the newest range commit instead of the oldest, a
+# `<=` for a `<`, an author date for a committer date -- because none of them is within a
+# day of the answer. These cases sit on and around the floor, as instants.
+#
+# Each is `(author_date, committer_date, ruled_out)`. A neighbour commit is ruled out only
+# when it is strictly OLDER than the range's oldest commit, because only then can it not have
+# been squashed into the range; at the floor or after it, nothing excludes it.
+_FLOOR_EDGE_CASES = {
+    "exactly_at_the_floor": (_iso(_FLOOR_EPOCH), _iso(_FLOOR_EPOCH), False),
+    "one_second_before_the_floor": (_iso(_FLOOR_EPOCH - 1), _iso(_FLOOR_EPOCH - 1), True),
+    "one_second_after_the_floor": (_iso(_FLOOR_EPOCH + 1), _iso(_FLOOR_EPOCH + 1), False),
+    # Between c1 (the floor) and c2: inside the span of the range, so it could be anywhere.
+    "mid_range": (_iso(_FLOOR_EPOCH + 6 * 3600), _iso(_FLOOR_EPOCH + 6 * 3600), False),
+    # One hour after c3, the newest commit in range.
+    "after_the_newest_range_commit": (
+        _iso(_FLOOR_EPOCH + 2 * 86400 + 3600),
+        _iso(_FLOOR_EPOCH + 2 * 86400 + 3600),
+        False,
+    ),
+    # Instants, not wall-clock strings. The same instant as the floor written in two other
+    # offsets reads as 17:00 and 02:00 the next day.
+    "the_floor_instant_written_in_plus_5": (_iso(_FLOOR_EPOCH, 5), _iso(_FLOOR_EPOCH, 5), False),
+    "the_floor_instant_written_in_plus_14": (
+        _iso(_FLOOR_EPOCH, 14),
+        _iso(_FLOOR_EPOCH, 14),
+        False,
+    ),
+    # 12:00 on the floor's day in +14:00 is the evening BEFORE it in UTC: the same wall-clock
+    # reading as the floor, an earlier instant, so it is ruled out.
+    "floor_wall_clock_in_plus_14_is_an_earlier_instant": (
+        "2025-06-02T12:00:00+14:00",
+        "2025-06-02T12:00:00+14:00",
+        True,
+    ),
+    # And the other way round: 12:00 in -05:00 is 17:00 UTC, a later instant.
+    "floor_wall_clock_in_minus_5_is_a_later_instant": (
+        "2025-06-02T12:00:00-05:00",
+        "2025-06-02T12:00:00-05:00",
+        False,
+    ),
+    # THE COMMITTER DATE IS THE ONE USED (`git show --format=%ct`, documented on
+    # `_commit_timestamp`). A commit authored long ago and committed after the floor -- a
+    # rebased or cherry-picked commit -- is not provably older than the range.
+    "authored_long_ago_but_committed_after_the_floor": (
+        _iso(_FLOOR_EPOCH - 10 * 86400),
+        _iso(_FLOOR_EPOCH + 1),
+        False,
+    ),
+    "authored_after_the_floor_but_committed_before_it": (
+        _iso(_FLOOR_EPOCH + 10 * 86400),
+        _iso(_FLOOR_EPOCH - 1),
+        True,
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(_FLOOR_EDGE_CASES))
+def test_a_neighbour_commit_is_ruled_out_only_when_strictly_older_than_the_floor(
+    db, tmp_path, case
+):
+    from core.work_orders.range_attribution import attribute_range
+
+    authored, committed, ruled_out = _FLOOR_EDGE_CASES[case]
+    root, expr, side = _dated_repo(tmp_path, {"edge": (authored, committed)})
+    _own(db, "wo-neighbour", [side["edge"]])
+
+    note = attribute_range("wo-mine", expr, repo_root=root, db_path=db).note
+
+    if ruled_out:
+        assert "may be graded here" not in note, f"{case}: should be ruled out by date: {note}"
+        assert "predate this range's oldest commit" in note, f"{case}: {note}"
+    else:
+        assert "may be graded here" in note, f"{case}: could be in the range, so: {note}"
+        assert "predate this range's oldest commit" not in note, f"{case}: {note}"
+
+
+def test_a_neighbour_commit_with_no_readable_timestamp_still_raises_the_caveat(db, tmp_path):
+    """Unknown is not safe: this is the live failure mode behind #904.
+
+    A neighbour recorded a sha this repository has never seen, so its date cannot be read
+    and nothing rules it out. It is also pinned, from the other side and with a different
+    fixture, by `test_an_unmappable_neighbour_claim_is_reported_too`.
+    """
+    from core.work_orders.range_attribution import attribute_range
+
+    root, expr, _side = _dated_repo(tmp_path)
+    _own(db, "wo-neighbour", ["f" * 40])
+
+    note = attribute_range("wo-mine", expr, repo_root=root, db_path=db).note
+
+    assert "may be graded here" in note, note
+    assert "predate this range's oldest commit" not in note, note
+
+
+def test_a_range_with_no_readable_timestamp_rules_nothing_out(db, tmp_path):
+    """If the range's own dates cannot be read there is no floor to compare against, and a
+    neighbour commit dated 2020 must not be called harmless on the strength of nothing.
+
+    A zero timestamp is how an unreadable one is told apart here (`if t` drops both None and
+    0), so every commit in the range is written at the epoch.
+    """
+    from core.work_orders.range_attribution import attribute_range
+
+    epoch = "1970-01-01T00:00:00+00:00"
+    old = "2020-01-01T12:00:00+00:00"
+    root, expr, side = _dated_repo(tmp_path, {"old": (old, old)}, range_dates=[epoch] * 4)
+    _own(db, "wo-neighbour", [side["old"]])
+
+    note = attribute_range("wo-mine", expr, repo_root=root, db_path=db).note
+
+    assert "may be graded here" in note, note
+    assert "predate this range's oldest commit" not in note, note
+
+
+def test_one_zero_timestamp_in_the_range_does_not_become_the_floor(db, tmp_path):
+    """A single commit dated at the epoch (a bad import, a clock that was never set) must
+    not be read as the range's oldest, or nothing would ever be ruled out again.
+
+    `_partition_by_range_floor` drops falsy timestamps before taking the minimum, so the
+    floor here is c2's date and the 2020 neighbour commit predates it.
+    """
+    from core.work_orders.range_attribution import attribute_range
+
+    dates = list(_DEFAULT_RANGE_DATES)
+    dates[1] = "1970-01-01T00:00:00+00:00"
+    old = "2020-01-01T12:00:00+00:00"
+    root, expr, side = _dated_repo(tmp_path, {"old": (old, old)}, range_dates=dates)
+    _own(db, "wo-neighbour", [side["old"]])
+
+    note = attribute_range("wo-mine", expr, repo_root=root, db_path=db).note
+
+    assert "may be graded here" not in note, note
+    assert "predate this range's oldest commit" in note, note
 
 
 # ── WO 654a54d7: a pin means finished, and only close means finished ───────────
