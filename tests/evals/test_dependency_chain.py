@@ -62,17 +62,27 @@ def _drive_hook(mod, payload: dict) -> None:
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _compiled_pack() -> dict:
+    """What the Claude Code installer writes, built from this repository's canonical tree."""
+    from integrations.compiler.claude_code import compile_pack
+
+    return compile_pack(REPO_ROOT / "canonical")
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Chain 1 — Natural Language to Skill Execution
 # ═════════════════════════════════════════════════════════════════════════════
 
 
 def test_chain_1_link_1_claude_md_routing_table_present():
-    """C1-L1: User message → CLAUDE.md routing table read. PROVEN."""
-    claude_md = Path.home() / ".claude" / "CLAUDE.md"
-    if not claude_md.is_file():
-        pytest.skip("Operator's ~/.claude/CLAUDE.md not installed in this environment")
-    content = claude_md.read_text(encoding="utf-8")
+    """C1-L1: User message -> CLAUDE.md routing table read. PROVEN.
+
+    Asserted against the CLAUDE.md the installer WRITES (``compile_pack``), not against
+    ``~/.claude/CLAUDE.md``: that file is whatever this machine's operator last installed,
+    so the test passed or skipped depending on the machine and could never fail on a
+    regression in the generator.
+    """
+    content = _compiled_pack()["files"]["CLAUDE.md"]
     assert "MANDATORY" in content or "Skill Routing" in content, "CLAUDE.md missing routing markers"
 
 
@@ -314,28 +324,27 @@ def test_chain_3_link_5_spool_ingest_wo_events_post_a0():
 
 
 def test_chain_4_link_1_workflow_trigger_in_installed_routing():
-    """C4-L1: 'idea-to-pr' → workflow routing triggered. PROVEN post-18.1.15a.
+    """C4-L1: 'idea-to-pr' -> workflow routing triggered. PROVEN post-18.1.15a.
 
     Fixed: workflow trigger keywords added to ds-workflow pack routing table.
     Post-Phase-20 the installed CLAUDE.md delegates the routing table via an
-    @AGENTS.md import, so the keyword may live in either file — but a dangling
-    import (CLAUDE.md references AGENTS.md that was never installed) must fail.
+    @AGENTS.md import, so the keyword may live in either file -- but a dangling
+    import (CLAUDE.md references an AGENTS.md the install never writes) must fail.
+
+    Asserted against what the installer writes (``compile_pack``), so it neither reads
+    ``~/.claude`` nor skips on a machine without an install.
     """
-    claude_md = Path.home() / ".claude" / "CLAUDE.md"
-    if not claude_md.is_file():
-        pytest.skip("Operator's ~/.claude/CLAUDE.md not installed in this environment")
-    content = claude_md.read_text(encoding="utf-8")
+    files = _compiled_pack()["files"]
+    content = files["CLAUDE.md"]
     if "workflow:" in content:
         return
     assert "@AGENTS.md" in content, "workflow: trigger keyword absent from installed CLAUDE.md"
-    agents_md = Path.home() / ".claude" / "AGENTS.md"
-    assert agents_md.is_file(), (
-        "installed CLAUDE.md imports @AGENTS.md but ~/.claude/AGENTS.md was never installed"
-        " — routing table is unreachable"
+    agents_md = files.get("AGENTS.md", "")
+    assert agents_md, (
+        "installed CLAUDE.md imports @AGENTS.md but the install writes no AGENTS.md"
+        " -- routing table is unreachable"
     )
-    assert "workflow:" in agents_md.read_text(
-        encoding="utf-8"
-    ), "workflow: trigger keyword absent from installed AGENTS.md routing table"
+    assert "workflow:" in agents_md, "workflow: trigger keyword absent from installed AGENTS.md"
 
 
 @pytest.mark.xfail(
@@ -724,23 +733,30 @@ def test_chain_8_link_1_dynamic_plugin_root_path():
     ), "Expected dynamic plugin-root resolution marker in hooks.json"
 
 
-def test_chain_8_link_2_install_writes_all_files():
-    """C8-L2: integrate install --execute → required files written. PROVEN post-18.1.15a.
+def test_chain_8_link_2_install_writes_all_files(tmp_path):
+    """C8-L2: integrate install --execute -> required files written. PROVEN post-18.1.15a.
 
     Fixed: dispatcher entries present in hooks_template.json; user-scope install
     confirmed to write mode-level SKILL.md for all 11 packs including ds-milestone,
     ds-workorder, and ds-project/modes/manage.
+
+    Runs the real installer into a temporary config root and Dream Studio home. It used
+    to count the mode skills under ``~/.claude/skills`` and skip when there were none,
+    which tested whatever the operator had installed and so could not fail on a machine
+    without an install -- which is every CI runner.
     """
-    skills_dir = Path.home() / ".claude" / "skills"
-    mode_skills = list(skills_dir.rglob("modes/*/SKILL.md")) if skills_dir.is_dir() else []
-    # NOT INSTALLED AND INSTALLED WRONG ARE DIFFERENT ANSWERS, and the directory's
-    # existence does not tell them apart: ~/.claude/skills is shared, so the host's
-    # own skills recreate it even with Dream Studio fully uninstalled. Guarding on
-    # is_dir() alone therefore turned "no install here" into a regression failure.
-    # Zero mode skills means nothing to check; anything between one and two means an
-    # install that wrote a partial pack, which is the regression this exists to catch.
-    if not mode_skills:
-        pytest.skip("no Dream Studio mode skills installed in this environment")
+    from integrations.installer.claude_code import ClaudeCodeInstaller
+
+    config_root = tmp_path / "claude_config"
+    config_root.mkdir()
+    ClaudeCodeInstaller(
+        config_root,
+        "user",
+        canonical_root=REPO_ROOT / "canonical",
+        ds_home=tmp_path / "ds_home",
+    ).install("execute")
+
+    mode_skills = list((config_root / "skills").rglob("modes/*/SKILL.md"))
     assert (
         len(mode_skills) >= 3
     ), f"Expected at least 3 mode-level SKILL.md files, found {len(mode_skills)}"
