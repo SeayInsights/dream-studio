@@ -116,12 +116,6 @@ ALLOWLIST: dict[tuple[str, str], str] = {
         "guard_real_homedir",
     ): "the autouse guard snapshots the operator's real ~/.dream-studio events, integrations "
     "and state.db mtimes before and after each test and aborts the session if one moved",
-    (
-        "tests/unit/test_delivery_boundary.py",
-        "test_the_live_attribution_does_not_carry_a_standing_neighbour_caveat",
-    ): "reads ~/.dream-studio/state/studio.db and origin/main...HEAD of the checkout; rewritten "
-    "against a fixture repository and authority by PR #916 (fix/delivery-boundary-test-is-"
-    "hermetic), which deletes this function. Remove this entry when that PR merges.",
 }
 
 _KIND_MESSAGE = {

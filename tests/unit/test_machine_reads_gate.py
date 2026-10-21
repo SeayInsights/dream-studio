@@ -331,7 +331,7 @@ def test_every_real_allowlist_entry_has_a_reason():
 def test_the_real_allowlist_has_not_grown():
     """A ceiling, so the list can only go down. Lowering it is the whole point of a fix; raising
     it needs a review that agrees the read cannot be redirected, rebuilt, or marked."""
-    assert len(machine_reads.ALLOWLIST) <= 3, sorted(machine_reads.ALLOWLIST)
+    assert len(machine_reads.ALLOWLIST) <= 2, sorted(machine_reads.ALLOWLIST)
 
 
 # --- bound to the real suite -------------------------------------------------------------
