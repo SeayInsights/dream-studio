@@ -111,6 +111,257 @@ def test_a_rule_with_neither_enforcement_nor_a_declaration_is_refused(tmp_path):
 
 
 # --------------------------------------------------------------------------
+# A node id is resolved to the test, not just to the file
+# --------------------------------------------------------------------------
+#
+# `file::name` used to count as resolved when `file` existed. A test renamed or deleted
+# underneath a rule left the rule claiming enforcement by something that was no longer
+# there, and the gate printed OK (#896; found on `a-work-order-type-is-refused-at-the-door`
+# and on `detector-lane-declares-what-it-leaves-undecided`, the latter dangling for weeks).
+
+_SAMPLE = """\
+import pytest
+
+
+def test_plain():
+    pass
+
+
+async def test_async():
+    pass
+
+
+@pytest.mark.parametrize("value", [1, 2])
+@pytest.mark.slow
+def test_decorated(value):
+    pass
+
+
+class TestOuter:
+    def test_method(self):
+        pass
+
+    class TestInner:
+        def test_deep(self):
+            pass
+
+
+def test_duplicated():
+    pass
+
+
+def test_duplicated():
+    pass
+
+
+test_a_variable = 3
+test_an_alias = test_plain
+
+
+def test_wraps_a_function():
+    def test_nested_in_a_function():
+        pass
+
+
+if True:
+    def test_guarded():
+        pass
+"""
+
+
+@pytest.fixture
+def fake_repo(tmp_path, monkeypatch):
+    """A throwaway tree the gate resolves against, so each case controls the file."""
+    from core.gates import rule_enforcement
+
+    monkeypatch.setattr(rule_enforcement, "REPO_ROOT", tmp_path)
+    (tmp_path / "t.py").write_text(_SAMPLE, encoding="utf-8")
+    return tmp_path
+
+
+@pytest.mark.parametrize(
+    "node",
+    [
+        "t.py::test_plain",
+        "t.py::test_async",
+        "t.py::test_decorated",
+        "t.py::TestOuter",
+        "t.py::TestOuter::test_method",
+        "t.py::TestOuter::TestInner",
+        "t.py::TestOuter::TestInner::test_deep",
+        "t.py::test_duplicated",
+        "t.py::test_guarded",
+        # a parametrised id resolves when the function does; the ids are generated at
+        # collection time and may hold `::` and `]` themselves
+        "t.py::test_decorated[1]",
+        "t.py::test_decorated[a-b]",
+        "t.py::test_decorated[x::y]",
+        "t.py::TestOuter::test_method[1]",
+    ],
+)
+def test_a_node_that_exists_resolves(fake_repo, node):
+    assert _resolve(node) is None
+
+
+@pytest.mark.parametrize(
+    "node,fragment",
+    [
+        # the case the gate exists for: the test was renamed or deleted
+        ("t.py::test_renamed_away", "`test_renamed_away` defined in t.py"),
+        ("t.py::test_plain_renamed[1]", "`test_plain_renamed` defined in t.py"),
+        # right name, wrong class
+        ("t.py::TestInner::test_deep", "`TestInner` defined in t.py"),
+        ("t.py::TestOuter::test_deep", "`test_deep` defined in TestOuter"),
+        (
+            "t.py::TestOuter::TestInner::test_method",
+            "`test_method` defined in TestOuter::TestInner",
+        ),
+        # a function has no tests inside it, and an assignment is not a test
+        ("t.py::test_wraps_a_function::test_nested_in_a_function", "is a function, not a class"),
+        ("t.py::test_a_variable", "`test_a_variable` defined in t.py"),
+        ("t.py::test_an_alias", "`test_an_alias` defined in t.py"),
+        ("t.py::test_plain::", "empty segment"),
+        ("t.py::", "empty segment"),
+        ("t.py::::test_plain", "empty segment"),
+    ],
+)
+def test_a_node_that_does_not_exist_is_refused_and_named(fake_repo, node, fragment):
+    why = _resolve(node)
+    assert why is not None, f"{node} resolved but should not"
+    assert fragment in why
+
+
+def test_a_missing_file_still_says_no_such_test_file(fake_repo):
+    assert _resolve("gone.py::test_plain") == "no such test file"
+
+
+def test_a_node_into_a_non_python_file_is_refused(fake_repo):
+    (fake_repo / "notes.md").write_text("def test_plain(): pass\n", encoding="utf-8")
+    assert _resolve("notes.md::test_plain") == "node id into a non-python file"
+
+
+def test_a_test_file_that_does_not_parse_fails_with_a_message_not_a_crash(fake_repo):
+    (fake_repo / "broken.py").write_text("def test_a(:\n    pass\n", encoding="utf-8")
+    why = _resolve("broken.py::test_a")
+    assert why is not None and "does not parse" in why and "line 1" in why
+
+
+def test_a_test_file_that_is_not_utf8_fails_with_a_message_not_a_crash(fake_repo):
+    (fake_repo / "latin.py").write_bytes(b"def test_a():\n    x = '\xe9'\n")
+    why = _resolve("latin.py::test_a")
+    assert why is not None and "not readable" in why
+
+
+def test_resolving_a_node_never_imports_or_runs_the_test_module(fake_repo):
+    """Reading source is the whole method. A test module may need a database, a network,
+    or a fixture the gate has no business setting up, and importing it would execute
+    whatever sits at module level on every push."""
+    marker = fake_repo / "ran.txt"
+    (fake_repo / "side_effect.py").write_text(
+        f"open({str(marker)!r}, 'w').write('ran')\n"
+        "raise RuntimeError('imported')\n"
+        "def test_x():\n    pass\n",
+        encoding="utf-8",
+    )
+    assert _resolve("side_effect.py::test_x") is None
+    assert not marker.exists()
+
+
+def test_a_file_is_parsed_once_however_many_rules_name_it(fake_repo, monkeypatch):
+    """The gate runs on every push; 171 references over a few dozen files must cost a few
+    dozen parses."""
+    import ast
+
+    from core.gates import rule_enforcement
+
+    calls = []
+    real = ast.parse
+    monkeypatch.setattr(
+        rule_enforcement.ast, "parse", lambda *a, **k: calls.append(1) or real(*a, **k)
+    )
+    path = _registry(
+        fake_repo,
+        """\
+        rules:
+          - id: a-rule
+            statement: Something ought to be true.
+            source: nowhere.py
+            enforced_by:
+              - t.py::test_plain
+              - t.py::test_async
+              - t.py::TestOuter::test_method
+        """,
+    )
+    assert audit(path)["broken"] == []
+    assert len(calls) == 1
+
+
+def test_a_dangling_node_fails_the_audit_with_the_rule_the_reference_and_the_gap(fake_repo):
+    path = _registry(
+        fake_repo,
+        """\
+        rules:
+          - id: a-rule-whose-test-was-renamed
+            statement: Something ought to be true.
+            source: nowhere.py
+            enforced_by:
+              - t.py::test_plain
+              - t.py::test_plain_but_renamed
+        """,
+    )
+    report = audit(path)
+    assert report["references_checked"] == 2
+    assert [(b["rule"], b["reference"]) for b in report["broken"]] == [
+        ("a-rule-whose-test-was-renamed", "t.py::test_plain_but_renamed")
+    ]
+    assert "`test_plain_but_renamed` defined in t.py" in report["broken"][0]["why"]
+
+
+def test_the_command_exits_nonzero_and_names_a_dangling_node(fake_repo, monkeypatch, capsys):
+    from core.gates import rule_enforcement
+
+    path = _registry(
+        fake_repo,
+        """\
+        rules:
+          - id: a-rule-whose-test-was-renamed
+            statement: Something ought to be true.
+            source: nowhere.py
+            enforced_by:
+              - t.py::test_plain_but_renamed
+        """,
+    )
+    monkeypatch.setattr(rule_enforcement, "REGISTRY", path)
+    assert rule_enforcement.main() == 1
+    out = capsys.readouterr().out
+    assert "a-rule-whose-test-was-renamed" in out
+    assert "t.py::test_plain_but_renamed" in out
+    assert "`test_plain_but_renamed` defined in t.py" in out
+
+
+def test_the_known_dangling_reference_fails_the_real_register_when_it_comes_back(tmp_path):
+    """The register as shipped passes; the same register with a node that does not exist
+    added to the rule that dangled for weeks is refused, naming that rule. Kept as a test
+    so the real register, not only a fixture, is shown to be reachable by the check."""
+    shipped = (REPO_ROOT / "canonical" / "rules.yml").read_text(encoding="utf-8")
+    assert audit()["broken"] == []
+
+    anchor = "      - core/gates/review_lane_registry.py\n"
+    mutated = shipped.replace(
+        anchor,
+        anchor
+        + "      - tests/unit/test_round_table.py::test_no_lane_asks_more_than_its_enforcement_x\n",
+        1,
+    )
+    assert mutated != shipped, "the mutation did not apply; the rule moved"
+    path = tmp_path / "rules.yml"
+    path.write_text(mutated, encoding="utf-8")
+    broken = audit(path)["broken"]
+    assert [b["rule"] for b in broken] == ["detector-lane-declares-what-it-leaves-undecided"]
+    assert broken[0]["reference"].endswith("test_no_lane_asks_more_than_its_enforcement_x")
+
+
+# --------------------------------------------------------------------------
 # The declaration, and that it is not a bypass
 # --------------------------------------------------------------------------
 
