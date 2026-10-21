@@ -11,14 +11,16 @@ Both functions also emit canonical events for cross-system observability (fail-o
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import uuid
-import warnings
 from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
 from .model import encode_honesty
+
+logger = logging.getLogger(__name__)
 
 _HONESTY_COLUMNS = ("confidence", "coverage", "limitations")
 
@@ -35,7 +37,7 @@ def honesty_columns(
     column stays NULL, which every reader treats as unknown. When values are given but
     this database predates migration 161 (the migration is unreleased, so a live
     authority may not have applied it), they cannot be stored: the finding is still
-    recorded, without them, and a warning says so. It then reads unknown, which is the
+    recorded, without them, and the log says so. It then reads unknown, which is the
     truth, not a certain value.
     """
     stored = {k: v for k, v in encode_honesty(confidence, coverage, limitations).items() if v}
@@ -46,11 +48,11 @@ def honesty_columns(
     except sqlite3.Error:
         have = set()
     if not set(_HONESTY_COLUMNS) <= have:
-        warnings.warn(
+        # Logged, not warnings.warn: a warning escalated to an error (-W error,
+        # filterwarnings=error) would raise here and lose the finding itself.
+        logger.warning(
             "security_events has no confidence/coverage/limitations columns (migration 161 "
-            "not applied); the finding is recorded without them and reads as unknown",
-            RuntimeWarning,
-            stacklevel=3,
+            "not applied); the finding is recorded without them and reads as unknown"
         )
         return {}
     return stored

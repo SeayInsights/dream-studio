@@ -267,23 +267,55 @@ def test_the_collector_treats_a_corrupt_limitations_cell_as_not_recorded(tmp_pat
     assert (f.confidence, f.coverage, f.limitations) == ("unknown", "unknown", None)
 
 
-def test_record_finding_on_a_database_without_the_columns_still_records_it(tmp_path: Path):
-    """The migration is unreleased, so a live authority may not have it. The finding is
-    recorded without the fields, with a warning, and reads unknown."""
+@pytest.fixture
+def pre161(tmp_path: Path) -> Path:
+    """A database at the previous schema: what a live authority is until 161 is released."""
     path = tmp_path / "pre161.db"
     conn = sqlite3.connect(path)
     run_migrations(conn, target_version=160)
     conn.commit()
     conn.close()
-    with pytest.warns(RuntimeWarning, match="migration 161"):
-        fid = record_finding(severity="high", title="t", coverage="partial", db_path=path)
-    assert _row(path, fid)["title"] == "t"
-    (f,) = from_security_events(path)
+    return path
+
+
+def test_record_finding_on_a_database_without_the_columns_still_records_it(pre161: Path, caplog):
+    """The migration is unreleased, so a live authority may not have it. The finding is
+    recorded without the fields, the loss is logged, and it reads unknown."""
+    with caplog.at_level("WARNING"):
+        fid = record_finding(severity="high", title="t", coverage="partial", db_path=pre161)
+    assert _row(pre161, fid)["title"] == "t"
+    assert any("migration 161" in r.getMessage() for r in caplog.records)
+    (f,) = from_security_events(pre161)
     assert f.coverage == "unknown"
 
+    caplog.clear()
+    record_finding(severity="low", title="plain", db_path=pre161)
+    assert not caplog.records, "nothing supplied, nothing to report"
+
+
+def test_a_warning_escalated_to_an_error_cannot_lose_a_finding(pre161: Path):
+    """-W error / filterwarnings=error must not turn "the columns are missing" into "the
+    finding is missing". Both write paths, rows read back by SQL."""
+    from core.telemetry.emitters import emit_security_finding
+
     with warnings.catch_warnings():
-        warnings.simplefilter("error")  # nothing supplied, nothing to warn about
-        record_finding(severity="low", title="plain", db_path=path)
+        warnings.simplefilter("error")
+        fid = record_finding(severity="high", title="kept", coverage="partial", db_path=pre161)
+        with patch("spool.writer.write_event"):
+            result = emit_security_finding(
+                severity="high",
+                description="kept too",
+                rule_id="CWE-1",
+                coverage="partial",
+                limitations=["x"],
+                context={"project_id": "proj"},
+                db_path=pre161,
+            )
+    assert result.emitted
+    conn = sqlite3.connect(pre161)
+    ids = {r[0] for r in conn.execute("SELECT event_id FROM security_events")}
+    conn.close()
+    assert {fid, result.record_id} <= ids
 
 
 # ---------------------------------------------------------------------------
@@ -348,3 +380,178 @@ def test_ds_render_findings_json_shows_what_was_recorded(db: Path, monkeypatch, 
     assert rows["recorded"]["confidence"] == "unknown"
     assert rows["bare"]["coverage"] == "unknown"
     assert rows["bare"]["limitations"] is None
+
+
+# ---------------------------------------------------------------------------
+# limitations is a JSON array at the SQL level
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("value", ['"a string"', '{"a": 1}', "3", "null", "true"])
+def test_the_database_refuses_limitations_that_is_not_a_json_array(value):
+    conn = sqlite3.connect(":memory:")
+    run_migrations(conn)
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO security_events (event_id, event_kind, limitations)"
+            " VALUES ('x', 'finding.recorded', ?)",
+            (value,),
+        )
+    conn.close()
+
+
+@pytest.mark.parametrize("value", ["[]", '["a"]', '["a", "b"]'])
+def test_the_database_accepts_a_json_array_of_limitations(value):
+    conn = sqlite3.connect(":memory:")
+    run_migrations(conn)
+    conn.execute(
+        "INSERT INTO security_events (event_id, event_kind, limitations)"
+        " VALUES ('x', 'finding.recorded', ?)",
+        (value,),
+    )
+    conn.close()
+
+
+def test_items_being_strings_is_not_enforceable_in_sql_so_the_reader_is_tolerant(tmp_path):
+    """SQLite forbids a subquery in a CHECK, so json_each cannot check the items. [1, 2]
+    therefore passes the CHECK, and the reader coerces rather than fails."""
+    conn = sqlite3.connect(":memory:")
+    run_migrations(conn)
+    with pytest.raises(sqlite3.OperationalError, match="subqueries prohibited"):
+        conn.execute("CREATE TABLE t (x TEXT CHECK (EXISTS (SELECT 1 FROM json_each(x))))")
+    conn.execute(
+        "INSERT INTO security_events (event_id, event_kind, severity, title, limitations)"
+        " VALUES ('x', 'finding.recorded', 'low', 't', '[1, 2]')"
+    )
+    conn.commit()
+    path = tmp_path / "n.db"
+    disk = sqlite3.connect(path)
+    conn.backup(disk)
+    disk.close()
+    conn.close()
+    (f,) = from_security_events(path)
+    assert f.limitations == ("1", "2")
+
+
+def test_a_pathologically_deep_stored_limitations_cell_is_not_recorded():
+    assert decode_limitations("[" * 100000 + "]" * 100000) is None
+
+
+# ---------------------------------------------------------------------------
+# A hostile value never loses the finding
+# ---------------------------------------------------------------------------
+
+
+class _RaisingStr:
+    def __str__(self):
+        raise RuntimeError("boom")
+
+
+class _RaisingEq:
+    def __eq__(self, other):
+        raise RuntimeError("eq")
+
+    __hash__ = None
+
+
+class _RaisingHash:
+    def __hash__(self):
+        raise RuntimeError("hash")
+
+
+class _BadLen(list):
+    def __len__(self):
+        raise RuntimeError("len")
+
+
+class _BadIter(list):
+    def __iter__(self):
+        raise RuntimeError("iter")
+
+
+class _OddStr(str):
+    """A str subclass that lies: equal to everything, strips to an int."""
+
+    def __eq__(self, other):
+        return True
+
+    __hash__ = str.__hash__
+
+    def strip(self, *a):
+        return 5
+
+    def lower(self):
+        raise RuntimeError("lower")
+
+
+def _recursive():
+    items: list = []
+    items.append(items)
+    return items
+
+
+def _hostile_values():
+    return {
+        "raising __str__ item": [_RaisingStr()],
+        "raising __str__ bare": _RaisingStr(),
+        "raising __eq__ item": [_RaisingEq()],
+        "raising __hash__ item": [_RaisingHash()],
+        "raising __len__": _BadLen(["a"]),
+        "raising __iter__": _BadIter(["a"]),
+        "huge list": ["limit"] * 200_000,
+        "huge string": "x" * 5_000_000,
+        "recursive list": _recursive(),
+        "odd str subclass": _OddStr("high"),
+        "odd str subclass item": [_OddStr("a")],
+    }
+
+
+def _assert_row_is_well_formed(row) -> None:
+    """Whatever came in, the stored cells are NULL or a valid value, never garbage."""
+    assert row["confidence"] in (None, *CONFIDENCE_VALUES)
+    assert row["coverage"] in (None, *COVERAGE_VALUES)
+    if row["limitations"] is not None:
+        stored = json.loads(row["limitations"])
+        assert isinstance(stored, list) and all(isinstance(i, str) for i in stored)
+
+
+@pytest.mark.parametrize("name", sorted(_hostile_values()))
+def test_a_hostile_value_does_not_lose_the_finding_on_either_write_path(db: Path, name):
+    from core.telemetry.emitters import emit_security_finding
+
+    hostile = _hostile_values()[name]
+    fid = record_finding(
+        severity="high",
+        title=name,
+        confidence=hostile,
+        coverage=hostile,
+        limitations=hostile,
+        db_path=db,
+    )
+    with patch("spool.writer.write_event"):
+        result = emit_security_finding(
+            severity="high",
+            description=name,
+            rule_id=f"rule-{name}",
+            confidence=hostile,
+            coverage=hostile,
+            limitations=hostile,
+            context={"project_id": "proj"},
+            db_path=db,
+        )
+    assert result.emitted, result.error
+    for finding_id in (fid, result.record_id):
+        row = _row(db, finding_id)
+        assert row is not None, f"{name}: the finding was lost"
+        _assert_row_is_well_formed(row)
+
+
+def test_a_failed_encoding_degrades_to_unknown_and_says_so_in_the_log(db: Path, caplog):
+    with caplog.at_level("WARNING"):
+        fid = record_finding(
+            severity="high", title="t", coverage="partial", limitations=[_RaisingStr()], db_path=db
+        )
+    row = _row(db, fid)
+    assert (row["confidence"], row["coverage"], row["limitations"]) == (None, None, None)
+    assert any("could not be encoded" in r.getMessage() for r in caplog.records)
+    assert not any("boom" in r.getMessage() for r in caplog.records), "the value is not echoed"

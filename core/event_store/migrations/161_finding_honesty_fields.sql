@@ -15,7 +15,11 @@
 -- THE VOCABULARY IS CLOSED, by CHECK, and mirrors CONFIDENCE_VALUES / COVERAGE_VALUES in
 -- core/findings/model.py (tests/unit/test_finding_honesty_storage.py fails if the two
 -- drift). limitations is a JSON array of strings: '[]' records "none exist", which is a
--- different statement from NULL, "not recorded".
+-- different statement from NULL, "not recorded". The CHECK enforces that it is a JSON
+-- array. It cannot enforce that the items are strings: that needs json_each, which is a
+-- subquery, and SQLite prohibits a subquery in a CHECK. The writer only ever stores
+-- strings (encode_honesty), and the reader coerces an item that is not one rather than
+-- failing, so a hand-written [1, 2] reads as ("1", "2").
 --
 -- ADDITIVE ONLY: three nullable columns on an existing append-only table. No row is
 -- touched, no table is dropped, and no existing reader or writer changes shape: the
@@ -31,4 +35,7 @@ ALTER TABLE security_events
 
 ALTER TABLE security_events
     ADD COLUMN limitations TEXT
-    CHECK (limitations IS NULL OR json_valid(limitations));
+    CHECK (
+        limitations IS NULL
+        OR CASE WHEN json_valid(limitations) THEN json_type(limitations) = 'array' ELSE 0 END
+    );
