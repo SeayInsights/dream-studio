@@ -27,6 +27,15 @@ under test, and the fake stops leaking:
             return oversized
         return real_stat(self_, **kw)
 
+THE SECOND RULE (2026-10-21, GitHub issue #911): a test may not read the machine it runs on.
+``core/gates/machine_reads.py`` carries the detector and its reasons. In short: a read of the
+operator's home, ``~/.claude``, the Claude Code config root (``CLAUDE_CONFIG_DIR``), a sibling
+checkout, or this clone's git refs and history (``origin/main``) must sit in a scope that
+redirects the home first, or in a test marked ``install_check``, which is never collected by
+default. A test that skips when such a thing is absent cannot fail anywhere that it is absent.
+A shrinking allow-list in that module names what is left, each with a reason, and the gate fails
+on an entry that no longer matches anything.
+
 WHAT IS DELIBERATELY NOT BANNED.
 
 * ``Path.home`` / ``Path.cwd`` -- class-level, carrying no per-object state. Redirecting
@@ -46,6 +55,8 @@ import ast
 import json
 import sys
 from pathlib import Path
+
+from core.gates import machine_reads
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -154,6 +165,7 @@ def _offenders_in(path: Path, repo_root: Path) -> list[dict]:
             rel = str(path)
         offenders.append(
             {
+                "kind": "process-wide-patch",
                 "path": rel.replace(chr(92), "/"),
                 "line": node.lineno,
                 "target": f"{type_name}.{member_name}",
@@ -180,22 +192,38 @@ def _iter_tests(repo_root: Path) -> list[Path]:
     return [p for p in sorted(base.rglob("*.py")) if "__pycache__" not in p.parts]
 
 
-def run(repo_root: Path = REPO_ROOT) -> dict:
-    """Scan repo_root/tests. Parameterised so this gate's own tests can prove it FAILS."""
+def run(
+    repo_root: Path = REPO_ROOT,
+    allowlist: dict[tuple[str, str], str] | None = None,
+) -> dict:
+    """Scan repo_root/tests. Parameterised so this gate's own tests can prove it FAILS.
+
+    ``allowlist`` defaults to the real one when scanning this repository and to nothing when
+    scanning any other tree: a fixture tree must not be failed for "stale" entries that name
+    files it never had.
+    """
     offenders: list[dict] = []
+    machine: list[dict] = []
     files = _iter_tests(repo_root)
     for path in files:
         offenders.extend(_offenders_in(path, repo_root))
+        machine.extend(machine_reads.scan_file(path, repo_root))
+    if allowlist is None:
+        allowlist = machine_reads.ALLOWLIST if repo_root == REPO_ROOT else {}
+    failing, stale = machine_reads.apply_allowlist(machine, allowlist)
+    offenders.extend(failing)
+    offenders.extend(stale)
     return {
         "status": "fail" if offenders else "pass",
         "files_scanned": len(files),
+        "allowlisted": len(machine) - len(failing),
         "offenders": offenders,
     }
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Scan for a fixture-lifetime stdlib instance-method patch."
+        description="Scan the tests for process-wide patches and for reads of the machine."
     )
     parser.add_argument(
         "--repo-root",
@@ -208,16 +236,22 @@ def main(argv: list[str] | None = None) -> int:
     result = run(repo_root=repo_root)
     if result["status"] != "pass":
         print(json.dumps(result, indent=2, sort_keys=True))
+        kinds: dict[str, int] = {}
+        for off in result["offenders"]:
+            kinds[off.get("kind", "?")] = kinds.get(off.get("kind", "?"), 0) + 1
+        summary = ", ".join(f"{n} {kind}" for kind, n in sorted(kinds.items()))
         print(
-            f"\ntest-isolation: FAILED - {len(result['offenders'])} process-wide stdlib"
-            " patch(es). Each can make an unrelated test or an autouse guard read a faked"
-            " answer.",
+            f"\ntest-isolation: FAILED - {len(result['offenders'])} finding(s) ({summary}). A"
+            " process-wide stdlib patch can make an unrelated test or an autouse guard read a"
+            " faked answer; a machine read makes a test's result depend on whose computer runs"
+            " it. See core/gates/test_isolation.py and core/gates/machine_reads.py.",
             file=sys.stderr,
         )
         return 1
     print(
         f"test-isolation: OK - {result['files_scanned']} test file(s) scanned, no"
-        " fixture-lifetime stdlib instance-method fakes."
+        " fixture-lifetime stdlib instance-method fakes, no unredirected read of the machine"
+        f" ({result['allowlisted']} allow-listed, see machine_reads.ALLOWLIST)."
     )
     return 0
 
