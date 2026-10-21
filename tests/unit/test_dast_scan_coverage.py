@@ -18,6 +18,7 @@ directory.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -617,3 +618,116 @@ def test_doc_describes_unread_exactly_as_the_code_behaves():
     assert "missing, empty" not in text and "empty or malformed" not in text
     assert "missing or malformed" in text
     assert "an empty file is a result" in text
+
+
+# -- a target that was not scanned leaves a record (issue #895 item 6) ----------------------------
+#
+# `dast run` skips a target whose URL does not answer ("warn and skip"), and stops the whole
+# run when ZAP is not installed. Neither wrote anything, so `dast status` could not tell a
+# target nobody tried from one that was tried and skipped, and a stale last scan kept
+# reading CURRENT. The record is the one every other skipped step already uses: a scan
+# directory holding only a scan-meta.json whose steps are `skipped` with the reason, and
+# `outcome: not_scanned`. parse_dast reads it with no new code path, and the dashboard and
+# `dast status` get "target X not scanned: reason".
+
+UNREACHABLE = "target unreachable: curl returned 000"
+
+
+def _not_scanned(reason: str = UNREACHABLE, **override: object) -> dict:
+    meta: dict = {
+        "schema_version": 1,
+        "target": "web",
+        "target_type": "webapp",
+        "source": "local-run",
+        "outcome": "not_scanned",
+        "reason": reason,
+        "scanners": [],
+        "steps": [{"step": s, "status": "skipped", "tool": s, "reason": reason} for s in ALL_STEPS],
+    }
+    meta.update(override)
+    return meta
+
+
+def test_a_target_that_was_not_scanned_reads_partial_and_names_why(tmp_path: Path):
+    scans = tmp_path / "scans"
+    steps = [{"step": s, "status": "skipped", "tool": s, "reason": "skipped"} for s in ALL_STEPS]
+    d = _scan(scans, "web", _not_scanned(steps=steps), zap=None, nuclei=None)
+    assert [p.name for p in d.iterdir()] == ["scan-meta.json"]
+
+    findings, coverage, _ = _run(d, tmp_path, rc=1)
+
+    assert not findings
+    scan = coverage["scans"][0]
+    assert coverage["coverage"] == "partial" == scan["coverage"]
+    assert scan["skipped_steps"] == ["zap", "nuclei"]
+    text = " ".join(scan["limitations"])
+    assert "the target was not scanned" in text and UNREACHABLE in text
+
+
+def test_an_outcome_of_not_scanned_cannot_be_overruled_by_steps_that_say_ran(tmp_path: Path):
+    """A record that says both is contradictory; the claim that nothing was scanned wins."""
+    meta = _not_scanned(steps=_steps())
+    d = _scan(tmp_path / "scans", "web", meta)
+    findings, coverage, _ = _run(d, tmp_path)
+    assert {f["coverage"] for f in findings} == {"partial"}
+    assert "the target was not scanned" in " ".join(coverage["scans"][0]["limitations"])
+
+
+def test_a_hostile_reason_is_bounded_and_printable(tmp_path: Path):
+    d = _scan(
+        tmp_path / "scans", "web", _not_scanned("down \x1b[31m" + "x" * 5000), zap=None, nuclei=None
+    )
+    _, coverage, _ = _run(d, tmp_path, rc=1)
+    text = " ".join(coverage["scans"][0]["limitations"])
+    assert "\x1b" not in text and len(text) < 2000
+
+
+def test_a_not_scanned_record_beside_a_real_scan_is_reported_separately(tmp_path: Path):
+    scans = tmp_path / "scans"
+    real = _scan(scans, "web", {"schema_version": 1, "steps": _steps()})
+    skipped = scans / "web" / "2026-10-20"
+    skipped.mkdir()
+    (skipped / "scan-meta.json").write_text(json.dumps(_not_scanned()), encoding="utf-8")
+    assert real.is_dir()
+
+    _, coverage, _ = _run(scans / "web", tmp_path)
+
+    by_dir = {Path(s["scan_dir"]).name: s["coverage"] for s in coverage["scans"]}
+    assert by_dir == {"2026-10-19": "complete", "2026-10-20": "partial"}
+
+
+def _documented_not_scanned(reason: str) -> dict:
+    text = EXAMPLES.read_text(encoding="utf-8")
+    block = next(
+        b
+        for b in re.findall(r"```json\n(.*?)```", text, re.S)
+        if '"not_scanned"' in b and '"steps"' in b
+    )
+    block = block.replace("{why}", reason)
+    block = re.sub(r'"\{[^}"]*\}"', '"x"', block)
+    return json.loads(block)
+
+
+def test_the_documented_not_scanned_record_is_the_record_the_parser_reads(tmp_path: Path):
+    meta = _documented_not_scanned(UNREACHABLE)
+    assert meta["outcome"] == "not_scanned" and meta["scanners"] == []
+    assert [s["step"] for s in meta["steps"]] == list(ALL_STEPS)
+    d = _scan(tmp_path / "scans", "web", meta, zap=None, nuclei=None)
+    _, coverage, _ = _run(d, tmp_path, rc=1)
+    assert coverage["coverage"] == "partial"
+    assert UNREACHABLE in " ".join(coverage["scans"][0]["limitations"])
+
+
+def test_the_run_steps_record_both_ways_a_target_goes_unscanned():
+    """R2 step 1 (URL does not answer: skip that target) and step 2 (ZAP missing: stop the
+    run) both write the record; the ZAP stop writes one for every target in scope, so there
+    is a single mechanism and `dast status` reads one place."""
+    text = " ".join(EXAMPLES.read_text(encoding="utf-8").split())
+    pre = text.split("### Step R2: Pre-flight Checks")[1].split("### Step R3")[0]
+    assert "skip this target, and write its not-scanned record" in pre
+    assert "**stop** the run, and write the not-scanned record" in pre
+    assert "for every target in scope that has not been scanned" in pre
+    status = text.split("## Mode: `status`")[1]
+    assert "mark the target **NOT SCANNED** with its `reason`" in status
+    assert "`outcome` is not `not_scanned`" in status
+    assert "last scan that ran" in status

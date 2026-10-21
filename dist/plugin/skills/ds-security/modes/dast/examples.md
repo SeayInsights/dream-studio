@@ -108,9 +108,41 @@ Extract from user input:
 ### Step R2: Pre-flight Checks
 
 For each target:
-1. Confirm URL is reachable: `curl -s -o /dev/null -w "%{http_code}" {target.url}`. If not reachable: **warn** and skip.
-2. Confirm ZAP is installed: `which zap.sh || which zap-cli || docker images owasp/zap2docker-stable`. If missing: show install instructions and **stop**.
+1. Confirm URL is reachable: `curl -s -o /dev/null -w "%{http_code}" {target.url}`. If not reachable: **warn**, skip this target, and write its not-scanned record (below) with the reason, for example "target unreachable: curl returned 000".
+2. Confirm ZAP is installed: `which zap.sh || which zap-cli || docker images owasp/zap2docker-stable`. If missing: show install instructions, **stop** the run, and write the not-scanned record (below) for every target in scope that has not been scanned, with the reason "zap is not installed (run stopped)". The stop must leave a trace: without it `dast status` cannot tell a target nobody tried from one the run never reached.
 3. Confirm Nuclei is installed: `which nuclei`. If missing: show install instructions and continue with ZAP only. Remember that `nuclei` was skipped (reason: "nuclei is not installed"): Step R5 records it, and it is what makes the ingested result `partial`.
+
+#### Not-scanned record
+
+A target the run did not scan has no results, but it still gets a scan directory,
+`~/.dream-studio/security/scans/{client}/{target}/{date}/`, holding only this
+`scan-meta.json` (no result files):
+
+```json
+{
+  "schema_version": 1,
+  "client": "{client}",
+  "target": "{target}",
+  "target_type": "webapp",
+  "date": "{YYYY-MM-DD}",
+  "source": "local-run",
+  "outcome": "not_scanned",
+  "reason": "{why}",
+  "scanners": [],
+  "steps": [
+    {"step": "zap", "status": "skipped", "tool": "zap", "reason": "{why}"},
+    {"step": "nuclei", "status": "skipped", "tool": "nuclei", "reason": "{why}"}
+  ],
+  "url": "{target.url}",
+  "ingested_at": "{ISO-8601}"
+}
+```
+
+It is the same record every skipped scanner already uses, so `parse_dast.py` reads it as it
+is: `outcome: not_scanned` makes the directory `partial` with the limitation "the target was
+not scanned: {why}", whatever the steps say. There is one record per target and no separate
+run-level file: a run stopped by missing ZAP is these records for every target it did not
+reach.
 
 ### Step R3: Execute ZAP Scan
 
@@ -236,8 +268,9 @@ Show: the coverage (when it is not `complete`, say so first and name the skipped
 ### Step T1: Inventory DAST Scan Store
 
 1. List all target directories under `~/.dream-studio/security/dast/{client}/`.
-2. For each target: find most recent scan, check staleness (>7 days = STALE).
-3. For targets in profile but not scanned: mark NO RESULTS.
+2. For each target: read `scan-meta.json` of its scan directories under `~/.dream-studio/security/scans/{client}/{target}/`. The last scan that ran is the most recent one whose `outcome` is not `not_scanned`; check its staleness (>7 days = STALE).
+3. If the most recent directory is a not-scanned record (`outcome: not_scanned`), mark the target **NOT SCANNED** with its `reason`, and show the date of the last scan that ran beside it: a stale or old scan must not read CURRENT when the latest attempt did not scan.
+4. For targets in profile but not scanned: mark NO RESULTS.
 
 ### Step T2: Render Coverage Report
 
@@ -248,8 +281,9 @@ Show: the coverage (when it is not `complete`, say so first and name the skipped
 |---------|-----|-------------|-----------|-----|----------|--------|
 | vendor-portal-web | https://vendor.plm... | full | 2026-04-20 | 2d | 12 | CURRENT |
 | pricing-api-web | https://api.plm... | api-only | — | — | — | NO RESULTS |
+| legacy-admin-web | https://admin.plm... | passive | 2026-04-02 | 20d | 4 | NOT SCANNED (target unreachable: curl returned 000; last scan that ran 2026-04-02) |
 
-**Summary:** {N} targets | {N} current | {N} stale | {N} no results
+**Summary:** {N} targets | {N} current | {N} stale | {N} not scanned | {N} no results
 ```
 
 ---

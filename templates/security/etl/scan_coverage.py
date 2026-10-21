@@ -349,9 +349,11 @@ def assess(
 
 
 def _assess_run(meta: dict | None) -> tuple[bool, bool, list[str]]:
-    """What the `run` object of scan-meta.json says: (partial, unknown, limitations).
+    """What scan-meta.json says about the run as a whole: (partial, unknown, limitations).
 
-    Modes whose scan is one CI workflow run record it (`scan ingest`):
+    Two whole-run facts, beyond the per-step record. `outcome: not_scanned` (a target the
+    mode did not scan at all) is partial and names the reason. And modes whose scan is one
+    CI workflow run record it (`scan ingest`):
 
         "run": {"run_id": "123", "status": "completed", "conclusion": "failure"}
 
@@ -361,7 +363,16 @@ def _assess_run(meta: dict | None) -> tuple[bool, bool, list[str]]:
     leaves the scan `unknown`: the record claims a run it does not describe. A scan-meta.json
     with no `run` (binary-scan and dast run locally) is judged by its steps alone.
     """
-    if meta is None or "run" not in meta:
+    if meta is None:
+        return False, False, []
+    if meta.get("outcome") == "not_scanned":
+        # `dast run` records a target it did not scan (unreachable URL, ZAP missing) as a
+        # scan directory holding only this scan-meta.json. Whatever its steps say, nothing
+        # was scanned, and the reason is the one thing a reader needs.
+        reason = meta.get("reason")
+        why = f": {_text(reason)}" if isinstance(reason, str) and reason.strip() else ""
+        return True, False, [f"the target was not scanned{why}"]
+    if "run" not in meta:
         return False, False, []
     run = meta["run"]
     conclusion = run.get("conclusion") if isinstance(run, dict) else None
