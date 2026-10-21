@@ -36,7 +36,7 @@ read (`binary/`, `dast/`, `semgrep-rules/`, `github-actions/`, `compliance/`, `m
 `powerbi/`) are shipped inside it, under `<skill-dir>/templates/security/`, with the layout the
 scripts expect (`etl/` beside `compliance/` and `mitigations/`). The scripts run from any
 working directory, import only their own directory, and find the Dream Studio home from
-`DREAM_STUDIO_HOME`, else `~/.dream-studio`. They need Python 3.12 and, for some, PyYAML.
+`DREAM_STUDIO_HOME`, else the home a self-installed app records in its venv, else `~/.dream-studio` (the same rule as the platform's, without importing it). They need Python 3.12 and, for some, PyYAML.
 
 In a source checkout of dream-studio the same files are at `templates/security/` in the
 repository root, with no `<skill-dir>` in front: `<skill-dir>/templates/security/etl/parse_dast.py`

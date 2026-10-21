@@ -480,39 +480,6 @@ def test_the_documented_exit_codes_hold_from_a_fresh_interpreter(tmp_path: Path)
         assert "Traceback" not in proc.stderr
 
 
-# -- etl_home near the root of the filesystem ---------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "parts",
-    [("etl",), ("app", "etl"), ("tools", "etl"), ("a", "b", "etl")],
-    ids=["root/etl", "root/app/etl", "root/tools/etl", "root/a/b/etl"],
-)
-def test_an_etl_directory_near_the_filesystem_root_is_installed_not_a_checkout(parts):
-    import etl_home
-
-    anchor = Path(Path.cwd().anchor)
-    location = anchor.joinpath(*parts, "etl_home.py")
-    assert etl_home._checkout_root(location) is None  # no IndexError
-
-
-def test_a_shallow_install_falls_back_to_the_environment(monkeypatch, tmp_path):
-    import etl_home
-
-    anchor = Path(Path.cwd().anchor)
-    location = anchor / "etl" / "etl_home.py"
-    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "h"))
-    assert etl_home.home_dir(location) == tmp_path / "h"
-    monkeypatch.delenv("DREAM_STUDIO_HOME")
-    assert etl_home.home_dir(location) == Path.home() / ".dream-studio"
-
-
-def test_the_real_location_is_still_recognised_as_a_checkout():
-    import etl_home
-
-    assert etl_home._checkout_root() == REPO_ROOT
-
-
 # -- the doc ------------------------------------------------------------------------------------------
 
 

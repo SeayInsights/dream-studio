@@ -1,18 +1,29 @@
 """
-etl_home.py -- where the ETL scripts find the Dream Studio home, in a checkout and in an
-installed plugin.
+etl_home.py -- the Dream Studio home, for the ETL scripts, with no platform import.
 
-The scripts in this directory run in place: from a dream-studio checkout
-(`templates/security/etl/`) and from an installed plugin (`<skill-dir>/templates/security/etl/`,
-where `<skill-dir>` is the ds-security skill's own directory). A checkout has the platform's
-`core` package next to them and an installed plugin does not, so the home is resolved here
-and nowhere else:
+The scripts in this directory run in place from a dream-studio checkout
+(`templates/security/etl/`) and from a skill directory the plugin or the self-install
+projection wrote (`<skill-dir>/templates/security/etl/`), where there is no `core` package.
+They must not import one: `core` pulls pydantic, jsonschema and the event store, and an
+installed skill has none of them.
 
-  * in a checkout, `core.config.paths.home_dir()` decides, exactly as before;
-  * anywhere else, DREAM_STUDIO_HOME if set, else ~/.dream-studio.
+So this is the stdlib mirror of `core.config.paths.home_dir()`, in the way
+`runtime/lib/home.py` is for hooks, and it is held to the same answer:
 
-This file is a sibling of the scripts and is imported by plain name; each script puts its
-own directory on sys.path first.
+  1. DREAM_STUDIO_HOME, when set and not empty, with `~` expanded (a relative path stays
+     relative, trailing separators and case are Path's, exactly as the original);
+  2. else the home a self-installed app records in its venv (APP_HOME_MARKER under
+     sys.prefix), when that file holds a path;
+  3. else ~/.dream-studio.
+
+NOT created. It used to delegate to `core` when it found a checkout and fall back to this
+rule otherwise, which made two behaviours and left the second without the venv marker; it is
+one rule now. tests/unit/test_etl_home_parity.py runs this module (standalone, `core` blocked)
+and `core.config.paths.home_dir()` under the same environment matrix and requires the same
+path, and tests/unit/test_home_means_home.py lists the two lines below that spell the
+default, with this reason.
+
+Do not add anything here beyond os, sys and pathlib.
 """
 
 from __future__ import annotations
@@ -21,36 +32,18 @@ import os
 import sys
 from pathlib import Path
 
-
-def _checkout_root(here: Path | None = None) -> Path | None:
-    """The dream-studio checkout these scripts sit in, or None when they are installed.
-
-    `here` is this file's location (default: this file); a parameter so the layouts near
-    the filesystem root can be tested where nothing can be created.
-    """
-    parents = (here if here is not None else Path(__file__)).resolve().parents
-    if len(parents) < 4:
-        # A directory like /etl or /app/etl (or tools/etl on a Windows drive root) is too close
-        # to the filesystem root to sit three levels inside a checkout: the scripts are
-        # installed there, not in a checkout.
-        return None
-    root = parents[3]
-    return root if (root / "core" / "config" / "paths.py").is_file() else None
+USER_DATA_DIRNAME = ".dream-studio"
+APP_HOME_MARKER = "dream-studio-home"  # core.config.paths.APP_HOME_MARKER
 
 
-def home_dir(here: Path | None = None) -> Path:
-    """The Dream Studio home. NOT created. `here`: see _checkout_root."""
-    root = _checkout_root(here)
-    if root is not None:
-        if str(root) not in sys.path:
-            sys.path.insert(0, str(root))
-        try:
-            from core.config.paths import home_dir as platform_home_dir
-        except ImportError:
-            pass
-        else:
-            return platform_home_dir()
+def home_dir() -> Path:
+    """DREAM_STUDIO_HOME, else the installed app's recorded home, else ~/.dream-studio."""
     override = os.environ.get("DREAM_STUDIO_HOME")
     if override:
         return Path(override).expanduser()
-    return Path.home() / ".dream-studio"
+    marker = Path(sys.prefix) / APP_HOME_MARKER
+    if marker.is_file():
+        recorded = marker.read_text(encoding="utf-8").strip()
+        if recorded:
+            return Path(recorded)
+    return Path.home() / USER_DATA_DIRNAME

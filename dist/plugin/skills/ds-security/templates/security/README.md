@@ -74,6 +74,6 @@ Paths here are relative to the dream-studio repository root. In an installed plu
 tree ships inside the ds-security skill's own directory, so the command is
 `py -3.12 <skill-dir>/templates/security/etl/parse_sarif.py ...` (`<skill-dir>` is where the
 skill's `SKILL.md` is). The scripts import only their own directory, run from any working
-directory, and find the Dream Studio home from `DREAM_STUDIO_HOME`, else `~/.dream-studio`.
+directory, and find the Dream Studio home from `DREAM_STUDIO_HOME`, else the home a self-installed app records in its venv, else `~/.dream-studio` (`etl_home.py`, the stdlib mirror of the platform's resolver).
 
 ETL scripts expect `~/.dream-studio/clients/{client}/` to exist with scan outputs.
