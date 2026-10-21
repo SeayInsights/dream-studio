@@ -560,6 +560,26 @@ def stamp(findings: list[dict], report: dict) -> None:
         f["limitations"] = list(report["limitations"])
 
 
+def finding_coverage(finding: dict) -> tuple[str, list[str]]:
+    """What a finding says about its own scan: (coverage, limitations), for a consumer.
+
+    A finding that carries no coverage, a blank one, or a value outside the vocabulary
+    reads `unknown`, never `complete`: a consumer that cannot tell must not say the scan
+    was whole. Limitations are always a list of short strings; a finding with no usable
+    coverage gets one limitation saying so, so an empty list never reads as "nothing
+    was missed" next to `unknown`.
+    """
+    raw = finding.get("coverage")
+    coverage = raw if isinstance(raw, str) and raw in (COMPLETE, PARTIAL, UNKNOWN) else UNKNOWN
+    limits = finding.get("limitations")
+    if isinstance(limits, str):
+        limits = [limits]
+    out = [short(x) for x in limits] if isinstance(limits, list) else []
+    if coverage == UNKNOWN and raw != UNKNOWN and not out:
+        out = ["scan coverage was not recorded for this finding"]
+    return coverage, out
+
+
 def unknown_report(scan_dir: str | None, limitation: str) -> dict:
     """A report for something that was never assessed against a run record."""
     return {

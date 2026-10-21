@@ -28,6 +28,13 @@ if str(_REPO_ROOT) not in sys.path:
 
 from core.config.paths import home_dir  # noqa: E402
 
+# scan_coverage.py is a sibling of this script (shared with the parse_* scripts).
+_ETL_DIR = Path(__file__).resolve().parent
+if str(_ETL_DIR) not in sys.path:
+    sys.path.insert(0, str(_ETL_DIR))
+
+import scan_coverage  # noqa: E402
+
 try:
     import yaml
 except ImportError:
@@ -112,6 +119,7 @@ def write_csv(filepath: Path, rows: list[dict], fieldnames: list[str]) -> None:
 def build_findings_csv(findings: list[dict]) -> list[dict]:
     rows = []
     for f in findings:
+        coverage, limitations = scan_coverage.finding_coverage(f)
         rows.append(
             {
                 "id": f.get("id", ""),
@@ -135,6 +143,10 @@ def build_findings_csv(findings: list[dict]) -> list[dict]:
                 "url": f.get("url", ""),
                 "http_method": f.get("http_method", ""),
                 "binary_hash": f.get("binary_hash", ""),
+                # How much of the scan this finding's result covers. Unknown stays unknown
+                # (see scan_coverage.finding_coverage); limitations is one JSON string cell.
+                "coverage": coverage,
+                "limitations": json.dumps(limitations, ensure_ascii=False),
             }
         )
     return rows
@@ -162,6 +174,8 @@ FINDINGS_FIELDS = [
     "url",
     "http_method",
     "binary_hash",
+    "coverage",
+    "limitations",
 ]
 
 
@@ -437,6 +451,12 @@ def build_metadata(
     frameworks = client_profile.get("compliance", {}).get("frameworks", [])
 
     return {
+        # The weakest coverage among the exported findings: partial beats unknown beats
+        # complete, and no findings is unknown (a scan with no findings leaves nothing to
+        # carry its coverage; read the parser's --coverage-output for that).
+        "coverage": scan_coverage.overall(
+            {"coverage": scan_coverage.finding_coverage(f)[0]} for f in findings
+        ),
         "client_name": client_info.get("name", "Unknown"),
         "enterprise": client_info.get("enterprise", ""),
         "scan_date": date.today().isoformat(),

@@ -175,6 +175,8 @@ TEMPLATE SPEC HANDED OFF: {client}
 | scanner | string | Source scanner (semgrep, bandit, trufflehog, pip-audit) |
 | message | string | Finding description |
 | compliance_controls | string | Semicolon-separated framework control IDs |
+| coverage | string | `complete` / `partial` / `unknown`: how much of the scan this finding's result covers. A finding that carries no coverage reads `unknown`, never `complete` |
+| limitations | string | JSON array of strings naming what the result cannot establish (skipped steps, unread results). A finding with no recorded coverage lists that as its limitation |
 
 ### mitigations.csv
 | Column | Type | Description |
@@ -247,9 +249,15 @@ TEMPLATE SPEC HANDED OFF: {client}
     "low": 59
   },
   "org_score": 62.4,
-  "frameworks": ["SOC2", "NIST-CSF", "OWASP-ASVS"]
+  "frameworks": ["SOC2", "NIST-CSF", "OWASP-ASVS"],
+  "coverage": "partial"
 }
 ```
+
+`coverage` is the weakest coverage among the exported findings (`partial` beats `unknown` beats
+`complete`); it is `unknown` when there are no findings, because a scan with none leaves
+nothing to carry its coverage (read the parser's `coverage.json`). `org_score` is computed
+from the findings that exist: when `coverage` is not `complete`, show it next to the score.
 
 ---
 

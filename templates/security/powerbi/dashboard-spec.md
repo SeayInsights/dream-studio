@@ -31,6 +31,8 @@
 
 **Note:** Findings.compliance_controls is a semicolon-delimited string. Use a calculated column to split it for M:N relationship with Compliance, or use `CONTAINSSTRING()` in measures.
 
+**Note:** Findings.coverage is `complete`, `partial` or `unknown` (how much of the scan the finding's result covers; never blank) and Findings.limitations is a JSON array of strings, one cell per finding. Metadata.coverage is the weakest of them. Both columns are appended after `binary_hash`, so existing column positions are unchanged. A visual that shows an org score or a finding count should show Metadata.coverage beside it: a count from a partial scan is a lower bound, not a clean result.
+
 ### Date Table (calculated)
 
 ```dax
@@ -955,7 +957,9 @@ let
         {"age_days", Int64.Type},
         {"scanner", type text},
         {"message", type text},
-        {"compliance_controls", type text}
+        {"compliance_controls", type text},
+        {"coverage", type text},
+        {"limitations", type text}
     })
 in
     TypedColumns
