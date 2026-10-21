@@ -163,11 +163,45 @@ def test_a_flag_that_is_not_a_real_bool_is_refused(clean_registry, flag, bad):
 
 
 def test_an_overlong_name_is_refused_and_the_limit_itself_is_accepted(clean_registry):
-    limit = type_registry.MAX_NAME_LENGTH
-    register_work_order_type("a" * limit, artifact_class=CODE)
-    with pytest.raises(ValueError, match="at most"):
-        register_work_order_type("a" * (limit + 1), artifact_class=CODE)
-    assert get_work_order_type("a" * (limit + 1)) is None
+    """The cap is pinned as the literal 64, not read from MAX_NAME_LENGTH: a test that read the
+    constant would agree with any value the constant were changed to (issue #900)."""
+    register_work_order_type("a" * 64, artifact_class=CODE)
+    with pytest.raises(ValueError, match="at most 64"):
+        register_work_order_type("a" * 65, artifact_class=CODE)
+    assert get_work_order_type("a" * 65) is None
+    assert get_work_order_type("a" * 64) is not None
+
+
+def test_a_str_subclass_cannot_slip_past_the_length_cap(clean_registry):
+    """A subclass that reports a short __len__ passed isinstance(name, str) and the cap check,
+    which asks len(). The regex matched the real 100 characters; only the cap was fooled."""
+
+    class Short(str):
+        def __len__(self) -> int:
+            return 1
+
+    name = Short("a" * 100)
+    assert len(name) == 1 and str.__len__(name) == 100
+    with pytest.raises(ValueError, match="must be lowercase"):
+        register_work_order_type(name, artifact_class=CODE)
+    assert get_work_order_type("a" * 100) is None
+
+
+def test_a_str_subclass_cannot_pose_as_an_allowed_artifact_class(clean_registry):
+    """A subclass whose __eq__ is always true and whose hash collides with "code" is "in"
+    ARTIFACT_CLASSES, so a class that is not allowed registered anyway."""
+
+    class Spoof(str):
+        def __eq__(self, other: object) -> bool:
+            return True
+
+        def __hash__(self) -> int:
+            return hash("code")
+
+    assert Spoof("spreadsheet") in type_registry.ARTIFACT_CLASSES, "the spoof must work"
+    with pytest.raises(ValueError, match="unknown artifact class"):
+        register_work_order_type("ledger", artifact_class=Spoof("spreadsheet"))
+    assert get_work_order_type("ledger") is None
 
 
 def test_a_ui_bearing_type_must_stale_the_design_brief(clean_registry):

@@ -138,6 +138,9 @@ rules:
       - tests/unit/test_work_order_types_one_definition.py::test_the_door_refuses_an_undeclared_type
       - tests/unit/test_work_order_types_one_definition.py::test_the_baseline_migration_seeds_exactly_the_declared_types
       - tests/unit/test_work_order_types_one_definition.py::test_every_declared_type_reviews_as_a_known_artifact_class
+      - tests/unit/test_work_order_type_registry.py::test_a_str_subclass_cannot_slip_past_the_length_cap
+      - tests/unit/test_work_order_type_registry.py::test_a_str_subclass_cannot_pose_as_an_allowed_artifact_class
+      - tests/unit/test_work_order_type_registry.py::test_an_overlong_name_is_refused_and_the_limit_itself_is_accepted
       - tests/unit/test_work_order_types_one_definition.py::test_no_module_carries_a_second_full_list
       - tests/unit/test_work_order_type_registry.py::test_each_built_in_yields_what_the_old_tables_yielded
       - tests/unit/test_work_order_type_registry.py::test_create_work_order_accepts_a_registered_type_and_still_names_the_valid_ones

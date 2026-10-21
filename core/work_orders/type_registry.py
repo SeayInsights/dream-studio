@@ -75,10 +75,13 @@ def register_work_order_type(
     the design surface. Pass it explicitly to declare a type that moves the surface
     without owing a CWV result (as ``saas_feature`` does).
     """
-    if not isinstance(name, str) or not _NAME_RE.fullmatch(name):
+    # `type(x) is str`, not isinstance: a str subclass can override __len__ (to slip past the
+    # cap below) or __eq__ and __hash__ (to pose as a member of ARTIFACT_CLASSES). The
+    # API is about to be fed manifest data, and a plain str is the only thing it declares.
+    if type(name) is not str or not _NAME_RE.fullmatch(name):
         raise ValueError(
             f"work-order type name {name!r} must be lowercase letters, digits and underscores,"
-            " starting with a letter"
+            " starting with a letter (a plain str, not a subclass)"
         )
     if len(name) > MAX_NAME_LENGTH:
         raise ValueError(
@@ -96,7 +99,7 @@ def register_work_order_type(
             raise ValueError(f"work-order type {name!r}: {flag} must be a bool, got {value!r}")
     if name in _REGISTRY:
         raise ValueError(f"work-order type {name!r} is already registered")
-    if not isinstance(artifact_class, str) or artifact_class not in ARTIFACT_CLASSES:
+    if type(artifact_class) is not str or artifact_class not in ARTIFACT_CLASSES:
         raise ValueError(
             f"work-order type {name!r} names unknown artifact class {artifact_class!r}."
             f" Known: {', '.join(sorted(ARTIFACT_CLASSES))}."
