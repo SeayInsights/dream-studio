@@ -28,6 +28,7 @@ dependencies:
   core_modules: []
   tools_required: []
   tools_optional: []
+  python_packages: []
   env_vars_required: []
   files_required: []
   calls_skills: []

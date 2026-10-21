@@ -389,3 +389,111 @@ def test_the_repository_dispatches_only_agents_it_ships():
 
     phantom = [f for f in gate.unresolved_commands() if "subagent" in str(f["kind"])]
     assert not phantom, f"canonical/ dispatches agents that do not ship: {phantom}"
+
+
+# ---------------------------------------------------------------------------------------
+# A `ds` subcommand an instruction tells the reader to run (#893).
+#
+# `analyze:multi` ended on "run `ds lesson-queue list` to review and promote", and `core:learn`
+# carries five more. `ds` has no `lesson-queue` (the lesson CLI is the module
+# `interfaces.cli.lesson_queue`, never registered under `ds`): argparse answers "invalid
+# choice", the review step is skipped, and nothing noticed because this gate read script paths
+# and `py -m` modules and not the command people type.
+#
+# Resolved against the real argparse tree, not a list written in the gate.
+# ---------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "line,in_fence,expected",
+    [
+        ("Run `ds lesson-queue list` to review.", False, "ds lesson-queue"),
+        ("Run `ds work-order nonsense` now.", False, "ds work-order nonsense"),
+        ("Then `py -m interfaces.cli.ds lesson-queue list` (reads x).", False, "ds lesson-queue"),
+        ("`./ds frobnicate`", False, "ds frobnicate"),
+        ("ds frobnicate --flag", True, "ds frobnicate"),
+        ("$ ds frobnicate", True, "ds frobnicate"),
+        ("Run: ds frobnicate --now", False, "ds frobnicate"),
+    ],
+)
+def test_a_ds_subcommand_the_parser_does_not_have_is_reported(line, in_fence, expected):
+    from core.gates.instruction_commands import _ds_tree_cached, bad_ds_subcommand, ds_commands
+
+    wrong = [bad_ds_subcommand(w, _ds_tree_cached()) for w in ds_commands(line, in_fence)]
+    assert wrong == [expected], (line, wrong)
+
+
+@pytest.mark.parametrize(
+    "line,in_fence",
+    [
+        ("Run `ds status` first.", False),
+        ("`ds work-order start <id>`", False),
+        ("`ds work-order tasks <id>` lists them", False),
+        ("`py -m interfaces.cli.ds project state`", False),
+        ('ds files write "audits/x.md" --category planning', True),
+        ("Run: ds workflow run pre-push", False),
+        ("`ds --help`", False),
+        ("`ds --home /x status`", False),
+        ("`ds work-order <subcommand>`", False),
+    ],
+)
+def test_a_ds_command_that_exists_is_not_reported(line, in_fence):
+    from core.gates.instruction_commands import _ds_tree_cached, bad_ds_subcommand, ds_commands
+
+    assert [bad_ds_subcommand(w, _ds_tree_cached()) for w in ds_commands(line, in_fence)] == [
+        None
+    ] * len(ds_commands(line, in_fence))
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "The ds team discussed status and frobnicate.",
+        "Compare ds frobnicate to the other columns",  # prose, not a span, fence or Run
+        "`fields frobnicate`",
+        "`ds_documents frobnicate`",
+        "see ds-analyze frobnicate",
+        "`docs frobnicate`",
+    ],
+)
+def test_the_word_ds_in_a_sentence_is_not_an_invocation(line):
+    from core.gates.instruction_commands import ds_commands
+
+    assert ds_commands(line, False) == []
+
+
+def test_the_tree_is_the_real_parser_not_a_list():
+    from core.gates.instruction_commands import _ds_tree_cached
+
+    tree = _ds_tree_cached()
+    assert {"status", "work-order", "files", "project"} <= set(tree)
+    assert {"start", "tasks"} <= set(tree["work-order"])
+    assert "lesson-queue" not in tree, "if ds ever grows it, the docs may name it"
+    assert tree["status"] is None, "a leaf takes arguments, not subcommands"
+
+
+def test_the_scan_reports_a_ds_subcommand_that_does_not_exist(tmp_path):
+    """The wiring, not the pieces: `unresolved_commands` must consult the resolver. (A mutant
+    that returned no finding from `bad_ds_subcommand` is killed by this and only by this.)"""
+    root = _tree_with(
+        tmp_path,
+        "Notify the user: run `ds lesson-queue list` to review and promote.\n"
+        "```bash\nds frobnicate\n```\n",
+    )
+    found = [f for f in _scan(root) if str(f["kind"]).startswith("ds subcommand")]
+    assert {f["names"] for f in found} == {"ds lesson-queue", "ds frobnicate"}, found
+    assert {f["line"] for f in found} == {1, 3}
+
+
+def test_a_ds_command_that_exists_in_a_skill_is_not_reported(tmp_path):
+    root = _tree_with(tmp_path, "Run `ds status`, then `ds work-order tasks <id>`.\n")
+    assert [f for f in _scan(root) if str(f["kind"]).startswith("ds subcommand")] == []
+
+
+def test_the_repository_names_only_ds_subcommands_that_exist():
+    """The live assertion: all of canonical/. It is clean because `core:learn` and
+    `analyze:multi` now name `py -m interfaces.cli.lesson_queue`, the real command."""
+    import core.gates.instruction_commands as gate
+
+    wrong = [f for f in gate.unresolved_commands() if str(f["kind"]).startswith("ds subcommand")]
+    assert wrong == [], "\n".join(f"  {f['file']}:{f['line']} names {f['names']!r}" for f in wrong)

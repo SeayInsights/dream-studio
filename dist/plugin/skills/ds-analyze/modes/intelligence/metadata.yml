@@ -36,6 +36,19 @@ common_failures: []
 # turn imports core.config, core.storage, core.telemetry, core.gates and core.projects
 # (recorded as a follow-up: the engine moves into the pack, or behind a CLI door).
 # `ds dashboard --open` is how the output template points at the dashboard.
+# tools_required: sqlite3 is how reference/error-handling.md reads the analysis.failed event
+# out of ai_canonical_events (a query that was run against the real schema when it was
+# written); ds is how it ingests the spool first (`ds spool ingest`).
+# files_required is what the engine really writes. The PRD goes to
+# ~/.dream-studio/projects/<project-name>/planning/specs/prd.md (core.config.paths.
+# project_planning_dir, called from control/analysis/synthesis.py) and a copy into the document
+# store, files.db; it is NOT written into the analyzed project's .planning/, which the skill
+# text and this card said until now. The engine's phase events go to the spool,
+# ~/.dream-studio/events/. Nothing writes ~/.dream-studio/logs/analysis-errors.log: the doc
+# pointed at a log no code produces, so it is not declared. The run-history and findings
+# tables the skill text listed were dropped by migration 142 and are not written either.
+# These map to the artifact:write and memory:record capability names in
+# docs/contracts/pack-capability-contract.md; today they are reached directly, not through it.
 dependencies:
   core_modules:
     - control.analysis.engine
@@ -44,12 +57,14 @@ dependencies:
     - control.analysis.bugs
     - control.analysis.synthesis
     - control.analysis.stacks
-  tools_required: [python, git, ds]
+  tools_required: [python, git, ds, sqlite3]
+  python_packages: []
   env_vars_required: []
   files_required:
     - ~/.dream-studio/state/studio.db
-    - ~/.dream-studio/logs/analysis-errors.log
-    - .planning/specs/<project-name>/prd.md   # written into the analyzed project
+    - ~/.dream-studio/state/files.db
+    - ~/.dream-studio/events/
+    - ~/.dream-studio/projects/<project-name>/planning/specs/prd.md
   calls_skills: [ds-code-health:debug, ds-core:plan, ds-security:review]
 
 # Compatibility

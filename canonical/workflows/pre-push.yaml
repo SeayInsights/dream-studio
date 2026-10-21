@@ -147,6 +147,9 @@ gates:
       handler list + plugin.json after #442; the DuckDB schema pin after #450).
       A pin only drifts when a change set adds an object without updating the
       expected set — precisely a pre-push-time mistake. Fast and deterministic.
+      Also carries the pack self-containment guard (tests/unit/test_pack_self_contained.py):
+      it was in no workflow, so an enrolled pack could regress and nothing ran it until
+      the full suite did.
     command: [py, -m, pytest,
       tests/unit/test_duckdb_business_schema.py,
       tests/unit/test_packs_yaml_integrity.py,
@@ -179,12 +182,16 @@ gates:
       tests/unit/test_citation_registry.py,
       tests/unit/test_gate_manifests_name_real_files.py,
       tests/unit/test_generated_artifacts_gate.py,
+      tests/unit/test_pack_self_contained.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME
       change set as the schema/artifact change (DuckDB objects in
       test_duckdb_business_schema.py, packs.yaml handler lists, regenerated
-      plugin.json, a schema-debt doc entry for new migrations).
+      plugin.json, a schema-debt doc entry for new migrations). An enrolled skill
+      pack that reaches outside its own directory fails test_pack_self_contained.py
+      with the file, line and reach; fix the pack or declare the reach in the mode's
+      metadata.yml dependencies.
 
   - id: rule-enforcement
     tier: blocking
@@ -214,12 +221,13 @@ gates:
   - id: instruction-commands
     tier: blocking
     description: |
-      Every script path and first-party module a canonical skill or workflow tells an
-      agent to RUN must exist. An agent does what an instruction says; a command that
+      Every script path, first-party module and `ds` subcommand a canonical skill or
+      workflow tells an agent to RUN must exist (`ds` subcommands are resolved against
+      the real argparse tree). An agent does what an instruction says; a command that
       cannot run is a step silently skipped, and the steps instructions name are
       disproportionately checks.
     command: [py, -m, core.gates.instruction_commands]
-    fail_hint: "A canonical instruction names a command that cannot run. Write the thing, correct the path, or remove the instruction."
+    fail_hint: "A canonical instruction names a command that cannot run. Write the thing, correct the path or the ds subcommand, or remove the instruction."
 
   - id: generated-artifacts
     tier: blocking

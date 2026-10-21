@@ -75,12 +75,19 @@ analyze project: --incremental
 ```
 
 ## Output files
-- **PRD**: `.planning/specs/<project-name>/prd.md`
+- **PRD**: `~/.dream-studio/projects/<project-name>/planning/specs/prd.md` (also stored as a document; it is not written into the analyzed project)
 - **Database**: `~/.dream-studio/state/studio.db`
-  - `reg_projects` - project metadata, health scores
-  - `pi_analysis_runs` - run history, timing
-  - `pi_violations`, `pi_bugs`, `pi_improvements` - findings
-  - `ds_documents` - PRD with FTS5 search
+  - `business_projects` - the analyzed project is registered here when it is not already
+  - `ai_canonical_events` - one `analysis.*` event per phase, after `ds spool ingest`
+    (the engine writes them to the spool, `~/.dream-studio/events/spool/`)
+- **Documents**: `~/.dream-studio/state/files.db`, table `ds_documents` - a copy of the PRD,
+  with an FTS5 index
+
+Detected bugs are also written as security findings: each is emitted through
+`emit_security_finding` to the spool and, after `ds spool ingest`, lands in `security_events`
+(best-effort; a failure to emit never fails the run). Violations and improvements are not
+stored anywhere; they, the bugs and the health score are returned in the result, and the PRD
+lists the detected bugs.
 
 ## Error handling
 See `reference/error-handling.md` for full error scenarios and recovery steps.
