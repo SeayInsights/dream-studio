@@ -191,7 +191,9 @@ def _repo_from_path(scan_file_stem: str) -> str:
 
 def parse_semgrep_sarif(data: dict, repo: str) -> list[dict]:
     findings = []
-    for run in data.get("runs", []):
+    runs = data.get("runs", [])
+    # a `runs` that is not a list of objects holds no run; read_result_file says so
+    for run in [r for r in (runs if isinstance(runs, list) else []) if isinstance(r, dict)]:
         rules_meta = {}
         for rule in run.get("tool", {}).get("driver", {}).get("rules", []):
             rid = rule.get("id", "")
@@ -464,25 +466,77 @@ def planned_steps(meta: dict | None) -> tuple[str, ...]:
     return tuple(names)
 
 
+#: File-name fragments that say which scanner a result belongs to, for a file too corrupt to
+#: tell by its content. `pip-audit` and `pipaudit` are the two spellings the workflow's
+#: artifacts and the older doc used.
+SCANNER_NAME_HINTS = (
+    ("semgrep", "semgrep"),
+    ("bandit", "bandit"),
+    ("trufflehog", "trufflehog"),
+    ("pip-audit", "pip-audit"),
+    ("pipaudit", "pip-audit"),
+    ("npm-audit", "npm-audit"),
+)
+
+
+def scanner_from_name(name: str) -> str | None:
+    """The scanner a file name points at, or None. Names are free-form (the workflow keeps
+    each scanner's own), so this is a hint used only when the content cannot be read."""
+    low = name.lower()
+    return next((step for hint, step in SCANNER_NAME_HINTS if hint in low), None)
+
+
+def sarif_degradation(raw: object) -> str | None:
+    """Why a SARIF document is not evidence that semgrep ran to the end; None when it is.
+
+    semgrep always writes one run, with a `results` list (empty when it found nothing). A
+    document with no runs, or runs with no results list, is a schema stub or a truncated
+    write: it must not read as a clean complete scan with zero findings.
+    """
+    runs = raw.get("runs") if isinstance(raw, dict) else None
+    if not isinstance(runs, list) or not runs:
+        return "no runs in the SARIF: it holds no run, so it does not show the scan completed"
+    if not any(isinstance(r, dict) and isinstance(r.get("results"), list) for r in runs):
+        return "no results list in any run of the SARIF: it does not show the scan completed"
+    return None
+
+
 def read_result_file(path: Path, target_name: str) -> scan_coverage.Read:
     """Parse one scanner result into a scan_coverage.Read.
 
     The scanner (the planned step the file is the output of) is decided by content. A file
-    that is JSON but no scanner's output reads as no step and is named; one that is not JSON
-    raises (the caller names it and the step stays unread).
+    that is JSON but no scanner's output reads as no step and is named. One that cannot be
+    read is named too, and when its name says which scanner it belongs to that scanner is
+    degraded (partial): a corrupt second semgrep file must not hide behind a good first.
     """
-    decoded = scan_coverage.decode_text(path.read_bytes(), path.name)
-    raw = json.loads(decoded.text)
+    try:
+        decoded = scan_coverage.decode_text(path.read_bytes(), path.name)
+        raw = json.loads(decoded.text)
+    except (OSError, ValueError, RecursionError) as exc:
+        step = scanner_from_name(path.name)
+        if step is None:
+            raise
+        reason = f"{path.name} could not be read ({scan_coverage.short(exc)})"
+        return scan_coverage.Read(
+            None,
+            [],
+            [],
+            [],
+            [f"{path.name} could not be read: {scan_coverage.short(exc)}"],
+            ((step, f"{reason}, so {step}'s output may be incomplete"),),
+        )
     step = detect_step(raw)
     notes = list(decoded.notes)
     if step is None:
         refusal = f"{path.name} is not the output of a scanner this parser reads"
         return scan_coverage.Read(None, [], [], notes, [refusal])
+    degraded = list(decoded.degraded)
+    if step == "semgrep":
+        problem = sarif_degradation(raw)
+        if problem:
+            degraded.append(f"{path.name}: {problem}")
     return scan_coverage.Read(
-        step,
-        detect_and_parse(raw, path.name, repo_for(path, target_name)),
-        list(decoded.degraded),
-        notes,
+        step, detect_and_parse(raw, path.name, repo_for(path, target_name)), degraded, notes
     )
 
 

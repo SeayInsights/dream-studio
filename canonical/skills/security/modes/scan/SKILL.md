@@ -133,7 +133,12 @@ Extract from user input:
    whatever the steps say, and `parse_sarif.py` names it. A scan directory with no `steps`
    or `run` (an ingest from `--file`: nothing says which scanners ran or whether the run
    finished) reads `unknown`, never `complete`. Write `source` as `local-file` for it and
-   omit `run`, `planned_steps` and `steps`.
+   omit `run`, `planned_steps` and `steps`. A `github-actions` scan always records `run`:
+   with `source` `github-actions` and no `run` it reads `unknown` too. Write `run.status`
+   as `completed` (a conclusion on a run that is not completed contradicts itself and reads
+   `unknown`). A SARIF with no run, or whose runs hold no `results` list, is not a completed
+   semgrep scan: it reads `partial` ("no runs in the SARIF"), and so does a second file for
+   a scanner (named like it) that cannot be read.
 
 5. Parse SARIF to extract finding counts: iterate `runs[].results[]`, group by `level` (error=critical/high, warning=medium, note=low).
 6. Run `py -3.12 <skill-dir>/templates/security/etl/parse_sarif.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json`. Every finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`; `coverage.json` holds the same per scan directory and is the only place coverage shows when a scan produced no findings. It reads the scanner outputs directly in `{scan_dir}` (SARIF, Bandit, TruffleHog and pip-audit JSON); an output it has no reader for (npm audit) leaves that scanner `ran` but unread, so the scan is `partial` and the file is named.

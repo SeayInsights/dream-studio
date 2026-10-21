@@ -826,12 +826,23 @@ def test_a_target_that_was_not_scanned_reads_partial_and_names_why(tmp_path: Pat
     assert "the target was not scanned" in text and UNREACHABLE in text
 
 
-def test_an_outcome_of_not_scanned_cannot_be_overruled_by_steps_that_say_ran(tmp_path: Path):
-    """A record that says both is contradictory; the claim that nothing was scanned wins."""
-    meta = _not_scanned(steps=_steps())
+@pytest.mark.parametrize("outcome", ["not_scanned", "Not_Scanned", " NOT_SCANNED "])
+def test_not_scanned_with_steps_that_say_ran_is_a_contradiction_and_reads_unknown(
+    tmp_path: Path, outcome: str
+):
+    """A record that says both cannot be trusted either way: never complete, and `unknown`
+    (the wrong-case spelling included: the outcome is read normalised)."""
+    meta = _not_scanned(outcome=outcome, steps=_steps())
     d = _scan(tmp_path / "scans", "web", meta)
     findings, coverage, _ = _run(d, tmp_path)
-    assert {f["coverage"] for f in findings} == {"partial"}
+    assert {f["coverage"] for f in findings} == {"unknown"}
+    assert "contradicts itself" in " ".join(coverage["scans"][0]["limitations"])
+
+
+def test_an_outcome_in_the_wrong_case_with_skipped_steps_is_still_not_scanned(tmp_path: Path):
+    d = _scan(tmp_path / "scans", "web", _not_scanned(outcome="Not_Scanned"), zap=None, nuclei=None)
+    _, coverage, _ = _run(d, tmp_path, rc=1)
+    assert coverage["coverage"] == "partial"
     assert "the target was not scanned" in " ".join(coverage["scans"][0]["limitations"])
 
 

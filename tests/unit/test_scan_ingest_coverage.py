@@ -164,12 +164,189 @@ def test_a_run_record_with_no_readable_conclusion_is_unknown_never_complete(run:
     assert any("conclusion" in x for x in report["limitations"])
 
 
-def test_a_meta_without_a_run_object_is_judged_by_its_steps_alone() -> None:
+def test_a_local_scan_without_a_run_object_is_judged_by_its_steps_alone() -> None:
+    """binary-scan and dast run locally and record no workflow run."""
+    for source in ("local-analysis", "local-run", None):
+        meta = _meta()
+        del meta["run"]
+        if source is None:
+            del meta["source"]
+        else:
+            meta["source"] = source
+        report = scan_coverage.assess(meta, ("semgrep", "bandit"), {"semgrep", "bandit"})
+        assert report["coverage"] == "complete", source
+
+
+@pytest.mark.parametrize("source", ["github-actions", "GitHub-Actions", " github-actions "])
+def test_a_github_actions_scan_with_no_run_record_is_unknown_never_complete(source: str) -> None:
+    """A github-actions scan has a workflow run by definition; steps that say `ran` with no
+    run recorded cannot show the run finished."""
+    meta = _meta(source=source)
+    del meta["run"]
+    report = scan_coverage.assess(meta, ("semgrep", "bandit"), {"semgrep", "bandit"})
+    assert report["coverage"] == "unknown"
+    assert any("workflow run is not recorded" in x for x in report["limitations"])
+
+
+def test_parse_sarif_reads_a_github_actions_scan_without_a_run_as_unknown(tmp_path: Path) -> None:
     meta = _meta()
-    del meta["run"]  # binary-scan and dast do not record one
-    assert scan_coverage.assess(meta, ("semgrep", "bandit"), {"semgrep", "bandit"})["coverage"] == (
-        "complete"
+    del meta["run"]
+    d = _scan(tmp_path / "scans", meta)
+    findings, coverage, _, _ = _run(d, tmp_path)
+    assert findings and {f["coverage"] for f in findings} == {"unknown"}
+    assert coverage["coverage"] == "unknown"
+
+
+# -- contradictory records never read complete ------------------------------------------------------
+
+
+@pytest.mark.parametrize("status", ["in_progress", "queued", "requested", "waiting", "pending"])
+def test_a_conclusion_on_a_run_that_is_not_completed_is_unknown(status: str) -> None:
+    meta = _meta("success")
+    meta["run"]["status"] = status
+    report = scan_coverage.assess(meta, ("semgrep", "bandit"), {"semgrep", "bandit"})
+    assert report["coverage"] == "unknown"
+    assert any("not completed" in x for x in report["limitations"])
+
+
+def test_a_run_status_of_completed_in_any_case_is_fine() -> None:
+    meta = _meta("success")
+    meta["run"]["status"] = " Completed "
+    assert (
+        scan_coverage.assess(meta, ("semgrep", "bandit"), {"semgrep", "bandit"})["coverage"]
+        == "complete"
     )
+
+
+def test_a_failed_conclusion_on_an_unfinished_run_is_still_partial() -> None:
+    meta = _meta("failure")
+    meta["run"]["status"] = "in_progress"
+    assert (
+        scan_coverage.assess(meta, ("semgrep", "bandit"), {"semgrep", "bandit"})["coverage"]
+        == "partial"
+    )
+
+
+@pytest.mark.parametrize(
+    "conclusion, expected",
+    [
+        ("Success", "complete"),
+        (" SUCCESS ", "complete"),
+        ("FAILURE", "partial"),
+        ("Cancelled", "partial"),
+    ],
+)
+def test_the_conclusion_is_normalised(conclusion: str, expected: str) -> None:
+    report = scan_coverage.assess(_meta(conclusion), ("semgrep", "bandit"), {"semgrep", "bandit"})
+    assert report["coverage"] == expected
+
+
+@pytest.mark.parametrize("outcome", ["Not_Scanned", "NOT_SCANNED", " not_scanned "])
+def test_an_outcome_in_any_case_is_read_as_not_scanned(outcome: str) -> None:
+    skipped = [{"step": s, "status": "skipped", "tool": s, "reason": "down"} for s in ("a", "b")]
+    meta = {"outcome": outcome, "reason": "target down", "steps": skipped}
+    report = scan_coverage.assess(meta, ("a", "b"), set())
+    assert report["coverage"] == "partial"
+    assert any("the target was not scanned: target down" in x for x in report["limitations"])
+
+
+@pytest.mark.parametrize("outcome", ["not_scanned", "Not_Scanned"])
+def test_not_scanned_with_steps_that_ran_contradicts_itself_and_reads_unknown(
+    outcome: str,
+) -> None:
+    meta = {
+        "outcome": outcome,
+        "reason": "x",
+        "steps": [{"step": "a", "status": "ran", "tool": "a"}],
+    }
+    report = scan_coverage.assess(meta, ("a",), {"a"})
+    assert report["coverage"] == "unknown"
+    assert any("contradicts itself" in x and "a" in x for x in report["limitations"])
+
+
+# -- an empty SARIF is not a completed scan --------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "sarif, message",
+    [
+        ({"$schema": SARIF["$schema"], "runs": []}, "no runs in the SARIF"),
+        ({"$schema": SARIF["$schema"]}, "no runs in the SARIF"),
+        ({"$schema": SARIF["$schema"], "runs": "none"}, "no runs in the SARIF"),
+        (
+            {"$schema": SARIF["$schema"], "runs": [{"tool": {"driver": {"name": "semgrep"}}}]},
+            "no results list in any run",
+        ),
+    ],
+    ids=["empty-runs", "schema-only", "runs-not-a-list", "run-without-results"],
+)
+def test_a_sarif_with_no_run_or_no_results_list_is_not_a_complete_semgrep_scan(
+    tmp_path: Path, sarif: dict, message: str
+) -> None:
+    d = _scan(tmp_path / "scans", _meta("success"), {"semgrep.sarif": sarif, "bandit.json": BANDIT})
+    findings, coverage, _, _ = _run(d, tmp_path)
+    scan = coverage["scans"][0]
+    assert scan["coverage"] != "complete", scan
+    assert any(message in x for x in scan["limitations"]), scan["limitations"]
+    assert {f["coverage"] for f in findings} == {scan["coverage"]}
+
+
+def test_a_real_run_with_zero_results_is_still_complete(tmp_path: Path) -> None:
+    clean = {"$schema": SARIF["$schema"], "runs": [{"tool": {"driver": {}}, "results": []}]}
+    d = _scan(tmp_path / "scans", _meta("success"), {"semgrep.sarif": clean, "bandit.json": BANDIT})
+    _, coverage, _, _ = _run(d, tmp_path)
+    assert coverage["coverage"] == "complete"
+
+
+# -- a corrupt file for a scanner that has another result ---------------------------------------------
+
+
+def test_a_corrupt_second_file_for_a_scanner_that_was_read_makes_it_partial(tmp_path: Path) -> None:
+    d = _scan(
+        tmp_path / "scans",
+        _meta("success"),
+        {"semgrep.sarif": SARIF, "semgrep-extra.sarif": "{ not json", "bandit.json": BANDIT},
+    )
+    findings, coverage, _, _ = _run(d, tmp_path)
+    scan = coverage["scans"][0]
+    assert scan["coverage"] == "partial" and scan["degraded_steps"] == ["semgrep"]
+    text = " ".join(scan["limitations"])
+    assert "semgrep-extra.sarif could not be read" in text and "semgrep" in text
+    assert {f["coverage"] for f in findings} == {"partial"}
+
+
+def test_a_corrupt_pip_audit_file_degrades_pip_audit_by_its_name(tmp_path: Path) -> None:
+    meta = _meta(
+        "success", steps=_steps() + [{"step": "pip-audit", "status": "ran", "tool": "pip"}]
+    )
+    meta["planned_steps"] = ["semgrep", "bandit", "pip-audit"]
+    audit = {"dependencies": []}
+    d = _scan(
+        tmp_path / "scans",
+        meta,
+        {
+            "semgrep.sarif": SARIF,
+            "bandit.json": BANDIT,
+            "pip-audit-results.json": audit,
+            "pipaudit-old.json": "{ not json",
+        },
+    )
+    _, coverage, _, _ = _run(d, tmp_path)
+    scan = coverage["scans"][0]
+    assert scan["degraded_steps"] == ["pip-audit"] and scan["coverage"] == "partial"
+
+
+def test_a_stray_unreadable_file_that_names_no_scanner_is_a_limitation_only(tmp_path: Path) -> None:
+    d = _scan(
+        tmp_path / "scans",
+        _meta("success"),
+        {"semgrep.sarif": SARIF, "bandit.json": BANDIT, "notes.json": "{ not json"},
+    )
+    findings, coverage, _, _ = _run(d, tmp_path)
+    scan = coverage["scans"][0]
+    assert scan["coverage"] == "complete"
+    assert any("notes.json could not be read" in x for x in scan["limitations"])
+    assert {f["coverage"] for f in findings} == {"complete"}
 
 
 def test_a_failed_run_with_no_steps_is_still_named_partial() -> None:
@@ -365,3 +542,7 @@ def test_the_ingest_steps_tell_the_agent_to_record_the_run_and_the_scanners() ->
     examples = SCAN_EXAMPLES.read_text(encoding="utf-8")
     assert '"steps"' in examples and '"run"' in examples and "planned_steps" in examples
     assert "findings may be partial" not in text  # no longer only a chat warning
+    flat = " ".join(text.split())
+    assert "with `source` `github-actions` and no `run` it reads `unknown`" in flat
+    assert "Write `run.status` as `completed`" in flat
+    assert '"no runs in the SARIF"' in flat

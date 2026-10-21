@@ -96,7 +96,9 @@ class Read(NamedTuple):
     replaced, a check name the doc does not list). `refusals` say why a file was found and
     not accepted as the step's result (it is not that step's output, it has the wrong
     shape): they are never cut by the note cap, because the unread-step limitation points
-    at them.
+    at them. `degrades` are (step, reason) pairs for a file that could not be read but is
+    known to belong to a step (a second semgrep SARIF that is corrupt): they make that step
+    partial without counting the file as a result read for it.
     """
 
     step: str | None
@@ -104,6 +106,7 @@ class Read(NamedTuple):
     degraded: list
     notes: list
     refusals: list | tuple = ()
+    degrades: tuple = ()
 
 
 class ScanRead:
@@ -128,6 +131,8 @@ class ScanRead:
                 self.degraded.setdefault(result.step, []).extend(result.degraded)
         self.notes.extend(result.notes)
         self.refusals.extend(result.refusals)
+        for step, reason in result.degrades:
+            self.degraded.setdefault(step, []).append(reason)
 
 
 def _real(path: Path) -> Path:
@@ -363,45 +368,85 @@ def assess(
     }
 
 
+def _word(value: object) -> str:
+    """A status-like value, case- and space-normalised ("" when it is not a string)."""
+    return value.strip().lower() if isinstance(value, str) else ""
+
+
 def _assess_run(meta: dict | None) -> tuple[bool, bool, list[str]]:
     """What scan-meta.json says about the run as a whole: (partial, unknown, limitations).
 
-    Two whole-run facts, beyond the per-step record. `outcome: not_scanned` (a target the
-    mode did not scan at all) is partial and names the reason. And modes whose scan is one
-    CI workflow run record it (`scan ingest`):
+    Whole-run facts, beyond the per-step record. Every word is read case- and
+    space-normalised (`Not_Scanned`, ` Success `), so a spelling cannot turn a bad record
+    into a clean one.
 
-        "run": {"run_id": "123", "status": "completed", "conclusion": "failure"}
-
-    A run that did not conclude `success` (failure, cancelled, timed_out, neutral, skipped,
-    ...) may have produced only some of its results, whatever the per-scanner steps say, so
-    the scan is partial and the conclusion is named. A `run` whose conclusion cannot be read
-    leaves the scan `unknown`: the record claims a run it does not describe. A scan-meta.json
-    with no `run` (binary-scan and dast run locally) is judged by its steps alone.
+    * `outcome: not_scanned` (a target the mode did not scan at all) is partial and names
+      the reason. A record that says so while one of its steps is `ran` contradicts itself,
+      and a contradictory record is `unknown`, never complete.
+    * A scan whose `source` is `github-actions` has a workflow run by definition: with no
+      `run` recorded it is `unknown`. Modes that run locally (binary-scan, dast) record none
+      and are judged by their steps alone.
+    * `run`: {"run_id": "123", "status": "completed", "conclusion": "failure"}. A run that
+      did not conclude `success` (failure, cancelled, timed_out, neutral, skipped, ...) may
+      have produced only some of its results, whatever the steps say: partial, with the
+      conclusion named. A conclusion that cannot be read, or a conclusion recorded for a
+      run whose status is not `completed`, leaves the scan `unknown`.
     """
     if meta is None:
         return False, False, []
-    if meta.get("outcome") == "not_scanned":
+    if _word(meta.get("outcome")) == "not_scanned":
         # `dast run` records a target it did not scan (unreachable URL, ZAP missing) as a
         # scan directory holding only this scan-meta.json. Whatever its steps say, nothing
         # was scanned, and the reason is the one thing a reader needs.
+        steps = meta.get("steps")
+        ran = sorted(
+            {
+                _text(e.get("step"))
+                for e in (steps if isinstance(steps, list) else [])
+                if isinstance(e, dict) and _word(e.get("status")) == STATUS_RAN
+            }
+        )
+        if ran:
+            return (
+                False,
+                True,
+                [
+                    "the record contradicts itself: outcome not_scanned, but step(s) "
+                    f"{', '.join(ran)} are recorded as ran"
+                ],
+            )
         reason = meta.get("reason")
         why = f": {_text(reason)}" if isinstance(reason, str) and reason.strip() else ""
         return True, False, [f"the target was not scanned{why}"]
     if "run" not in meta:
+        if _word(meta.get("source")) == "github-actions":
+            return (
+                False,
+                True,
+                ["the workflow run is not recorded (`run`) for a github-actions scan"],
+            )
         return False, False, []
     run = meta["run"]
-    conclusion = run.get("conclusion") if isinstance(run, dict) else None
-    if not (isinstance(conclusion, str) and conclusion.strip()):
+    conclusion = _word(run.get("conclusion")) if isinstance(run, dict) else ""
+    if not conclusion:
         return False, True, ["the workflow run's conclusion is not recorded (`run.conclusion`)"]
-    if conclusion != "success":
+    limitations: list[str] = []
+    unknown = False
+    status = _word(run.get("status"))
+    if status and status != "completed":
+        unknown = True
+        limitations.append(
+            f"the workflow run's status is {_text(status)}, not completed, yet a conclusion "
+            f"({_text(conclusion)}) is recorded: the record contradicts itself"
+        )
+    partial = conclusion != "success"
+    if partial:
         run_id = run.get("run_id")
         which = f" (run {_text(run_id)})" if isinstance(run_id, (str, int)) and run_id else ""
-        return (
-            True,
-            False,
-            [f"the workflow run{which} concluded {_text(conclusion)}: findings may be partial"],
+        limitations.append(
+            f"the workflow run{which} concluded {_text(conclusion)}: findings may be partial"
         )
-    return False, False, []
+    return partial, unknown, limitations
 
 
 def scan_key(
