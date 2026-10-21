@@ -668,39 +668,3 @@ class TestLocalFirst:
         """harvest() only accesses the passed SQLite connection."""
         result = harvester.harvest()
         assert result is not None
-
-
-# ── Real data smoke test ──────────────────────────────────────────────────
-
-
-class TestRealDataSmoke:
-    def test_harvester_on_real_db_no_exception(self):
-        """Run harvester against real studio.db. Zero signals is correct if no Phase 19 data yet."""
-        try:
-            from core.config.database import _default_db_path
-        except ImportError:
-            pytest.skip("core.config.database not importable in this environment")
-
-        from projections.core.analyzers.friction_signals import FrictionSignalHarvester
-
-        db_path = _default_db_path()
-        if not db_path.exists():
-            pytest.skip(f"Live DB not found at {db_path}")
-
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        try:
-            # Check if migration 096 was applied
-            try:
-                conn.execute("SELECT 1 FROM ds_friction_signals LIMIT 1")
-            except sqlite3.OperationalError:
-                pytest.skip("Migration 096 not applied to live DB yet")
-
-            harvester = FrictionSignalHarvester(conn, session_id="smoke-test")
-            result = harvester.harvest()
-            # Document result — zero is correct for Phase 18 fixture-based dev
-            assert isinstance(result.signals_written, int)
-            assert isinstance(result.signals_skipped, int)
-            # If zero, that's expected: Phase 18 ran via fixtures, not real finding dismissals
-        finally:
-            conn.close()

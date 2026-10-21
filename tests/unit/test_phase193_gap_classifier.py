@@ -421,18 +421,9 @@ class TestTier2LLM:
         assert GapClassifier._parse_llm_response("") is None
         assert GapClassifier._parse_llm_response(None) is None
 
-    def test_tier2_variance_documented(self, classifier, full_conn):
-        """Run same ambiguous classification 3 times, document variance.
-
-        When claude CLI is unavailable, this verifies the prompt is deterministic
-        (same inputs → same prompt → same expected behavior).
-        When claude IS available, checks variance < 0.1.
-        """
-        import shutil
-        from projections.core.analyzers.gap_classifier import GapClassifier
-
-        # Build the prompt for an ambiguous signal
-        sig = {
+    @staticmethod
+    def _ambiguous_signal() -> dict:
+        return {
             "signal_id": _sid(),
             "signal_type": "dismissed_finding",
             "skill_id": "ds-quality:security",
@@ -441,58 +432,60 @@ class TestTier2LLM:
             "project_id": "proj-variance",
         }
 
-        # Test 1: prompt is deterministic (same inputs → identical prompt)
-        conn1 = sqlite3.connect(":memory:")
-        conn1.row_factory = sqlite3.Row
-        conn1.executescript(FINDINGS_BASE)
-        conn1.executescript(SCAN_RUNS_BASE)
-        conn1.executescript(WORKFLOW_PATTERNS_BASE)
-        conn1.executescript(MIGRATION_095)
-        conn1.executescript(MIGRATION_096)
-        conn1.executescript(MIGRATION_097)
-        c1 = GapClassifier(conn1)
-        prompt_a = c1._build_prompt(sig)
-        prompt_b = c1._build_prompt(sig)
-        assert prompt_a == prompt_b, "Same inputs must produce identical prompt"
-        conn1.close()
+    @staticmethod
+    def _fresh_classifier():
+        from projections.core.analyzers.gap_classifier import GapClassifier
 
-        # Test 2: if claude available, classify 3 times and check variance
-        claude_bin = shutil.which("claude")
-        if claude_bin is None:
-            # Document why test is skipped
-            pytest.skip(
-                "claude CLI not available — variance test skipped. "
-                "Prompt determinism verified. Token cost: N/A (Tier 2 not reached)."
-            )
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.executescript(FINDINGS_BASE)
+        conn.executescript(SCAN_RUNS_BASE)
+        conn.executescript(WORKFLOW_PATTERNS_BASE)
+        conn.executescript(MIGRATION_095)
+        conn.executescript(MIGRATION_096)
+        conn.executescript(MIGRATION_097)
+        return conn, GapClassifier(conn)
 
+    def test_tier2_prompt_is_deterministic(self):
+        """Same inputs -> identical prompt, which is what makes variance a property of the
+        model and not of the classifier."""
+        sig = self._ambiguous_signal()
+        conn, classifier = self._fresh_classifier()
+        try:
+            assert classifier._build_prompt(sig) == classifier._build_prompt(sig)
+        finally:
+            conn.close()
+
+    @pytest.mark.install_check
+    def test_tier2_variance_live(self):
+        """Run the same ambiguous classification 3 times against the real ``claude`` CLI
+        and require variance < 0.1.
+
+        An install check, not a unit test: it spends tokens on a live model through whatever
+        ``claude`` is on PATH, so its answer is a fact about this machine and this day. It
+        used to run in the default suite whenever the CLI was installed (and skip when it was
+        not, which on CI is always), so the suite called a paid model on one machine and
+        nothing on the others. Run it deliberately: ``py -m pytest -m install_check tests``.
+        """
+        import shutil
+
+        assert shutil.which("claude"), "the live variance check needs the claude CLI on PATH"
+        sig = self._ambiguous_signal()
         results = []
         for _ in range(3):
-            # Fresh in-memory DB per run to avoid cross-contamination
-            conn_run = sqlite3.connect(":memory:")
-            conn_run.row_factory = sqlite3.Row
-            conn_run.executescript(FINDINGS_BASE)
-            conn_run.executescript(SCAN_RUNS_BASE)
-            conn_run.executescript(WORKFLOW_PATTERNS_BASE)
-            conn_run.executescript(MIGRATION_095)
-            conn_run.executescript(MIGRATION_096)
-            conn_run.executescript(MIGRATION_097)
-            c_run = GapClassifier(conn_run)
-            r = c_run._tier2_classify(sig)
-            if r is not None and r.classification:
-                results.append(r.confidence)
-            conn_run.close()
+            conn, classifier = self._fresh_classifier()
+            try:
+                r = classifier._tier2_classify(sig)
+                if r is not None and r.classification:
+                    results.append(r.confidence)
+            finally:
+                conn.close()
 
-        if not results:
-            pytest.skip("Tier 2 returned no results (all deferred) — variance test N/A")
-
+        assert results, "Tier 2 returned no results (all deferred) -- the live check measured nothing"
         variance = max(results) - min(results)
         assert variance < 0.1, (
             f"Tier 2 variance {variance:.3f} exceeds 0.1 target across {len(results)} runs. "
             f"Scores: {results}. Tighten the classifier prompt."
-        )
-        print(
-            f"\n[Token cost] Tier 2 ran {len(results)} times. "
-            f"Avg confidence: {sum(results)/len(results):.3f}, variance: {variance:.3f}"
         )
 
 

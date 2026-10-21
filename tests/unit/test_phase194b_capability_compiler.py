@@ -714,17 +714,17 @@ class TestVariance:
         prompt_b, _ = compiler._build_prompt("ds-quality:security", events)
         assert prompt_a == prompt_b, "Prompt must be deterministic for same inputs"
 
-    def test_live_variance_if_claude_available(self, compiler, full_conn):
-        """If claude is available, run 3 times and check variance < 0.1."""
+    @pytest.mark.install_check
+    def test_live_variance(self, compiler, full_conn):
+        """Run 3 times against the real ``claude`` CLI and require variance < 0.1.
+
+        An install check: it spends tokens on a live model, so its answer is a fact about
+        this machine. It used to run in the default suite whenever the CLI was on PATH and
+        skip otherwise. Run it deliberately: ``py -m pytest -m install_check tests``.
+        """
         import shutil
 
-        claude_bin = shutil.which("claude")
-        if claude_bin is None:
-            pytest.skip(
-                "claude CLI not available — variance test skipped. "
-                "Prompt determinism verified above. "
-                "Token cost: N/A (capability compilation deferred without claude)."
-            )
+        assert shutil.which("claude"), "the live variance check needs the claude CLI on PATH"
 
         for _ in range(3):
             _insert_canonical_event(full_conn, event_id=_uid(), event_type="skill.invoked")
@@ -749,8 +749,7 @@ class TestVariance:
             )
             full_conn.commit()
 
-        if not confidences:
-            pytest.skip("No successful compilations — claude CLI returned no results")
+        assert confidences, "no successful compilations -- the claude CLI returned no results"
 
         variance = max(confidences) - min(confidences)
         assert variance < 0.1, (

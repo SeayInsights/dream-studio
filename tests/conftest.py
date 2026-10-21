@@ -394,7 +394,7 @@ def pytest_collection_modifyitems(config, items):
 
     Run them deliberately, on the machine you mean to check::
 
-        py -m pytest -m install_check tests/install_checks
+        py -m pytest -m install_check tests
 
     When selected they FAIL on an absent install instead of skipping, because the person
     who asked for the check wants to hear that the install is not there.

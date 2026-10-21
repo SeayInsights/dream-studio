@@ -51,9 +51,10 @@ repository and the install it needs in a temporary directory; it does not read
 `~/.claude`, `~/.dream-studio`, a sibling checkout, `origin/main` or the working
 directory, and `py -m core.gates.test_isolation` fails the push when it does. A check
 that is really about one machine (is the operator's install current?) lives in
-`tests/install_checks`, is marked `install_check`, is never collected by default, and
-is run on purpose with `py -m pytest -m install_check tests/install_checks`. It fails,
-rather than skips, when the install is absent.
+`tests/install_checks` (or, when it needs a unit module's fixtures, beside them), is marked
+`install_check`, is never collected by default, and is run on purpose with
+`py -m pytest -m install_check tests`. It fails, rather than skips, when the install is
+absent. A test that calls a paid model through the `claude` CLI is one of these.
 
 The full unit suite takes roughly 35 minutes on Windows and does not OOM
 (6,044 passed / 25 failed, measured 2026-09-21).
