@@ -179,6 +179,33 @@ rules:
       closed -- contributes.gates is refused today, not ignored -- because nothing reads
       it, and a pack that declared one and was accepted would believe it had a gate. Gates
       themselves wait on gate:register.
+  - id: a-pack-manifest-cannot-lower-how-its-work-is-reviewed
+    statement: >
+      A pack manifest cannot exempt its own work from independent review, take a
+      work-order type name core writes, or leave a governance flag to a default; and a
+      manifest that does not load never takes the CLI down with it.
+    source: core/work_orders/type_manifest.py
+    enforced_by:
+      - tests/unit/test_work_order_type_manifest.py::test_a_manifest_cannot_exempt_its_own_work_from_independent_review
+      - tests/unit/test_work_order_type_manifest.py::test_a_pack_cannot_allow_itself
+      - tests/unit/test_work_order_type_manifest.py::test_the_flags_that_switch_governance_have_no_default
+      - tests/unit/test_work_order_type_manifest.py::test_a_name_core_writes_cannot_be_declared
+      - tests/unit/test_work_order_type_manifest.py::test_the_shipped_manifest_passes_every_governance_rule_and_its_profile_is_pinned
+      - tests/unit/test_work_order_type_manifest.py::test_an_alias_bomb_is_refused_cheaply_and_the_message_stays_small
+      - tests/unit/test_work_order_type_names_core_writes.py::test_every_type_name_core_writes_is_built_in_or_reserved
+      - tests/unit/test_broken_manifest_does_not_break_ds.py::test_doctor_reports_the_broken_manifest_as_a_finding_not_a_crash
+      - tests/unit/test_broken_manifest_does_not_break_ds.py::test_a_command_that_reads_a_type_fails_in_one_line_naming_the_manifest
+    note: >
+      A manifest is the pack's statement about itself, so it is an attestation, not
+      evidence. Verified attacks: exempt_from_verification on a code-class type closes code
+      with no review; artifact_class document drops the review standards from 8 to 5;
+      ui_bearing omitted skips the milestone design audit; and declaring cleanup (which
+      core files itself, 137 rows in one authority) as an exempt document type changed how
+      those existing work orders are reviewed. The operator, not the pack, allows an
+      exemption, in a file in their own home. The manifest is also untrusted input to every
+      process that starts: an 8-level alias chain made a 312 MB error message, and a bad
+      manifest made `ds --help` and `ds doctor` exit with a traceback because the parser read
+      the registry while it was being built.
   - id: a-work-order-is-not-done-until-main-is-green
     statement: >
       A work order closes only when the default branch is green; a known-red main refuses

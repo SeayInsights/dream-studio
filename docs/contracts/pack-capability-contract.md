@@ -121,10 +121,10 @@ packs:
         - name: contract_review           # required: lowercase, digits, underscores, at most 64
           artifact_class: document        # required: code | config | document | data
           description: Reviewing a contract for completeness and accuracy   # required, one line
-          ui_bearing: false               # optional flags, all default false
-          stales_design_brief: false      #   (stales_design_brief defaults to ui_bearing)
-          exempt_from_verification: false
-          dashboard_truth_gated: false
+          ui_bearing: false               # required, never defaulted (see below)
+          exempt_from_verification: false # required, never defaulted; true needs the operator
+          stales_design_brief: false      # optional; defaults to ui_bearing
+          dashboard_truth_gated: false    # optional; only adds a close gate
 ```
 
 How it behaves:
@@ -139,9 +139,22 @@ How it behaves:
   read until it is fixed: it never silently falls back to the built-ins.
 - **What is refused.** An unknown key on a type or under `contributes`, a missing required
   key, an unknown artifact class, a bad name, flag or description, a duplicate across packs,
-  and a collision with a built-in or an already registered type. `contributes.gates` and
+  a collision with a built-in, a reserved or an already registered type, an exemption the
+  operator has not allowed, and a manifest that is too large, nested too deeply, uses a YAML
+  anchor or alias, is not UTF-8, or declares more than 200 types. `contributes.gates` and
   `contributes.finding_categories` are refused today, not ignored, because nothing reads them.
-  A manifest is applied whole or not at all.
+  A manifest is applied whole or not at all. Every refusal is a `PackManifestError` naming the
+  file and the pack, never a raw traceback, and no message quotes manifest data whole.
+- **A broken manifest does not take `ds` down.** The CLI builds its parser whatever the
+  manifest holds, so `ds --help`, `version`, `status` and `doctor` run. A command that reads a
+  work-order type (`create`, `start`, `close`, `project state`) fails with one line naming the
+  manifest and the pack. `ds doctor` reports the manifest as `checks.pack_work_order_types`,
+  with the error when it does not load and, when it does, the governance profile of every type
+  a pack declared.
+- **No reload.** The manifest is read once per process. A long-lived process (`ds mcp serve`)
+  keeps serving the types it loaded until it is restarted, and logs one warning line, once per
+  change, when the file has changed on disk since it loaded. Editing the manifest therefore
+  needs a restart of the server; a new `ds` command picks it up on its own.
 - **Startable without a row.** `ds work-order start` reads `business_work_order_types` for a
   work order's gates, executor and workflow template. A declared type with no row gets a
   profile derived from the declaration (a label, and no pre/post gate, executor or workflow);
@@ -155,8 +168,39 @@ How it behaves:
   undeclared: independent review is required, it reviews as code, and the `dashboard_truth`
   gate does not apply, so such a work order can still be closed through the universal gates.
 - **For tests.** `type_registry.scoped_registration()` and
-  `type_registry.scoped_pack_manifest(path)` restore the registry on exit. There is no public
-  unregister.
+  `type_registry.scoped_pack_manifest(path, trusted=...)` restore the registry on exit. There
+  is no public unregister. Scopes swap the process-wide registry, so they are single-threaded:
+  a second thread entering one is refused, and a reader on another thread sees the scoped
+  state while it lasts. A scope never reads the operator's trust file.
+
+#### What a pack type can and cannot weaken
+
+A manifest is the pack's own statement about itself, so the platform treats everything in it as
+an attestation the pack author owns, and refuses the ones that lower governance unless the
+operator, who is not the pack, says so.
+
+| A manifest can | A manifest cannot |
+| --- | --- |
+| Choose an artifact class, which selects the review standards (8 for code, 6 for config, 8 for data, 5 for a document). This is an attestation: nothing checks it against what the type delivers, so declaring `document` for code drops three review standards. `ds doctor` prints the count for each declared type. | Take a name core writes or holds: `cleanup`, `migration`, `investigation`, `chore`. Declaring one would change how existing work orders of that name are reviewed and closed. `cleanup` is derived (core files it; a test scans production code and fails on a writer of any name that is neither built in nor reserved); the other three are held by live authorities from earlier versions and cannot be derived from the code. |
+| Declare `ui_bearing` (a locked design brief is read at start; the milestone owes a design audit and a Core Web Vitals result) and `exempt_from_verification` explicitly. Neither has a default, so omission is an error; saying `ui_bearing: false` for a type that ships a page skips the milestone design audit, and that is the author's attestation. | Exempt its work from independent review by itself. `exempt_from_verification: true` needs the pack's key in the operator's `pack-trust.yaml` in the Dream Studio home (`exempt_from_verification: [<pack>]`), a file no manifest can edit, name or point at. |
+| Add governance: `dashboard_truth_gated: true` holds closing the type to the live-authority invariants; `stales_design_brief` widens the staling set. | Remove a universal close gate (tasks done, executable acceptance criteria, change impact, lane review) or the main-CI check. Those are not per-type. |
+| Add a type. | Redeclare or alter a built-in, or another pack's type. |
+
+The trust file is read only when a manifest asks for an exemption. A present but invalid file
+is an error naming it, never an empty allow-list. The trust file lives in the home, not next
+to `packs.yaml`, because an environment variable would have to be set in every process that
+reads the registry (the CLI, the MCP server, each hook) and one that was not would silently
+differ.
+
+The repository's own `packs.yaml` declares no type today, and a test pins its governance
+profile, so adding one is a reviewed change to that test.
+
+One limit, stated rather than implied: before the declared-type check existed, `create`
+accepted any string, so a very old authority may hold a work order typed `dashboard` or
+`telemetry` (the two names the old `dashboard_truth` literal set carried, which no migration
+seeds and no door accepts today). Such a row is an undeclared type: it closes under the
+strictest defaults and no longer runs the `dashboard_truth` gate. That window closed with the
+declared-type check, so it is negligible, but it is not zero.
 
 What is not shipped:
 
