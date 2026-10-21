@@ -257,9 +257,7 @@ def emit_security_finding_resolved(
     announcements: list[Callable[[], None]] = []
 
     def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
-        reason = resolve_security_finding_reason(
-            conn, finding_id=finding_id, resolution=resolution
-        )
+        reason = resolve_security_finding_reason(conn, finding_id=finding_id, resolution=resolution)
         if reason == FINDING_NOT_FOUND:
             return TelemetryEmitResult(False, error=f"security finding not found: {finding_id}")
         if reason is not None:

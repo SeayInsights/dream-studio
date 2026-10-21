@@ -432,7 +432,10 @@ def test_a_missing_table_is_a_failure_not_a_skip(tmp_path: Path):
 def test_record_security_finding_returns_the_reason_and_none_on_success(db: Path):
     conn = sqlite3.connect(db)
     try:
-        assert record_security_finding(conn, finding_id="f-ok", severity="low", description="a") is None
+        assert (
+            record_security_finding(conn, finding_id="f-ok", severity="low", description="a")
+            is None
+        )
         bad = record_security_finding(conn, finding_id="f-bad", severity="low", description=POISON)
         assert bad and "IntegrityError" in bad and CODE.search(bad)
         dup = record_security_finding(conn, finding_id="f-ok", severity="low", description="a")
