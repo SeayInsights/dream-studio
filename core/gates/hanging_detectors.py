@@ -380,6 +380,72 @@ def detect_stale_removed_symbol_tests(
 # --- (b) changed-signature callers ------------------------------------------
 
 _SIG_RE = re.compile(r"\b(?:def|function)\s+([A-Za-z_]\w*)\s*\(([^)]*)\)")
+# A Python definition STARTS a statement: nothing but indentation (and `async`) may precede
+# `def`. Anchoring is exact where quote-parity is a heuristic, which is why Python files
+# use this and every other file type uses `_SIG_RE` plus `_in_literal_or_comment`.
+_PY_DEF_RE = re.compile(r"\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(([^)]*)\)")
+
+
+def _in_literal_or_comment(prefix: str) -> bool:
+    """Is the position just after ``prefix`` inside a string literal or a comment?
+
+    Scans left to right with the state a lexer would have: ``'``, ``"`` and backtick
+    strings, triple quotes where the line itself shows them, a backslash skipping the next
+    character (so ``"a\\"b"`` stays open at the escaped quote), ``//`` to end of line, and
+    ``/* ... */``. Used for non-Python files, where a `function` match is accepted only if
+    this says False. A line is judged alone: a string that opened on an earlier line is
+    invisible here.
+    """
+    quote: str | None = None
+    i, n = 0, len(prefix)
+    while i < n:
+        ch = prefix[i]
+        if quote == "/*":
+            end = prefix.find("*/", i)
+            if end < 0:
+                return True
+            quote, i = None, end + 2
+            continue
+        if quote is not None:
+            if ch == "\\":
+                i += 2
+            elif prefix.startswith(quote, i):
+                i += len(quote)
+                quote = None
+            else:
+                i += 1
+            continue
+        if prefix.startswith("//", i):
+            return True
+        if prefix.startswith("/*", i):
+            quote, i = "/*", i + 2
+        elif ch in "'\"`":
+            triple = ch * 3
+            if ch != "`" and prefix.startswith(triple, i):
+                quote, i = triple, i + 3
+            else:
+                quote, i = ch, i + 1
+        else:
+            i += 1
+    return quote is not None
+
+
+def _signature_on_line(line: str, *, is_py: bool) -> tuple[str, str, bool] | None:
+    """The ``(name, parameter text, is_python_def)`` a changed diff line defines, or None.
+
+    A `def` INSIDE A STRING IS NOT A DEFINITION. tests/unit/test_hanging_detectors.py builds
+    synthetic diffs in string literals, and `_SIG_RE.search` read ``"+def f(a=None):\\n"`` as
+    a real definition: PR #923, which refined this detector, failed its own gate on an edit
+    to such a line. Python files take only a statement-start `def`; other files take the
+    first `def`/`function` match that is not inside a string or comment on its line.
+    """
+    if is_py:
+        m = _PY_DEF_RE.match(line)
+        return (m.group(1), m.group(2), True) if m else None
+    for m in _SIG_RE.finditer(line):
+        if not _in_literal_or_comment(line[: m.start()]):
+            return m.group(1), m.group(2), False
+    return None
 
 
 def _split_top_level_commas(param_str: str) -> list[str]:
@@ -888,6 +954,17 @@ def detect_changed_signature_callers(
     stays COMPATIBLE; reporting every caller of every ``**kwargs`` function that gains a
     named keyword is what this refinement removes.
 
+    A `def` INSIDE A STRING OR COMMENT IS NOT A DEFINITION (``_signature_on_line``). PR #923
+    failed its own gate because tests/unit/test_hanging_detectors.py builds synthetic diffs
+    in strings, and an edit to ``"+def f(a=None):\\n"`` was read as a real signature change.
+    A ``.py`` file contributes only a statement-start ``def`` (``^\\s*(?:async\\s+)?def``,
+    exact: Python cannot put a `def` anywhere else, so quote-parity would add nothing);
+    every other file type (JS ``function``, ``export function``) contributes the first
+    match not inside a quote, backtick, ``//`` or ``/* */`` on its line
+    (``_in_literal_or_comment``). LIMIT: a line is judged alone, so a def-shaped statement in
+    the MIDDLE of a multi-line string or docstring still reads as a definition; the repo's
+    own test files are checked for that in tests/unit/test_blast_radius_string_literal_defs.py.
+
     KNOWN LIMIT, unchanged: ``_SIG_RE`` reads one line and stops at the first ``)``, so a
     multi-line ``def`` or a default containing a call is not extracted whole. A one-line def
     rewritten across lines therefore produces NO finding, whatever it changed
@@ -910,17 +987,13 @@ def detect_changed_signature_callers(
         new: dict[str, list[tuple[str, bool]]] = {}
         is_py = _normalize(f["path"]).endswith(".py")
         for ln in f["removed"]:
-            m = _SIG_RE.search(ln)
-            if m:
-                old.setdefault(m.group(1), []).append(
-                    (m.group(2), is_py and m.group(0).startswith("def"))
-                )
+            sig = _signature_on_line(ln, is_py=is_py)
+            if sig:
+                old.setdefault(sig[0], []).append((sig[1], sig[2]))
         for ln in f["added"]:
-            m = _SIG_RE.search(ln)
-            if m:
-                new.setdefault(m.group(1), []).append(
-                    (m.group(2), is_py and m.group(0).startswith("def"))
-                )
+            sig = _signature_on_line(ln, is_py=is_py)
+            if sig:
+                new.setdefault(sig[0], []).append((sig[1], sig[2]))
         for name in set(old) & set(new):
             change = _classify_changes(old[name], new[name])
             if change is None:

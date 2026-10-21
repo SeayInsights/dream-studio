@@ -411,13 +411,14 @@ def test_an_attribute_that_only_starts_like_a_mock_one_is_not_a_mock(tmp_path: P
     assert not _flagged(tmp_path, "def test_x(m):\n    do_work('a')\n    assert m.callable\n")
 
 
-def test_a_function_keyword_in_a_python_file_is_not_analysed_as_python(tmp_path: Path) -> None:
-    """The `def` check and the `.py` check are BOTH needed. A line spelled `function f(a)`
-    inside a Python file (a JS snippet in a string or heredoc) is not a Python def."""
+def test_a_function_keyword_in_a_python_file_is_text_not_a_definition(tmp_path: Path) -> None:
+    """A line spelled `function f(a)` inside a Python file is a JS snippet in a string or
+    heredoc: Python files take only a statement-start `def`
+    (tests/unit/test_blast_radius_string_literal_defs.py). Before that rule this was read
+    through the name comparison and reported."""
     _write(tmp_path / CALLER, "def test_it():\n    do_work('a')\n")
     diff = _diff(["a"], ["a, b = 1"], keyword="function")
-    findings = detect_changed_signature_callers(diff, repo_root=tmp_path)
-    assert CALLER in {f["path"] for f in findings}
+    assert detect_changed_signature_callers(diff, repo_root=tmp_path) == []
 
 
 def test_a_def_in_a_non_python_file_is_not_analysed_as_python(tmp_path: Path) -> None:
