@@ -432,6 +432,72 @@ def isolated_home(tmp_path, monkeypatch):
 
 import warnings  # noqa: E402
 
+#: The variables that keep a test off the operator's machine. Each is set for the session at the
+#: top of this file (or per test by `guard_real_homedir`); a test that leaves one different from
+#: how it found it has changed what every later test in the process reads.
+_ISOLATION_ENV = (
+    "DREAM_STUDIO_HOME",
+    "DREAM_STUDIO_DB_PATH",
+    "DS_SPOOL_ROOT",
+    "DREAM_STUDIO_TEST_SESSION_HOME",
+    "HOME",
+    "USERPROFILE",
+    "CLAUDE_CONFIG_DIR",
+)
+
+
+_ENV_BEFORE = pytest.StashKey[dict]()
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    """Record the isolation environment before any fixture of this test runs."""
+    item.stash[_ENV_BEFORE] = {key: _os.environ.get(key) for key in _ISOLATION_ENV}
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_runtest_teardown(item, nextitem):
+    """A test may not leave the isolation environment changed for the tests after it.
+
+    THE DEFECT. Six tests in ``test_readmodel_wiring.py`` set ``os.environ["DREAM_STUDIO_HOME"]``
+    directly and removed it in ``finally``. Removing is not restoring: the session home this
+    file created was gone for the REST OF THE PROCESS, so every later test that resolved the
+    Dream Studio home fell back to ``Path.home() / ".dream-studio"`` -- the operator's real one.
+    No test failed at the time. A neighbour failed (or, worse, read the operator's live data)
+    only in a large run, passed alone, and the symptom pointed at the victim.
+
+    ``monkeypatch.setenv`` restores on teardown; a raw assignment does not. This compares the
+    isolation variables with how they were before the test and, if any differ, puts them back
+    (so one leaker cannot corrupt the rest of the run) and fails THAT test by name.
+
+    A hook, not an autouse fixture, because it has to run AFTER every fixture has been
+    finalized: pytest orders autouse fixtures alphabetically, and a fixture of this kind
+    tears down before ``monkeypatch`` undoes the test's legitimate changes, which reads as
+    a leak on every test that uses it.
+    """
+    before = item.stash.get(_ENV_BEFORE, None)
+    if before is None:
+        return
+    leaked = {
+        key: (before[key], _os.environ.get(key))
+        for key in _ISOLATION_ENV
+        if _os.environ.get(key) != before[key]
+    }
+    if not leaked:
+        return
+    for key, (was, _now) in leaked.items():
+        if was is None:
+            _os.environ.pop(key, None)
+        else:
+            _os.environ[key] = was
+    detail = "; ".join(f"{key}: {was!r} -> {now!r}" for key, (was, now) in leaked.items())
+    pytest.fail(
+        f"{item.nodeid} left the isolation environment changed ({detail}). The value was"
+        " restored, but every test after it would have read the operator's real home. Set"
+        " environment variables with monkeypatch.setenv/delenv, never os.environ[...] = / .pop.",
+        pytrace=False,
+    )
+
 
 @pytest.fixture(autouse=True)
 def reset_warnings():
