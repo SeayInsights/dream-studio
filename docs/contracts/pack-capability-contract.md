@@ -86,7 +86,11 @@ limitation) and nothing else. Three producers still pass nothing, so their findi
 unknown: `core/projects/intake.py`, `control/analysis/bugs.py` and
 `core/analytics_ingestion_rows.py`. A write that cannot encode a value (an object whose
 `__str__` raises) records the finding with the three fields unknown and logs it; a finding
-is never lost to its annotations.
+is never lost to its annotations. `emit_security_finding` reports whether a row was written:
+a failed write returns `emitted=False, failed=True` with a logged reason (the exception class,
+never the data) and leaves no row; `failed=False` with `emitted=False` is a skip (telemetry
+disabled, or a duplicate id). The SARIF importer uses a result's `ruleIndex` only when the
+indexed rule's id matches the result's `ruleId`.
 
 ### Present today (Python API only, not yet reachable by a pack)
 
