@@ -107,8 +107,8 @@ gh pr merge <N> --squash --delete-branch
 
 | Workflow | Trigger | Platforms | Scope |
 |----------|---------|-----------|-------|
-| `ci.yml` (`pr-smoke`) | pull_request, manual | ubuntu + macos + windows | Docs drift, Contract Atlas, format, lint, focused gate tests, `cargo test` for the native hook crates (`runtime/hooks/{enqueue,enforce}-native`) when a PR's diff touches them. `fail-fast: false` |
-| `full-ci.yml` | push to main, manual | ubuntu-only | Full test suite + coverage. Post-merge verification. |
+| `ci.yml` (`pr-smoke`) | pull_request, manual | ubuntu + macos + windows | Docs drift, Contract Atlas, format, lint, focused gate tests, `cargo test` for the native hook crates (`runtime/hooks/{enqueue,enforce}-native`) when a PR's diff touches them. On ubuntu only, the four real-Docker tests of the review lane sandbox (`pytest -m install_check tests/unit/test_lane_sandbox.py`; an `install_check` is not collected by a default run). `fail-fast: false` |
+| `full-ci.yml` | push to main, manual | ubuntu-only | Full test suite + coverage, and the same four real-Docker review-lane tests. Post-merge verification. |
 | `release-validation.yml` | manual or `v*` tag | Release | Release-candidate evidence + release profile tests |
 | `validate-skills.yml` | PRs changing `skills/**` | ubuntu | Skill standards validation |
 
