@@ -358,6 +358,16 @@ def parse_trufflehog(data_list: list, repo: str) -> list[dict]:
 _NAMED_LINES = 5
 
 
+def jsonl_lines(text: str) -> list[str]:
+    """The lines of a JSON Lines text: split on LF only, each stripped of spaces, tabs and CR.
+
+    Not str.splitlines(), which also splits on U+0085, U+2028, U+2029, form feed and the rest:
+    a result whose value holds one (JSON allows it raw) became two unreadable lines. A line of
+    nothing but such a character is a junk line, not a blank one. Blank lines read as ''.
+    """
+    return [line.strip(" \t\r") for line in text.split("\n")]
+
+
 def read_trufflehog_lines(text: str, name: str) -> tuple[list[dict], list[str], list[str]]:
     """(findings, degraded, notes) from trufflehog JSON Lines (`--json`: one result per line).
 
@@ -368,8 +378,8 @@ def read_trufflehog_lines(text: str, name: str) -> tuple[list[dict], list[str], 
     results: list[dict] = []
     logs = 0
     bad: list[int] = []
-    for number, line in enumerate(text.splitlines(), 1):
-        if not line.strip():
+    for number, line in enumerate(jsonl_lines(text), 1):
+        if not line:
             continue
         try:
             obj = json.loads(line)
@@ -595,7 +605,7 @@ def _read_trufflehog_file(path, decoded, hinted, repo) -> scan_coverage.Read:
         finding["fingerprint"] = finding["id"] = _fingerprint(
             repo, finding["file"], finding["line"], finding["rule_id"]
         )
-    nonblank = any(line.strip() for line in decoded.text.splitlines())
+    nonblank = any(jsonl_lines(decoded.text))
     is_trufflehog = (
         bool(findings)
         or any("log line(s)" in n for n in notes)

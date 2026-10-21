@@ -451,3 +451,129 @@ def test_the_doc_says_bomless_utf16_needs_mostly_ascii_text() -> None:
     flat = " ".join(BINARY_DOC.read_text(encoding="utf-8").split())
     assert "UTF-16 without a BOM is recognised only when most of the text is ASCII" in flat
     assert "otherwise the file is unread and the step `partial`" in flat
+
+
+# -- #925: lines split on LF only, an empty file needs a ran record, invariants pinned ----------------------------
+
+
+@pytest.mark.parametrize("char", ["\x85", " ", " ", "\x0b", "\x0c", "\x1c"])
+def test_a_result_line_holding_a_unicode_line_separator_is_not_split(char: str) -> None:
+    """str.splitlines() splits on U+0085, U+2028 and friends; JSON Lines splits on LF only. A
+    value can hold one raw (ensure_ascii off), and splitting turned one result into two
+    unreadable lines."""
+    result = _git_result(DetectorName="Det" + char + "ector", Raw="before" + char + "after")
+    text = json.dumps(result, ensure_ascii=False) + "\n"
+    findings, degraded, _ = parse_sarif.read_trufflehog_lines(text, "t.jsonl")
+    assert len(findings) == 1 and degraded == []
+    assert "before" not in json.dumps(findings) and "after" not in json.dumps(findings)
+
+
+def test_crlf_line_ends_are_read() -> None:
+    text = json.dumps(_git_result()) + "\r\n" + json.dumps(_git_result(line=2)) + "\r\n"
+    findings, degraded, _ = parse_sarif.read_trufflehog_lines(text, "t.jsonl")
+    assert len(findings) == 2 and degraded == []
+
+
+def test_a_file_of_one_unicode_separator_is_a_junk_line_not_an_empty_file(tmp_path: Path) -> None:
+    findings, degraded, _ = parse_sarif.read_trufflehog_lines("\x85\n", "t.jsonl")
+    assert findings == [] and len(degraded) == 1
+    scan = _scan(tmp_path, {"trufflehog-results.jsonl": "\x85\n"})
+    _, coverage, *_ = _parse(scan, tmp_path)
+    assert coverage["scans"][0]["degraded_steps"] == ["trufflehog"]
+
+
+@pytest.mark.parametrize(
+    "steps, expected",
+    [
+        ([{"step": "trufflehog", "status": "ran", "tool": "trufflehog"}], "complete"),
+        ([], "unknown"),  # planned, with no record that it ran
+        ([{"step": "trufflehog", "status": "failed", "tool": "trufflehog"}], "partial"),
+        ([{"step": "trufflehog", "status": "skipped", "tool": "trufflehog"}], "partial"),
+    ],
+    ids=["ran", "no-record", "failed", "skipped"],
+)
+def test_an_empty_results_file_reads_complete_only_when_the_record_says_it_ran(
+    tmp_path: Path, steps: list, expected: str
+) -> None:
+    """An empty trufflehog-results.jsonl is what a clean scan leaves, and what a crash hidden by
+    `|| true` leaves: the run record is what tells them apart."""
+    meta = _meta()
+    meta["steps"] = [s for s in meta["steps"] if s["step"] != "trufflehog"] + steps
+    scan = _scan(tmp_path, {"trufflehog-results.jsonl": ""}, meta)
+    _, coverage, *_ = _parse(scan, tmp_path)
+    assert coverage["coverage"] == expected, coverage
+
+
+def test_an_empty_results_file_with_no_scan_meta_reads_unknown(tmp_path: Path) -> None:
+    d = tmp_path / "flat"
+    d.mkdir()
+    (d / "trufflehog-results.jsonl").write_text("", encoding="utf-8")
+    _, coverage, *_ = _parse(d, tmp_path)
+    assert coverage["coverage"] == "unknown"
+
+
+def test_the_scan_doc_says_the_log_stays_on_the_runner() -> None:
+    flat = " ".join(SCAN_SKILL.read_text(encoding="utf-8").split())
+    assert "`trufflehog.log`" in flat and "not uploaded" in flat
+    assert "apart from the results" not in flat
+
+
+# invariants that held and that no test pinned
+
+
+@pytest.mark.parametrize("name", [None, 7, True, ["AWS"], {"n": 1}, ""])
+def test_a_non_string_detector_name_falls_back_to_secret(name: object) -> None:
+    (finding,) = parse_sarif.parse_trufflehog([_git_result(DetectorName=name)], "r")
+    assert finding["rule_id"] == "TH-secret"
+
+
+def test_source_metadata_with_no_file_yields_an_empty_file_and_no_line() -> None:
+    result = _git_result()
+    result["SourceMetadata"] = {"Data": {"Git": {"commit": "abc", "line": 4}}}
+    (finding,) = parse_sarif.parse_trufflehog([result], "r")
+    assert finding["file"] == "" and finding["line"] is None
+
+
+@pytest.mark.parametrize("bad", ["12", 1.5, True, None, [3]])
+def test_a_line_number_that_is_not_an_integer_is_dropped(bad: object) -> None:
+    result = _git_result()
+    result["SourceMetadata"]["Data"]["Git"]["line"] = bad
+    (finding,) = parse_sarif.parse_trufflehog([result], "r")
+    assert finding["line"] is None
+
+
+def test_a_result_with_no_detector_name_is_a_result_and_a_log_line_is_not() -> None:
+    nameless = {"SourceMetadata": {"Data": {"Git": {"file": "a.py", "line": 1}}}, "Raw": SECRET}
+    findings, degraded, notes = parse_sarif.read_trufflehog_lines(_jsonl(nameless), "t.jsonl")
+    assert len(findings) == 1 and degraded == [] and notes == []
+    assert findings[0]["rule_id"] == "TH-secret" and SECRET not in json.dumps(findings)
+    findings, _, notes = parse_sarif.read_trufflehog_lines(_jsonl(LOG_LINES[0]), "t.jsonl")
+    assert findings == [] and len(notes) == 1
+
+
+@pytest.mark.parametrize("verified", ["true", "True", 1, "yes", None, [True]])
+def test_only_the_boolean_true_counts_as_verified(verified: object) -> None:
+    (finding,) = parse_sarif.parse_trufflehog([_git_result(Verified=verified)], "r")
+    assert "unverified" in finding["message"]
+
+
+def test_the_boolean_true_is_verified() -> None:
+    (finding,) = parse_sarif.parse_trufflehog([_git_result(Verified=True)], "r")
+    assert "verified by trufflehog" in finding["message"] and "unverified" not in finding["message"]
+
+
+def test_an_unreadable_results_file_never_echoes_its_own_content(tmp_path: Path) -> None:
+    """Bytes that cannot be decoded, holding the secret as text: the refusal names the file and
+    the reason, not what is in it."""
+    scan = _scan(tmp_path, {})
+    (scan / "trufflehog-results.jsonl").write_bytes(
+        b"\x00\x01\x02" * 40 + SECRET.encode() + b"\xff\xfe" * 60
+    )
+    _, coverage, out_text, cov_text, stderr = _parse(scan, tmp_path)
+    assert coverage["scans"][0]["unread_steps"] == ["trufflehog"]
+    _no_secret(out_text, cov_text, stderr)
+
+
+def test_a_very_long_file_path_is_bounded_in_the_finding() -> None:
+    (finding,) = parse_sarif.parse_trufflehog([_git_result(file="d/" * 5000 + "x.py")], "r")
+    assert len(finding["file"]) == 203 and finding["file"].endswith("...")
