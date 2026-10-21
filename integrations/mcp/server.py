@@ -16,8 +16,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from jsonschema import Draft202012Validator, validators
+
 from .auth import Identity
-from .tools import TOOLS, TOOLS_BY_NAME
+from .tools import TOOLS, TOOLS_BY_NAME, CallContext, Tool
 
 PROTOCOL_VERSION = "2026-03-26"
 SERVER_NAME = "dream-studio"
@@ -71,6 +73,46 @@ def _handle_tools_list(request_id: Any, _params: dict[str, Any]) -> dict[str, An
     )
 
 
+#: JSON Schema's own `integer` accepts 1.0 (and `bool` is an `int` in Python); a handler that
+#: slices with `limit` or orders by `order_index` wants a real integer, which is also what
+#: the advertised schema says.
+_StrictValidator = validators.extend(
+    Draft202012Validator,
+    type_checker=Draft202012Validator.TYPE_CHECKER.redefine(
+        "integer", lambda _checker, value: isinstance(value, int) and not isinstance(value, bool)
+    ),
+)
+
+#: How many problems one invalid-params message names -- enough to fix a call in one round
+#: trip, bounded so a hostile payload cannot make the server echo megabytes back.
+_MAX_REPORTED_PROBLEMS = 5
+_MAX_PROBLEM_CHARS = 200
+
+_VALIDATORS: dict[str, Any] = {}
+
+
+def _validator_for(tool: Tool) -> Any:
+    validator = _VALIDATORS.get(tool.name)
+    if validator is None:
+        validator = _VALIDATORS[tool.name] = _StrictValidator(tool.input_schema)
+    return validator
+
+
+def _schema_problems(tool: Tool, arguments: dict[str, Any]) -> list[str]:
+    """Every way `arguments` departs from the tool's advertised input schema, or [].
+
+    The advertised schema is the whole contract: a property it does not name, at any depth,
+    a wrong type, a missing required one, a value outside an enum -- each is a problem.
+    Nothing here reads the authority; a message names the property and the rule, and echoes
+    a client's value only where the schema keyword itself does (a type or enum mismatch).
+    """
+    problems = []
+    for error in sorted(_validator_for(tool).iter_errors(arguments), key=lambda e: list(e.path)):
+        where = "/".join(str(part) for part in error.path) or "arguments"
+        problems.append(f"{where}: {error.message}"[:_MAX_PROBLEM_CHARS])
+    return problems[:_MAX_REPORTED_PROBLEMS]
+
+
 def _handle_tools_call(
     request_id: Any,
     params: dict[str, Any],
@@ -82,9 +124,11 @@ def _handle_tools_call(
     if not isinstance(name, str) or name not in TOOLS_BY_NAME:
         return _error(request_id, -32602, f"unknown tool: {name!r}")
     tool = TOOLS_BY_NAME[name]
-    arguments = params.get("arguments") or {}
+    arguments = params.get("arguments")
+    if arguments is None:
+        arguments = {}
     if not isinstance(arguments, dict):
-        return _error(request_id, -32602, "arguments must be an object")
+        return _error(request_id, -32602, "invalid params: arguments must be an object")
     if tool.required_capability is not None:
         # identity=None fails closed here (a direct/internal caller that never
         # authenticated), same as an identity whose capabilities don't include this
@@ -96,20 +140,18 @@ def _handle_tools_call(
             return _error(
                 request_id, -32001, f"forbidden: missing capability {tool.required_capability!r}"
             )
-    kwargs: dict[str, Any] = {"dream_studio_home": dream_studio_home, **arguments}
-    if tool.required_capability is not None:
-        kwargs["identity"] = identity
+    # After the capability check (a caller without the capability learns nothing from the
+    # shape of its refusal) and before the handler. Only arguments the advertised schema
+    # names get past here, so the handler's keywords are the schema's properties and
+    # nothing else -- never a home, a root, a path to a database, or an identity.
+    problems = _schema_problems(tool, arguments)
+    if problems:
+        return _error(request_id, -32602, "invalid params: " + "; ".join(problems))
+    # The one place the home is bound: the server's own, passed positionally and never
+    # merged with anything a client sent.
+    ctx = CallContext(dream_studio_home=dream_studio_home, identity=identity)
     try:
-        payload = tool.handler(**kwargs)
-    except TypeError as exc:
-        # A caller sent an argument the handler's signature does not accept, or
-        # omitted one it requires -- a client-input error (invalid params), not a
-        # server fault. Message text is safe: TypeError from a mismatched call
-        # names only the parameter, never data read from the authority.
-        return _result(
-            request_id,
-            {"content": [{"type": "text", "text": f"invalid arguments: {exc}"}], "isError": True},
-        )
+        payload = tool.handler(ctx, **arguments)
     except Exception as exc:  # noqa: BLE001 — reported to the caller, never trusted further
         return _result(
             request_id,
