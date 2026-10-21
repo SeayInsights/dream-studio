@@ -90,8 +90,62 @@ def test_shipped_text_is_the_source_text_with_lf_line_endings(built: Path):
         assert shipped.decode("utf-8") == source
 
 
-def test_no_bytecode_or_cache_is_shipped(built: Path):
-    # a __pycache__ exists in the working tree from running the scripts and tests
+def _source_with_bytecode(root: Path) -> Path:
+    """A copy-sized stand-in for the support tree with every kind of build output planted in
+    it, so the assertions below can fail on a clean checkout (which has none)."""
+    tree = root / "templates" / "security"
+    (tree / "etl" / "__pycache__").mkdir(parents=True)
+    (tree / "etl" / ".pytest_cache").mkdir()
+    (tree / "etl" / "real.py").write_text("x = 1\n", encoding="utf-8")
+    (tree / "etl" / "real.pyc").write_bytes(b"\x00pyc")
+    (tree / "etl" / "real.pyo").write_bytes(b"\x00pyo")
+    (tree / "etl" / "native.pyd").write_bytes(b"MZ")
+    (tree / "etl" / "__pycache__" / "real.cpython-312.pyc").write_bytes(b"\x00pyc")
+    (tree / "etl" / ".pytest_cache" / "v").write_text("cache", encoding="utf-8")
+    (tree / "README.md").write_text("# readme\n", encoding="utf-8")
+    return root
+
+
+def test_no_bytecode_or_cache_is_shipped_by_the_installer_listing(tmp_path: Path):
+    from integrations.installer.claude_code_fileops import _collect_skill_dir_ops
+
+    repo = _source_with_bytecode(tmp_path / "repo")
+    skill = tmp_path / "skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text("# security\n", encoding="utf-8")
+    ops = _collect_skill_dir_ops(skill, tmp_path / "out", "ds-security", tmp_path / "bk", repo)
+    shipped = sorted(Path(op.target).relative_to(tmp_path / "out").as_posix() for op in ops)
+    assert shipped == [
+        "SKILL.md",
+        "templates/security/README.md",
+        "templates/security/etl/real.py",
+    ]
+
+
+def test_no_bytecode_or_cache_is_shipped_by_the_plugin_build(tmp_path: Path, monkeypatch):
+    repo = _source_with_bytecode(tmp_path / "planted")
+    try:
+        relative = os.path.relpath(repo / "templates" / "security", REPO_ROOT).replace("\\", "/")
+    except ValueError:
+        pytest.skip("the temp directory is on another drive than the checkout")
+    monkeypatch.setitem(
+        plugin_dist.SKILL_SUPPORT_TREES, "ds-security", ((relative, "templates/security"),)
+    )
+    out = tmp_path / "plugin"
+    build_plugin_dist(out, repo_root=REPO_ROOT)
+    tree = out / "skills" / "ds-security" / "templates" / "security"
+    assert (tree / "etl" / "real.py").is_file()  # the planted tree really was shipped...
+    leaked = [
+        p.relative_to(tree).as_posix()
+        for p in tree.rglob("*")
+        if "__pycache__" in p.parts
+        or ".pytest_cache" in p.parts
+        or p.suffix in (".pyc", ".pyo", ".pyd")
+    ]
+    assert leaked == []  # ...without the bytecode and caches planted beside it
+
+
+def test_the_built_plugin_has_no_bytecode_anywhere(built: Path):
     assert not [p for p in built.rglob("*") if "__pycache__" in p.parts or p.suffix == ".pyc"]
 
 

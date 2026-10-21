@@ -577,3 +577,45 @@ def test_the_profile_schema_lists_the_scanners_the_workflow_runs() -> None:
     listed = sorted(re.findall(r'"([a-z-]+)"', line))
     assert listed == runs, line
     assert not {"trivy", "codeql", "zap"} & set(listed)
+
+
+# -- the planned steps of one scan ------------------------------------------------------------------------
+
+
+def test_semgrep_is_always_planned_and_first_whatever_the_meta_lists() -> None:
+    """semgrep is the one scanner the workflow always runs: a meta that lists only others, or
+    nothing, still plans it, so its absence from the record cannot read complete."""
+    assert parse_sarif.planned_steps(None) == ("semgrep",)
+    assert parse_sarif.planned_steps({}) == ("semgrep",)
+    assert parse_sarif.planned_steps({"planned_steps": ["bandit"]}) == ("semgrep", "bandit")
+    assert parse_sarif.planned_steps({"steps": [{"step": "trufflehog"}]}) == (
+        "semgrep",
+        "trufflehog",
+    )
+    assert parse_sarif.planned_steps({"planned_steps": ["bandit", "semgrep", "bandit"]}) == (
+        "semgrep",
+        "bandit",
+    )
+
+
+def test_a_meta_that_plans_only_bandit_still_needs_semgrep_to_have_been_recorded() -> None:
+    meta = {
+        "source": "github-actions",
+        "run": {"status": "completed", "conclusion": "success"},
+        "planned_steps": ["bandit"],
+        "steps": [{"step": "bandit", "status": "ran", "tool": "bandit"}],
+    }
+    planned = parse_sarif.planned_steps(meta)
+    report = scan_coverage.assess(meta, planned, {"bandit"})
+    assert report["coverage"] != "complete"
+    assert any("semgrep: no record of whether it ran" in x for x in report["limitations"])
+
+
+def test_planned_steps_survives_hostile_shapes() -> None:
+    for meta in (
+        {"planned_steps": "bandit"},
+        {"planned_steps": [1, None, {"step": 3}, ["x"]]},
+        {"steps": "ran"},
+        {"steps": [None, 3, {"step": None}, {"step": ["a"]}]},
+    ):
+        assert parse_sarif.planned_steps(meta) == ("semgrep",), meta

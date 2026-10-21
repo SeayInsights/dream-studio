@@ -393,3 +393,67 @@ def test_the_unread_limitation_only_promises_what_the_cap_keeps(tmp_path: Path):
     assert "is named in another limitation" in unread
     assert any(x.startswith("checksec.json could not be read") for x in limits)
     assert limits[-1].startswith("... and ") and limits[-1].endswith(" more notes")
+
+
+# -- merging the same finding from two scans (issue #908) ---------------------------------------------
+
+
+def _finding(coverage: str | None, *limits: str, severity: str = "high") -> dict:
+    out: dict = {"fingerprint": "fp", "severity": severity, "limitations": list(limits)}
+    if coverage is not None:
+        out["coverage"] = coverage
+    return out
+
+
+RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+
+
+@pytest.mark.parametrize(
+    "a, b, expected",
+    [
+        ("complete", "partial", "partial"),
+        ("partial", "complete", "partial"),
+        ("unknown", "partial", "partial"),  # partial is a known gap: the weakest claim
+        ("partial", "unknown", "partial"),
+        ("complete", "unknown", "unknown"),
+        ("unknown", "complete", "unknown"),
+        ("partial", "partial", "partial"),
+    ],
+)
+def test_the_merged_finding_takes_the_weakest_coverage_whichever_scan_comes_first(a, b, expected):
+    (merged,) = scan_coverage.deduplicate([_finding(a, "x"), _finding(b, "y")], RANK)
+    assert merged["coverage"] == expected
+    # and whichever has the higher severity wins the finding, not the coverage
+    (merged,) = scan_coverage.deduplicate(
+        [_finding(a, "x", severity="low"), _finding(b, "y", severity="high")], RANK
+    )
+    assert merged["severity"] == "high" and merged["coverage"] == expected
+
+
+def test_equal_coverage_with_different_limitations_keeps_the_union_in_order():
+    (merged,) = scan_coverage.deduplicate(
+        [
+            _finding("partial", "yara skipped", "shared"),
+            _finding("partial", "shared", "strings cap"),
+        ],
+        RANK,
+    )
+    assert merged["coverage"] == "partial"
+    assert merged["limitations"][:3] == ["yara skipped", "shared", "strings cap"]
+    assert merged["limitations"][3].startswith(
+        "also reported by another scan with coverage partial"
+    )
+    assert len(merged["limitations"]) == 4  # "shared" is not repeated
+
+
+def test_equal_coverage_and_the_same_limitations_leaves_the_finding_exactly_as_it_was():
+    first, second = _finding("partial", "yara skipped"), _finding("partial", "yara skipped")
+    (merged,) = scan_coverage.deduplicate([first, second], RANK)
+    assert merged["limitations"] == ["yara skipped"] and merged["coverage"] == "partial"
+
+
+def test_a_merge_does_not_alias_the_losers_limitations():
+    winner, loser = _finding("complete"), _finding("partial", "zap skipped")
+    scan_coverage.merge_duplicate(winner, loser)
+    winner["limitations"].append("later")
+    assert loser["limitations"] == ["zap skipped"]
