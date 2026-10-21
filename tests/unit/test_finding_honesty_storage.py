@@ -484,6 +484,37 @@ class _OddStr(str):
         raise RuntimeError("lower")
 
 
+class _LyingStr(str):
+    """Content "bogus", but it hands itself back from str()/strip()/lower() and claims to be
+    "high" in a membership test, so a normaliser that trusts `in` would store "bogus"."""
+
+    def __str__(self):
+        return self
+
+    def strip(self, *a):
+        return self
+
+    def lower(self):
+        return self
+
+    def __eq__(self, other):
+        return other == "high" or other == "complete"
+
+    __hash__ = str.__hash__
+
+
+class _IntStripStr(str):
+    """Truthy, str-typed, but strips to an int: a non-string would reach the array."""
+
+    def strip(self, *a):
+        return 5
+
+
+class _StrReturnsIntStrip:
+    def __str__(self):
+        return _IntStripStr("x")
+
+
 def _recursive():
     items: list = []
     items.append(items)
@@ -503,6 +534,8 @@ def _hostile_values():
         "recursive list": _recursive(),
         "odd str subclass": _OddStr("high"),
         "odd str subclass item": [_OddStr("a")],
+        "lying str subclass": _LyingStr("bogus"),
+        "item that strips to an int": [_StrReturnsIntStrip()],
     }
 
 
