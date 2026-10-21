@@ -333,7 +333,7 @@ class CareerSkillAnalyzer(BaseAnalyzer):
 
         Looks for:
         - Salary data/benchmarks
-        - Negotiation scripts/templates
+        - Negotiation scripts or templates
         - Offer evaluation tools
         - Compensation calculators
         - Market research integration
