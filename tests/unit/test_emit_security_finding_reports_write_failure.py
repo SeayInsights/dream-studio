@@ -308,6 +308,39 @@ def test_the_generic_failure_path_reports_the_class_only_too():
     assert "7731" not in result.error
 
 
+class _CommitFails(sqlite3.Connection):
+    """Every statement succeeds and the COMMIT does not: a full disk, a lock timeout."""
+
+    def commit(self):
+        raise sqlite3.OperationalError("disk I/O error")
+
+
+def _commit_fails(path):
+    conn = sqlite3.connect(str(path), timeout=1.0, factory=_CommitFails)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def test_a_failed_commit_announces_nothing_for_a_finding(db: Path, spool_root: Path):
+    """The rows were written in the transaction; the commit did not land. Announcing at
+    that point would announce a finding that is not stored."""
+    with patch.object(emitters_shared, "_connect", _commit_fails):
+        result = emit(db)
+    assert result.emitted is False and result.failed is True
+    assert count(db, ROWS) == 0 and count(db, EVENTS) == 0
+    assert spooled(spool_root) == []
+
+
+def test_a_failed_commit_announces_nothing_for_a_resolution(db: Path, spool_root: Path):
+    finding_id = _recorded(db)
+    before = spooled(spool_root)
+    with patch.object(emitters_shared, "_connect", _commit_fails):
+        result = emit_security_finding_resolved(finding_id=finding_id, db_path=db)
+    assert result.emitted is False and result.failed is True
+    assert count(db, STATUS_ROWS) == 0
+    assert spooled(spool_root) == before
+
+
 # ---------------------------------------------------------------------------
 # Skips are not failures
 # ---------------------------------------------------------------------------

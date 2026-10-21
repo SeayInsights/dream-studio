@@ -263,8 +263,8 @@ def emit_security_finding_resolved(
         if reason == FINDING_NOT_FOUND:
             return TelemetryEmitResult(False, error=f"security finding not found: {finding_id}")
         if reason is not None:
-            # A failure, not a missing finding: reported as one, and never announced.
-            conn.rollback()
+            # A failure, not a missing finding: reported as one, and never announced. The
+            # failed statement wrote nothing, so there is nothing to roll back.
             logger.warning("security finding resolution was not written: %s", reason)
             message = f"security finding resolve failed: {reason}"
             if mode == MODE_STRICT:
