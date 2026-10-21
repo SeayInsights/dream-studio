@@ -104,6 +104,61 @@ def test_a_repo_with_no_scan_is_not_assessed_even_when_terms_exist(tmp_path: Pat
     ]
 
 
+@pytest.mark.parametrize("terms", [[""], ["", "  "], ["\t", "\n"], [None, 3, " "]])
+def test_blank_terms_are_not_terms(terms: list) -> None:
+    """A blank term is a substring of every message, so it used to match everything and read
+    `high`, and a list of blanks counted as an assessment."""
+    findings = [_result("acme-zsc-004", "repo/app.py", "plain outbound call")]
+    assert nc.assess_dlp_risk(findings, terms) == nc.DLP_NOT_ASSESSED
+
+
+def test_a_blank_term_beside_a_real_one_is_ignored_not_a_match_for_everything() -> None:
+    findings = [_result("acme-zsc-004", "repo/app.py", "plain outbound call")]
+    assert nc.assess_dlp_risk(findings, ["", "  ssn "]) == "low"  # real term checked, no hit
+    hit = [_result("acme-zsc-004", "repo/app.py", "posts SSN=123 to host")]
+    assert nc.assess_dlp_risk(hit, ["", " ssn "]) == "high"  # and the real term still matches
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"critical": ["", "  "], "sensitive": [" "]},
+        None,
+        "ssn",
+        ["ssn"],
+        7,
+        {"critical": "ssn", "sensitive": None},
+        {"critical": {"a": 1}, "sensitive": 3},
+    ],
+    ids=["all-blank", "null", "string", "list", "number", "string-term", "mapping-term"],
+)
+def test_a_malformed_data_section_is_not_assessed_with_a_note_not_a_crash(
+    tmp_path: Path, data: object, capsys
+) -> None:
+    sarif_dir = tmp_path / "scans" / "repo-a" / "2026-10-01"
+    sarif_dir.mkdir(parents=True)
+    sarif = {"runs": [{"results": [_result("acme-zsc-001", "repo-a/a.py", "sends ssn")]}]}
+    (sarif_dir / "semgrep.sarif").write_text(json.dumps(sarif), encoding="utf-8")
+    profile: dict = {"network": {"proxy": {"type": "zscaler"}}, "data": data}
+    rows = nc.run_analysis(tmp_path / "scans", profile)
+    assert [r["dlp_risk"] for r in rows] == ["not_assessed"]
+    err = capsys.readouterr().err
+    assert "DLP risk not assessed" in err
+    if data not in (None, {"critical": ["", "  "], "sensitive": [" "]}):
+        assert "data" in err and ("not a list" in err or "not a mapping" in err)
+
+
+def test_a_term_given_as_a_bare_string_is_a_problem_to_name_not_a_term_to_guess(
+    tmp_path: Path, capsys
+) -> None:
+    """`critical: ssn` is a scalar where a list belongs; do not guess (the doc: never guess at
+    data classifications) and do not iterate its characters."""
+    (tmp_path / "scans").mkdir()
+    nc.run_analysis(tmp_path / "scans", _profile({"critical": "ssn"}))
+    err = capsys.readouterr().err
+    assert "data.critical is not a list" in err
+
+
 def test_the_cli_writes_not_assessed_to_the_csv(tmp_path: Path) -> None:
     home = tmp_path / "home"
     (home / "clients").mkdir(parents=True)
@@ -139,6 +194,8 @@ def test_the_vocabulary_is_documented_wherever_dlp_risk_is_listed() -> None:
     examples = (MODES / "netcompat" / "examples.md").read_text(encoding="utf-8")
     assert "write `dlp_risk=not_assessed` for every repo" in examples
     assert "`high` / `medium` / `low` / `not_assessed`" in examples
+    flat = " ".join(examples.split())
+    assert "Blank terms are ignored" in flat and "`critical: ssn`" in flat
     skill = (MODES / "netcompat" / "SKILL.md").read_text(encoding="utf-8")
     assert "dlp_risk=not_assessed" in skill and re.search(r"never `low`", skill)
 

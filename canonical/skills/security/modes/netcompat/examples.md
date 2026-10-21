@@ -92,6 +92,9 @@ If the profile has no `data.critical` and no `data.sensitive` terms there is not
 cross-reference: skip this step, write `dlp_risk=not_assessed` for every repo and tell the user
 the DLP risk was not assessed. `not_assessed` is not `low`: `low` is a claim that terms were
 checked and none were found. A repo that has no ingested SARIF is `not_assessed` too.
+Blank terms are ignored (a blank term matches every message), so a list of blanks is no terms; a
+`data` section that is not a mapping, or a `data.critical` / `data.sensitive` that is not a list
+(`critical: ssn`), is named in a note and read as no terms: never guess at data classifications.
 
 Otherwise, for each repo, scan outbound URL patterns and payload construction in SARIF findings:
 1. Extract `locations` from each finding to identify files and lines.

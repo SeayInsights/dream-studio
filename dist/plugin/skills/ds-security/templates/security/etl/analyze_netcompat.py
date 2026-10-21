@@ -287,6 +287,34 @@ def extract_location(result: dict) -> tuple[str, int]:
 # ---------------------------------------------------------------------------
 
 
+def dlp_terms_from(profile: dict) -> tuple[list[str], list[str]]:
+    """(terms, problems): the data classification terms of a client profile.
+
+    `data.critical` and `data.sensitive` are lists of strings. Anything else (the section
+    missing, null, a string where a list belongs, a number) yields no terms and, when it is
+    present but malformed, a problem to print: guessing at data classifications is the thing
+    the mode forbids, and iterating the characters of `ssn` would be a guess. Blank terms are
+    dropped.
+    """
+    problems: list[str] = []
+    data = profile.get("data")
+    if data is None:
+        data = {}
+    elif not isinstance(data, dict):
+        problems.append(f"data is not a mapping ({type(data).__name__}); ignored")
+        data = {}
+    terms: list[str] = []
+    for key in ("critical", "sensitive"):
+        value = data.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, list):
+            problems.append(f"data.{key} is not a list ({type(value).__name__}); ignored")
+            continue
+        terms.extend(t for t in value if isinstance(t, str) and t.strip())
+    return terms, problems
+
+
 def assess_dlp_risk(findings: list[dict], dlp_terms: list[str]) -> str:
     """
     Cross-reference finding messages and file paths with DLP classification terms.
@@ -298,12 +326,14 @@ def assess_dlp_risk(findings: list[dict], dlp_terms: list[str]) -> str:
         'not_assessed' — the profile gave no data classification terms, so there was nothing
                          to cross-reference. This is not 'low': it says nothing about risk.
     """
-    if not dlp_terms:
+    # A blank term is a substring of every message: it would match everything and read
+    # `high`, and a list of blanks would count as an assessment. Only real terms count.
+    lowered_terms = [t.strip().lower() for t in dlp_terms if isinstance(t, str) and t.strip()]
+    if not lowered_terms:
         return DLP_NOT_ASSESSED
     if not findings:
         return "low"
 
-    lowered_terms = [t.lower() for t in dlp_terms]
     high_hit = False
     medium_hit = False
 
@@ -488,8 +518,9 @@ def run_analysis(
     """
     proxy_cfg = profile.get("network", {}).get("proxy", {})
     proxy_type = proxy_cfg.get("type", "none")
-    data_cfg = profile.get("data", {})
-    dlp_terms: list[str] = (data_cfg.get("critical") or []) + (data_cfg.get("sensitive") or [])
+    dlp_terms, problems = dlp_terms_from(profile)
+    for problem in problems:
+        print(f"NOTE: {problem}", file=sys.stderr)
     if not dlp_terms:
         print(
             "NOTE: DLP risk not assessed: the profile has no data.critical or data.sensitive "
