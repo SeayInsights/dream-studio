@@ -132,8 +132,7 @@ class TestGetRegisteredEventTypes:
         assert first is not second
 
     def test_loads_real_taxonomy(self, real_taxonomy):
-        if not real_taxonomy.exists():
-            pytest.skip("Real taxonomy not found")
+        assert real_taxonomy.exists(), "Real taxonomy not found"
         types = get_registered_event_types(real_taxonomy)
         assert len(types) > 50
         assert "analysis.started" in types
@@ -184,8 +183,7 @@ class TestValidateEventTypeAdvisory:
 class TestDerivesFromCanonicalTaxonomy:
     def test_uses_same_file_as_event_validator(self, real_taxonomy):
         """Advisory helper and EventValidator derive from the same taxonomy JSON."""
-        if not real_taxonomy.exists():
-            pytest.skip("Real taxonomy not found")
+        assert real_taxonomy.exists(), "Real taxonomy not found"
 
         with open(real_taxonomy) as f:
             taxonomy = json.load(f)
@@ -206,8 +204,7 @@ class TestDerivesFromCanonicalTaxonomy:
 
     def test_advisory_types_subset_matches_validator_flatten(self, real_taxonomy):
         """Advisory types match what EventValidator._flatten_taxonomy() produces."""
-        if not real_taxonomy.exists():
-            pytest.skip("Real taxonomy not found")
+        assert real_taxonomy.exists(), "Real taxonomy not found"
 
         from core.validation.event_validator import EventValidator
 
@@ -257,12 +254,10 @@ class TestEmitterIntegration:
 class TestExistingBehaviorPreservation:
     def test_event_validator_unchanged(self, real_taxonomy):
         """EventValidator still validates the same way."""
-        if not real_taxonomy.exists():
-            pytest.skip("Real taxonomy not found")
+        assert real_taxonomy.exists(), "Real taxonomy not found"
 
         schema_path = "docs/canonical/canonical_event_v1_schema.json"
-        if not Path(schema_path).exists():
-            pytest.skip("Schema file not found")
+        assert Path(schema_path).exists(), "Schema file not found"
 
         from core.validation.event_validator import EventValidator
 
