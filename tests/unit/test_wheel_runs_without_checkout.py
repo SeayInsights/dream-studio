@@ -621,7 +621,7 @@ def test_the_installed_doctor_writes_nothing_in_an_installed_home(installed):
     assert not changed, f"the installed doctor wrote: {changed}\n{proc.stderr[-1500:]}"
 
 
-INSTALL_PROBE = r"""
+SUPPORT_INSTALL_PROBE = r"""
 import json, sys
 from pathlib import Path
 from integrations.installer.claude_code import ClaudeCodeInstaller
@@ -643,7 +643,7 @@ def test_the_self_install_projection_ships_the_security_scripts_and_they_run(ins
     tmp = installed["tmp"]
     config_root, home = tmp / "claude-config", tmp / "ds-home"
     proc = subprocess.run(
-        [str(installed["py"]), "-I", "-c", INSTALL_PROBE, str(config_root), str(home)],
+        [str(installed["py"]), "-I", "-c", SUPPORT_INSTALL_PROBE, str(config_root), str(home)],
         capture_output=True,
         text=True,
         encoding="utf-8",
