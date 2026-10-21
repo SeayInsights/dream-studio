@@ -383,6 +383,36 @@ def pytest_configure(config):
         _signal.signal(_signal.SIGINT, _conftest_sigint_handler)
 
 
+def pytest_collection_modifyitems(config, items):
+    """Leave ``install_check`` tests out of a default run -- not skipped, not collected.
+
+    An install check asserts something about THIS machine (the operator's ~/.claude, a
+    sibling repository checked out beside this one). Its answer is a fact about a
+    computer, not about the code, so it has no place in the suite that gates a push, and
+    it must not appear there as a skip either: a test that skips when the thing it checks
+    is absent cannot fail, and a suite full of them reports green for whatever is missing.
+
+    Run them deliberately, on the machine you mean to check::
+
+        py -m pytest -m install_check tests/install_checks
+
+    When selected they FAIL on an absent install instead of skipping, because the person
+    who asked for the check wants to hear that the install is not there.
+    """
+    expression = config.getoption("markexpr", default="") or ""
+    # `-m install_check` (or any expression that selects it) opts in; `-m "not install_check"`
+    # and no expression at all do not.
+    selected = "install_check" in expression and "not install_check" not in expression
+    if selected:
+        return
+    kept, dropped = [], []
+    for item in items:
+        (dropped if item.get_closest_marker("install_check") else kept).append(item)
+    if dropped:
+        config.hook.pytest_deselected(items=dropped)
+        items[:] = kept
+
+
 @pytest.fixture
 def handler() -> Any:
     return load_handler

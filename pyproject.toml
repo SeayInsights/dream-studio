@@ -88,6 +88,7 @@ filterwarnings = [
 ]
 markers = [
     "runtime_reliability: Phase 5 runtime reliability gate — core contracts that must always pass",
+    "install_check: asserts a fact about THIS machine (an install under ~/.claude, a sibling repository), not about the code; never collected by default, run with `py -m pytest -m install_check tests/install_checks` and fails (never skips) when the thing it checks is absent",
 ]
 
 [tool.coverage.run]

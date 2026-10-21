@@ -46,6 +46,15 @@ Windows SIGINT handling is already configured in `spool/ingestor.py` (module-lev
 CTRL_C handler) and `tests/conftest.py` (pytest-level SIGINT handler). No env vars
 or workarounds needed.
 
+A test must give the same answer on every machine. It builds the home, the git
+repository and the install it needs in a temporary directory; it does not read
+`~/.claude`, `~/.dream-studio`, a sibling checkout, `origin/main` or the working
+directory, and `py -m core.gates.test_isolation` fails the push when it does. A check
+that is really about one machine (is the operator's install current?) lives in
+`tests/install_checks`, is marked `install_check`, is never collected by default, and
+is run on purpose with `py -m pytest -m install_check tests/install_checks`. It fails,
+rather than skips, when the install is absent.
+
 The full unit suite takes roughly 35 minutes on Windows and does not OOM
 (6,044 passed / 25 failed, measured 2026-09-21).
 

@@ -444,29 +444,29 @@ def test_an_in_window_task_in_a_non_done_status_is_not_a_write(authority):
 # ── Task 5: the fix must exist where the hooks actually run ───────────────────
 
 
-def test_the_projected_hook_copies_carry_this_fix():
+def test_the_projected_hook_copies_carry_this_fix(tmp_path, monkeypatch):
     """``runtime/lib/enforcement.py`` is COPIED into the installed hook trees, and
     ``ds update`` is version-gated, so a canonical fix does not auto-propagate — the
     WO 46fe128b lesson, where deployed copies had silently gone stale. A fix that
     exists only in canonical/ is a fix that never fires.
 
-    EXISTENCE OF A PROJECTION CANNOT BE ASSERTED. ``.gitignore`` line 150 ignores
-    ``.claude/`` outright — ``git ls-files .claude/hooks`` returns nothing — so a fresh
-    checkout has no projected tree at all, and the first version of this test
-    (``assert repo_copy.is_file()``) would have hard-failed in Full CI on main while
-    passing here, on the one machine that had already been projected. Caught by static
-    review, not by running it: executing this suite on a projected machine can never
-    reveal it. Same shape as the gitignored ``verify_*.py`` siblings that made a
-    committed facade import phantom modules.
-
-    So the portable guarantees are asserted hard, and the machine-local one only where
-    it exists:
+    Three guarantees, none of which reads this machine:
 
     1. canonical carries the fix;
     2. the file is in the projection MANIFEST, so any install will carry it;
-    3. every projection tree present on this machine matches canonical byte-for-byte.
+    3. the projection sync, run for real against a temporary checkout, writes a copy of
+       it that is byte-for-byte canonical (and so carries the fix).
+
+    (3) used to compare whatever hook trees happened to be on the machine -- this
+    checkout's gitignored ``.claude/hooks`` and the operator's ``~/.claude/hooks`` --
+    against canonical. That asserted the state of an install, not the code: it failed
+    on a stale install, skipped on a fresh checkout (``.claude/`` is gitignored, so CI
+    never has one), and so could never fail on a regression in the sync itself. The
+    detection of a stale deployed copy is covered by ``test_hook_drift`` against a
+    fixture tree; what is pinned here is that the sync produces a fresh one.
     """
     from core.health.doctor_shared import projected_hook_relpaths
+    from interfaces.cli import setup_hooks
 
     def _norm(path: Path) -> bytes:
         return path.read_bytes().replace(CRLF, LF)
@@ -483,20 +483,24 @@ def test_the_projected_hook_copies_carry_this_fix():
         f" reach an install (manifest has {len(rels)} paths)"
     )
 
-    # (3) Whatever IS deployed here must match. Both trees fire, so both are checked.
-    checked = 0
-    for tree in (_REPO / ".claude" / "hooks", Path.home() / ".claude" / "hooks"):
-        deployed = tree / "runtime" / "lib" / "enforcement.py"
-        if not deployed.is_file():
-            continue
-        checked += 1
-        assert _norm(deployed) == canonical, (
-            f"the hook projection at {deployed} is STALE and it fires — re-project it."
-            " Note `ds doctor --fix` only re-projects the project scope"
-            " (WO-HOOK-SCOPE-BLINDSPOT)."
-        )
-    if not checked:
-        pytest.skip(
-            "no hook projection on this machine (.claude/ is gitignored, so a fresh"
-            " checkout has none) — the manifest assertion above is the portable guard"
-        )
+    # (3) Run the real sync against a temporary checkout holding the canonical module.
+    checkout = tmp_path / "checkout"
+    (checkout / "runtime" / "lib").mkdir(parents=True)
+    (checkout / "runtime" / "hooks").mkdir(parents=True)
+    (checkout / "runtime" / "lib" / "enforcement.py").write_bytes(
+        (_REPO / "runtime" / "lib" / "enforcement.py").read_bytes()
+    )
+    monkeypatch.setattr(setup_hooks, "REPO_ROOT", checkout)
+
+    result = setup_hooks.step_sync_hook_projection()
+    assert result.passed, f"the projection sync failed: {result}"
+
+    projected = checkout / ".claude" / "hooks" / "runtime" / "lib" / "enforcement.py"
+    assert projected.is_file(), (
+        "the projection sync did not write runtime/lib/enforcement.py into the tree the"
+        " hooks run from"
+    )
+    assert _norm(projected) == canonical, (
+        "the projection sync wrote a copy of enforcement.py that differs from canonical"
+        " — the fix would not fire where the hooks run."
+    )
