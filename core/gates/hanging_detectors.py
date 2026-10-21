@@ -421,6 +421,141 @@ def _param_names(param_str: str) -> tuple[str, ...]:
     return tuple(names)
 
 
+# --- call-compatibility of a signature change -------------------------------
+
+_POSITIONAL_KINDS = ("posonly", "pos")
+
+# A parameter as the compatibility check sees it: (name, kind, has_default). Annotations
+# and the VALUE of a default are deliberately absent -- neither changes whether a call
+# binds -- while kind and "has a default" are exactly what decides it.
+_Param = tuple[str, str, bool]
+
+
+def _parse_params(param_str: str) -> list[_Param]:
+    """The parameters of ``param_str`` in declaration order.
+
+    Raises ValueError when it is not valid Python (a JS ``...rest``, a default `_SIG_RE`
+    truncated at its first ``)``, and so on): "cannot tell" is an answer the caller must
+    handle, never a silent "compatible"."""
+    # Imported here, not at module top: runtime/config/release-gates/fail-open-baseline.txt
+    # keys a tracked site by LINE NUMBER, and a module-level import would move the handler
+    # in _rust_cfg_test_boundary one line and force a baseline rewrite for no real change.
+    import ast
+
+    try:
+        tree = ast.parse("def _f(" + param_str + "):\n    pass\n")
+    except (SyntaxError, ValueError, RecursionError) as exc:
+        raise ValueError(f"not a Python parameter list: {param_str!r}") from exc
+    a = tree.body[0].args  # type: ignore[attr-defined]
+    positional = [*a.posonlyargs, *a.args]
+    n_defaults = len(a.defaults)
+    first_default = len(positional) - n_defaults
+    out: list[_Param] = []
+    for i, arg in enumerate(positional):
+        kind = "posonly" if i < len(a.posonlyargs) else "pos"
+        out.append((arg.arg, kind, i >= first_default))
+    if a.vararg:
+        out.append((a.vararg.arg, "vararg", False))
+    for arg, default in zip(a.kwonlyargs, a.kw_defaults):
+        out.append((arg.arg, "kwonly", default is not None))
+    if a.kwarg:
+        out.append((a.kwarg.arg, "kwarg", False))
+    return out
+
+
+def _call_compatible(old: list[_Param], new: list[_Param]) -> bool:
+    """True only if every call that bound before still binds to the same parameters."""
+    new_pos = {name: (i, kind, has_default) for i, (name, kind, has_default) in enumerate(new)}
+    if len(new_pos) != len(new):
+        return False
+    last = -1
+    for name, kind, has_default in old:
+        if name not in new_pos:
+            return False  # removed or renamed
+        i, new_kind, new_has_default = new_pos[name]
+        if new_kind != kind:
+            return False  # positional-only / pos-or-kw / keyword-only / *args / **kwargs
+        if has_default and not new_has_default:
+            return False  # a call that omitted it now fails
+        if i <= last:
+            return False  # reordered: positional calls bind differently
+        last = i
+
+    old_names = {name for name, _, _ in old}
+    old_has_vararg = any(kind == "vararg" for _, kind, _ in old)
+    last_old_positional = max(
+        (
+            i
+            for i, (name, kind, _) in enumerate(new)
+            if name in old_names and kind in _POSITIONAL_KINDS
+        ),
+        default=-1,
+    )
+    for i, (name, kind, has_default) in enumerate(new):
+        if name in old_names or kind in ("vararg", "kwarg"):
+            continue  # added *args / **kwargs accept what was previously an error
+        if kind == "kwonly":
+            if not has_default:
+                return False  # every existing call now misses a required argument
+            continue
+        # A NEW POSITIONAL parameter: needs a default, must follow every old positional
+        # one (else it takes an argument an old call passed to something else), and
+        # cannot sit in front of an old *args (it would take the first extra argument).
+        if not has_default or old_has_vararg or i < last_old_positional:
+            return False
+    return True
+
+
+def _signature_compatibility(old_params: str, new_params: str) -> str:
+    """Classify a signature change from the text of its old and new parameter lists.
+
+    ``"unchanged"``     same parameters, kinds and default-ness (annotations and default
+                        values may differ)
+    ``"compatible"``    changed, but every call valid before binds identically after
+    ``"incompatible"``  some previously valid call now fails or binds differently
+    ``"unparseable"``   a parameter list is not valid Python: the caller falls back to the
+                        old name-tuple comparison, which reports a changed name list
+    """
+    try:
+        old = _parse_params(old_params)
+        new = _parse_params(new_params)
+    except ValueError:
+        return "unparseable"
+    if old == new:
+        return "unchanged"
+    return "compatible" if _call_compatible(old, new) else "incompatible"
+
+
+_MOCK_ASSERTION_RE = re.compile(
+    r"\.(?:assert_called\w*|assert_any_call|assert_has_calls|assert_not_called"
+    r"|call_args\w*|call_count|mock_calls|method_calls|called)\b"
+)
+
+
+def _SETATTR_TARGET_RE(name: str):
+    """Matcher for ``monkeypatch.setattr(mod, "name", ...)`` / ``patch.object(mod, "name")``:
+    the function named as a string argument, which `_code_only` blanks."""
+    pattern = r"(?:setattr|delattr|patch\.object)\s*\([^)]*['\"]" + re.escape(name) + r"['\"]"
+    return re.compile(pattern)
+
+
+def _mocks_symbol(text: str, name: str, *, referenced_in_code: bool) -> bool:
+    """Does this file MOCK ``name`` -- the one way a call-compatible change still breaks it?
+
+    #353 was a compatible widening: ``_write_handoff_packet_to_db(session_id, cwd)``
+    gained ``handoff_path=None``, and what broke was a test asserting the OLD CALL SHAPE
+    through a mock. A default parameter protects a real call and nothing that records
+    one. So a compatible change is reported for a file that names the function as a
+    patch target, hands its name to ``setattr`` / ``patch.object``, or references it in
+    code alongside mock call assertions -- and for no other file.
+    """
+    if _PATCH_TARGET_RE(name).search(text):
+        return True
+    if _SETATTR_TARGET_RE(name).search(text):
+        return True
+    return referenced_in_code and bool(_MOCK_ASSERTION_RE.search(_code_only(text)))
+
+
 def _slice(lines: list[str], start: tuple[int, int], end: tuple[int, int]) -> str:
     """The text between two ``(row, col)`` positions, rows 1-indexed as tokenize reports."""
     start_row, start_col = start
@@ -554,27 +689,83 @@ def _aliased_to_a_different_name(text: str, name: str) -> bool:
 def detect_changed_signature_callers(
     diff_text: str, *, repo_root: Path | str = REPO_ROOT
 ) -> list[Finding]:
+    """Flag files outside the diff that reference a function whose signature changed.
+
+    A CHANGE NO CALL CAN NOTICE IS NOT A BREAKING CHANGE (2026-10-21, PR #918). The
+    detector compared only the tuple of parameter names, so
+    ``record_execution_event(conn, **values)`` gaining ``*, spool=True`` blocked a PR on
+    five emitters and two tests whose calls all still bind. The old and new parameter
+    lists of a Python ``def`` are now parsed with ``ast`` and classified by
+    ``_signature_compatibility``. A change is COMPATIBLE only if both hold:
+
+    * every old parameter survives with the same name, kind (positional-only /
+      positional-or-keyword / ``*args`` / keyword-only / ``**kwargs``) and relative
+      order, and none lost its default (an old required parameter may GAIN one);
+    * every new parameter is one of: keyword-only WITH a default; ``*args`` or
+      ``**kwargs``; or a positional parameter WITH a default placed after every old
+      positional parameter, when the old signature has no ``*args`` to be taken from.
+
+    Anything else -- a removed, renamed or reordered parameter, a lost default, a kind
+    change, a new required parameter of any kind -- is INCOMPATIBLE and reported as
+    before. A parameter list that does not parse is never silenced: it falls back to the
+    previous name-tuple comparison. Non-Python signatures (``function`` in JS) are not
+    analysed and keep that comparison too.
+
+    COMPATIBLE IS NOT "SAFE FOR A MOCK". #353 was a compatible widening whose break was a
+    test asserting the old call shape through ``mock.patch``. A compatible change is
+    therefore still reported for a file that names the function as a patch target, passes
+    its name to ``setattr`` / ``patch.object``, or references it next to mock call
+    assertions (``_mocks_symbol``).
+
+    DECIDED EDGE: a caller that today passes a key named like the new parameter through
+    ``**values`` (``spool=...``) now binds it to the parameter instead. That is a semantic
+    shift for exactly one key, chosen by the diff that adds the parameter, so the change
+    stays COMPATIBLE; reporting every caller of every ``**kwargs`` function that gains a
+    named keyword is what this refinement removes.
+
+    KNOWN LIMIT, unchanged: ``_SIG_RE`` reads one line and stops at the first ``)``, so a
+    multi-line ``def`` or a default containing a call is not extracted whole.
+    """
     root = Path(repo_root)
     files = _parse_diff(diff_text, repo_root=root)
     changed_paths = {_normalize(f["path"]) for f in files}
 
-    changed_sigs: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {}
+    # name -> (old names, new names, mock_only). mock_only marks a CALL-COMPATIBLE change:
+    # no real call can break, so only a file that mocks the function is still reported.
+    changed_sigs: dict[str, tuple[tuple[str, ...], tuple[str, ...], bool]] = {}
     sig_origin: dict[str, str] = {}
     for f in files:
-        old: dict[str, str] = {}
-        new: dict[str, str] = {}
+        # name -> (parameter text, is a Python `def`). Only Python parameter lists get the
+        # compatibility analysis: a default in JS is not a keyword-only contract.
+        old: dict[str, tuple[str, bool]] = {}
+        new: dict[str, tuple[str, bool]] = {}
+        is_py = _normalize(f["path"]).endswith(".py")
         for ln in f["removed"]:
             m = _SIG_RE.search(ln)
             if m:
-                old[m.group(1)] = m.group(2)
+                old[m.group(1)] = (m.group(2), is_py and m.group(0).startswith("def"))
         for ln in f["added"]:
             m = _SIG_RE.search(ln)
             if m:
-                new[m.group(1)] = m.group(2)
+                new[m.group(1)] = (m.group(2), is_py and m.group(0).startswith("def"))
         for name in set(old) & set(new):
-            if _param_names(old[name]) != _param_names(new[name]):
-                changed_sigs[name] = (_param_names(old[name]), _param_names(new[name]))
-                sig_origin[name] = _normalize(f["path"])
+            (old_text, old_py), (new_text, new_py) = old[name], new[name]
+            old_names, new_names = _param_names(old_text), _param_names(new_text)
+            verdict = (
+                _signature_compatibility(old_text, new_text) if old_py and new_py else "unparseable"
+            )
+            if verdict == "unchanged":
+                continue
+            if verdict == "unparseable" and old_names == new_names:
+                continue  # cannot tell, and the names did not change: as before
+            mock_only = verdict == "compatible"
+            # The stricter verdict wins when two files change a function of this name.
+            if name in changed_sigs and not changed_sigs[name][2]:
+                continue
+            if name in changed_sigs and mock_only:
+                continue
+            changed_sigs[name] = (old_names, new_names, mock_only)
+            sig_origin[name] = _normalize(f["path"])
     if not changed_sigs:
         return []
 
@@ -618,18 +809,34 @@ def detect_changed_signature_callers(
             # a dependency by any reading; prose does not contain one by accident.
             in_code = pat.search(_code_only(text))
             in_patch_target = _PATCH_TARGET_RE(name).search(text)
-            if in_code or in_patch_target:
-                old_p, new_p = changed_sigs[name]
+            old_p, new_p, mock_only = changed_sigs[name]
+            in_setattr_target = mock_only and _SETATTR_TARGET_RE(name).search(text)
+            if in_code or in_patch_target or in_setattr_target:
+                if mock_only:
+                    # A CALL-COMPATIBLE CHANGE BREAKS NO REAL CALL. It can still break a
+                    # file that mocks the function and asserts the old call shape (#353).
+                    if not _mocks_symbol(text, name, referenced_in_code=bool(in_code)):
+                        continue
+                    message = (
+                        f"{rel} mocks {name}(), whose signature changed in this diff "
+                        f"({list(old_p)} -> {list(new_p)}). The change is call-compatible, but "
+                        f"a mock or assertion written against the old call shape can still "
+                        f"break and this file was not updated."
+                    )
+                else:
+                    shape = " (same names: a parameter kind or default changed)"
+                    message = (
+                        f"{rel} references {name}(), whose signature changed in this diff "
+                        f"({list(old_p)} -> {list(new_p)}"
+                        f"{shape if old_p == new_p else ''}) but this file was not updated."
+                    )
                 findings.append(
                     {
                         "detector": "changed_signature_caller",
                         "severity": "block",
                         "path": rel,
                         "symbol": name,
-                        "message": (
-                            f"{rel} references {name}(), whose signature changed in this diff "
-                            f"({list(old_p)} -> {list(new_p)}) but this file was not updated."
-                        ),
+                        "message": message,
                     }
                 )
     return findings
