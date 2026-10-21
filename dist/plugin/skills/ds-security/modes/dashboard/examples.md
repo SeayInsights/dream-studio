@@ -230,7 +230,7 @@ TEMPLATE SPEC HANDED OFF: {client}
 | repo | string | Repository name |
 | zscaler_score | float | Compatibility score (0-100) |
 | cert_pinning | string | pass / fail / not_applicable |
-| dlp_risk | string | Risk level for DLP trigger |
+| dlp_risk | string | `high` / `medium` / `low` / `not_assessed`. `not_assessed` means the profile had no data classification terms (or no SARIF was read); it is not a low-risk result |
 | port_issues | string | Non-standard port findings |
 | fixes_needed | string | Summary of required fixes |
 

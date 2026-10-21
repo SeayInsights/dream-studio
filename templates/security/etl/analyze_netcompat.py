@@ -72,6 +72,11 @@ DEDUCTIONS: dict[str, int] = {
 # Categories that only apply to Zscaler
 ZSCALER_ONLY_CATEGORIES: set[str] = {"custom_dns", "mtls_conflict"}
 
+# `dlp_risk` is high | medium | low | not_assessed. not_assessed means the DLP cross-reference
+# did not run (no data classification terms in the profile, or no scan to read); it is never
+# written as low, because low is a claim that terms were checked and not found.
+DLP_NOT_ASSESSED = "not_assessed"
+
 # CSV output columns (in order)
 CSV_COLUMNS = ["repo", "zscaler_score", "cert_pinning", "dlp_risk", "port_issues", "fixes_needed"]
 
@@ -288,11 +293,15 @@ def assess_dlp_risk(findings: list[dict], dlp_terms: list[str]) -> str:
     Cross-reference finding messages and file paths with DLP classification terms.
 
     Returns:
-        'high'   — a data classification term appears in a finding message or file path
-        'medium' — a term appears in an adjacent/nearby pattern (heuristic match)
-        'low'    — no data terms detected near outbound connections
+        'high'         — a data classification term appears in a finding message or file path
+        'medium'       — a term appears in an adjacent/nearby pattern (heuristic match)
+        'low'          — terms were given and none were detected near outbound connections
+        'not_assessed' — the profile gave no data classification terms, so there was nothing
+                         to cross-reference. This is not 'low': it says nothing about risk.
     """
-    if not dlp_terms or not findings:
+    if not dlp_terms:
+        return DLP_NOT_ASSESSED
+    if not findings:
         return "low"
 
     lowered_terms = [t.lower() for t in dlp_terms]
@@ -481,7 +490,13 @@ def run_analysis(
     proxy_cfg = profile.get("network", {}).get("proxy", {})
     proxy_type = proxy_cfg.get("type", "none")
     data_cfg = profile.get("data", {})
-    dlp_terms: list[str] = data_cfg.get("critical", []) + data_cfg.get("sensitive", [])
+    dlp_terms: list[str] = (data_cfg.get("critical") or []) + (data_cfg.get("sensitive") or [])
+    if not dlp_terms:
+        print(
+            "NOTE: DLP risk not assessed: the profile has no data.critical or data.sensitive "
+            "terms to cross-reference, so dlp_risk is written as not_assessed.",
+            file=sys.stderr,
+        )
 
     rows: list[dict] = []
     repos_processed: set[str] = set()
@@ -514,7 +529,8 @@ def run_analysis(
             rows.append(row)
             repos_processed.add(repo_name)
 
-    # Add any explicitly provided repos with no SARIF (clean score)
+    # Add any explicitly provided repos with no SARIF (clean score). No scan was read, so
+    # nothing was cross-referenced: DLP risk is not assessed, whatever the profile holds.
     for repo_name in extra_repos or []:
         if repo_name not in repos_processed:
             rows.append(
@@ -522,7 +538,7 @@ def run_analysis(
                     "repo": repo_name,
                     "zscaler_score": 100,
                     "cert_pinning": 0,
-                    "dlp_risk": "low",
+                    "dlp_risk": DLP_NOT_ASSESSED,
                     "port_issues": 0,
                     "fixes_needed": 0,
                 }

@@ -63,7 +63,7 @@ Zscaler is the strictest proxy type and triggers all seven check categories. Blu
 - **Pushing rules to client repos** — output rules and workflow files for the user to commit. Never push directly.
 - **Ignoring proxy type when generating rules** — always check `network.proxy.type`. Zscaler-specific rules (DNS, mTLS) must not be emitted for non-Zscaler proxy environments; they generate false positives.
 - **Treating score=100 as "no risk"** — a score of 100 means no netcompat findings were detected, not that the code is free of network issues. Inform the user if no netcompat rules have been run yet.
-- **DLP assessment without data profile** — if `data.critical` and `data.sensitive` are both absent from the profile, skip DLP risk assessment and note it. Do not guess at data classifications.
+- **DLP assessment without data profile** — if `data.critical` and `data.sensitive` are both absent from the profile, skip DLP risk assessment, write `dlp_risk=not_assessed` (never `low`) and note it. Do not guess at data classifications.
 - **Surfacing stale findings** — before showing any finding, confirm the SARIF source is from the most recent scan date. Flag any findings from SARIF older than 7 days as potentially stale.
 - **Conflating port issues with security vulnerabilities** — port blocking is a network policy issue, not a security vulnerability. Frame port findings as compatibility blockers, not OWASP violations.
 

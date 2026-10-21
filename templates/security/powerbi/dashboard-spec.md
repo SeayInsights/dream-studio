@@ -1933,10 +1933,23 @@ CALCULATE(
 ```
 
 ```dax
+DLP Not Assessed Repos =
+CALCULATE(
+    DISTINCTCOUNT(Netcompat[repo]),
+    Netcompat[dlp_risk] = "not_assessed"
+)
+```
+
+`not_assessed` means the client profile had no data classification terms (or no SARIF was read
+for the repo), so nothing was cross-referenced. It is not a low-risk result and must not be
+folded into the LOW count.
+
+```dax
 DLP Risk Summary =
 "HIGH: " & [DLP High Risk Repos] & " repos" & UNICHAR(10) &
 "MEDIUM: " & [DLP Medium Risk Repos] & " repos" & UNICHAR(10) &
-"LOW: " & [DLP Low Risk Repos] & " repos"
+"LOW: " & [DLP Low Risk Repos] & " repos" & UNICHAR(10) &
+"NOT ASSESSED: " & [DLP Not Assessed Repos] & " repos"
 ```
 
 - **Subtitle:** "Repos transmitting data terms that may trigger Zscaler DLP rules"
@@ -1957,7 +1970,7 @@ DLP Risk Summary =
 
 - **Conditional formatting:**
   - Cert Pinning: "fail" → red bg, "pass" → green bg, "not_applicable" → grey
-  - DLP Risk: "high" → red bg, "medium" → amber bg, "low" → green bg
+  - DLP Risk: "high" → red bg, "medium" → amber bg, "low" → green bg, "not_assessed" → grey
   - Score: data bars with RAG coloring
 
 #### V10.6 — Slicers

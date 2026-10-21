@@ -88,7 +88,12 @@ Floor score at 0. Score formula: `max(0, 100 - sum(deductions))`.
 
 #### Step A4: DLP Risk Assessment
 
-For each repo, scan outbound URL patterns and payload construction in SARIF findings:
+If the profile has no `data.critical` and no `data.sensitive` terms there is nothing to
+cross-reference: skip this step, write `dlp_risk=not_assessed` for every repo and tell the user
+the DLP risk was not assessed. `not_assessed` is not `low`: `low` is a claim that terms were
+checked and none were found. A repo that has no ingested SARIF is `not_assessed` too.
+
+Otherwise, for each repo, scan outbound URL patterns and payload construction in SARIF findings:
 1. Extract `locations` from each finding to identify files and lines.
 2. Cross-reference finding messages for data classification terms from `data.critical` + `data.sensitive`.
 3. If any finding message or location path contains a data classification term: mark `dlp_risk=high`. If indirect match: `dlp_risk=medium`. Otherwise: `dlp_risk=low`.
@@ -117,7 +122,7 @@ repo,zscaler_score,cert_pinning,dlp_risk,port_issues,fixes_needed
 
 - `zscaler_score`: integer 0–100
 - `cert_pinning`: count of cert-pinning findings
-- `dlp_risk`: high | medium | low
+- `dlp_risk`: high | medium | low | not_assessed (no data classification terms in the profile, or no SARIF for the repo)
 - `port_issues`: count of non-standard-port + websocket-no-tls findings combined
 - `fixes_needed`: total count of all findings across all categories
 
@@ -169,7 +174,7 @@ Report format:
 **Client:** {client}
 **Proxy:** {proxy_type}
 **Score:** {score}/100
-**DLP Risk:** {high|medium|low}
+**DLP Risk:** {high|medium|low|not assessed}
 **Date:** {date}
 
 ---
@@ -212,7 +217,7 @@ Report format:
 | `repo` | string | Repository name |
 | `zscaler_score` | int (0–100) | Compatibility score; 100 = fully compatible |
 | `cert_pinning` | int | Count of cert-pinning violations |
-| `dlp_risk` | enum | `high` / `medium` / `low` |
+| `dlp_risk` | enum | `high` / `medium` / `low` / `not_assessed` (never `low` when nothing was assessed) |
 | `port_issues` | int | Count of non-standard-port + websocket-no-tls findings |
 | `fixes_needed` | int | Total finding count across all categories |
 
