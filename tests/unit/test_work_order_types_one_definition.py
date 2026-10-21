@@ -154,17 +154,40 @@ def test_create_does_not_refuse_an_absent_type():
 #: nine with one left out, which is the first thing anyone would do to dodge an exact match.
 _SECOND_LIST_THRESHOLD = 6
 
+#: How many declared names spread over SEVERAL collection literals in one file make it a copy
+#: split to dodge the per-literal threshold (two lists of five).
+_PER_FILE_THRESHOLD = 8
+
 _SPLIT_METHODS = frozenset({"split", "rsplit", "splitlines"})
+
+
+def _normalise(name: str) -> str:
+    """`UI-Page`, `UI_PAGE` and `ui_page` are the same name."""
+    return name.strip().lower().replace("-", "_")
 
 
 def second_list_lines(source: str) -> list[int]:
     """Line numbers of every literal in ``source`` that spells out most of the built-in types.
 
     Parsed, not grepped. A text match on `"name"` missed single-quoted lists, a list built as
-    `"a b c".split()`, and anything in a file exempted wholesale. Here a literal collection
-    (list, tuple, set, dict keys, or a tuple of pairs) or a `"..."`-literal `.split()` counts
-    when it holds ``_SECOND_LIST_THRESHOLD`` or more of the built-in names, whatever the
-    quoting. The BUILT-INS, not the live registry: a pack-declared type is not a copy of them.
+    `"a b c".split()`, and anything in a file exempted wholesale. What counts, when it holds
+    ``_SECOND_LIST_THRESHOLD`` or more of the built-in names whatever the quoting or case:
+
+    - a literal collection (list, tuple, set, dict keys, a tuple of pairs);
+    - two collections added together (``[...] + [...]``), which splits a copy across operands;
+    - a ``"..."`` literal ``.split()`` on whitespace, ``,``, ``/``, ``:``, ``|`` or ``;``;
+    - an ``Enum``-shaped class body (member names and values);
+    - a string that quotes the names, such as a SQL ``IN ('a', 'b', ...)`` list.
+
+    And, across a whole file, ``_PER_FILE_THRESHOLD`` or more names over several collections
+    (two lists of five). The BUILT-INS, not the live registry: a pack-declared type is not a
+    copy of them.
+
+    NOT CAUGHT, and said so rather than implied: ``.split()`` on a variable or on text read from
+    a file, a type spelled one assignment per name, and a list built by code (a comprehension
+    over something else). None of those can be found without running the code; the loader's
+    other guards (the reserved set, the explicit flags, the operator's allowance) do not depend
+    on this scan.
     """
     import ast
     import re
@@ -172,13 +195,29 @@ def second_list_lines(source: str) -> list[int]:
     declared = set(BUILTIN_TYPES)
     tree = ast.parse(source)
     hits: list[int] = []
+    in_collections: set[str] = set()
+
+    def constants(node: ast.AST) -> set[str]:
+        return {
+            _normalise(sub.value)
+            for sub in ast.walk(node)
+            if isinstance(sub, ast.Constant) and isinstance(sub.value, str)
+        }
+
     for node in ast.walk(tree):
         spelled: set[str] = set()
         if isinstance(node, (ast.List, ast.Tuple, ast.Set, ast.Dict)):
-            spelled = {
-                sub.value
-                for sub in ast.walk(node)
-                if isinstance(sub, ast.Constant) and isinstance(sub.value, str)
+            spelled = constants(node)
+            in_collections |= spelled & declared
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            spelled = constants(node)
+        elif isinstance(node, ast.ClassDef):
+            spelled = constants(node) | {
+                _normalise(target.id)
+                for stmt in node.body
+                if isinstance(stmt, ast.Assign)
+                for target in stmt.targets
+                if isinstance(target, ast.Name)
             }
         elif (
             isinstance(node, ast.Call)
@@ -187,9 +226,13 @@ def second_list_lines(source: str) -> list[int]:
             and isinstance(node.func.value, ast.Constant)
             and isinstance(node.func.value.value, str)
         ):
-            spelled = set(re.split(r"[\s,|;]+", node.func.value.value))
+            spelled = {_normalise(p) for p in re.split(r"[\s,|;/:]+", node.func.value.value)}
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            spelled = {_normalise(t) for t in re.findall(r"""['"]([A-Za-z_-]+)['"]""", node.value)}
         if len(spelled & declared) >= _SECOND_LIST_THRESHOLD:
             hits.append(node.lineno)
+    if not hits and len(in_collections) >= _PER_FILE_THRESHOLD:
+        hits.append(1)
     return hits
 
 
@@ -246,10 +289,67 @@ _DOUBLE = ", ".join(f'"{t}"' for t in BUILTIN_TYPES)
             + ",\n    )\n",
             id="inside-a-function-across-lines",
         ),
+        pytest.param(
+            f"A = {list(BUILTIN_TYPES[:5])!r}\nB = {list(BUILTIN_TYPES[5:])!r}\n",
+            id="two-lists-of-five",
+        ),
+        pytest.param(
+            f"X = {list(BUILTIN_TYPES[:3])!r} + {list(BUILTIN_TYPES[3:])!r}",
+            id="list-plus-list",
+        ),
+        pytest.param(
+            f"X = {'/'.join(BUILTIN_TYPES)!r}.split('/')",
+            id="slash-delimited-split",
+        ),
+        pytest.param(
+            f"X = {':'.join(BUILTIN_TYPES)!r}.split(':')",
+            id="colon-delimited-split",
+        ),
+        pytest.param(
+            f"X = {'|'.join(BUILTIN_TYPES)!r}.split('|')",
+            id="pipe-delimited-split",
+        ),
+        pytest.param(
+            "from enum import Enum\nclass T(Enum):\n"
+            + "".join(f"    {t.upper()} = {t!r}\n" for t in BUILTIN_TYPES),
+            id="enum-members",
+        ),
+        pytest.param(
+            "X = [" + ", ".join(repr(t.upper().replace("_", "-")) for t in BUILTIN_TYPES) + "]",
+            id="uppercase-hyphenated",
+        ),
+        pytest.param(
+            'Q = "SELECT 1 FROM t WHERE work_order_type IN ('
+            + ", ".join(f"'{t}'" for t in BUILTIN_TYPES)
+            + ')"',
+            id="sql-in-list",
+        ),
     ],
 )
 def test_the_scan_sees_a_second_list_however_it_is_spelled(planted):
     assert second_list_lines(planted), planted
+
+
+@pytest.mark.parametrize(
+    "known_limit",
+    [
+        pytest.param(
+            "import os\nX = os.environ['TYPES'].split()\n", id="split-on-a-variable-or-a-file"
+        ),
+        pytest.param(
+            "\n".join(f"N{i} = {t!r}" for i, t in enumerate(BUILTIN_TYPES)),
+            id="one-assignment-per-name",
+        ),
+        pytest.param(
+            "X = [n for n in other_registry()]",
+            id="built-by-code",
+        ),
+    ],
+)
+def test_the_scan_does_not_claim_to_catch_what_needs_the_code_to_run(known_limit):
+    """Documented limits, pinned so they are a decision and not a surprise: none of these can be
+    found without executing the code, and the loader's other guards do not depend on the scan."""
+    assert second_list_lines(known_limit) == []
 
 
 @pytest.mark.parametrize(
