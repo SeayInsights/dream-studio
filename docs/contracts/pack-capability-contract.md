@@ -151,6 +151,12 @@ How it behaves:
   manifest and the pack. `ds doctor` reports the manifest as `checks.pack_work_order_types`,
   with the error when it does not load and, when it does, the governance profile of every type
   a pack declared.
+- **MCP.** `ds_work_order_create`'s `work_order_type` enum is computed when `tools/list`
+  runs (`Tool.schema()`), and the strict argument validator for a tool with such a live enum is
+  built from that schema at every call, never cached by tool name, so a type declared after the
+  first call is accepted and an unknown one is `-32602` rather than reaching the handler.
+  `Tool.input_schema` carries no enum for it; anything validating or inspecting arguments
+  reads `schema()`.
 - **No reload.** The manifest is read once per process. A long-lived process (`ds mcp serve`)
   keeps serving the types it loaded until it is restarted, and logs one warning line, once per
   change, when the file has changed on disk since it loaded. Editing the manifest therefore

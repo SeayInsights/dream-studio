@@ -169,6 +169,8 @@ rules:
       - tests/unit/test_work_order_type_manifest.py::test_each_public_reader_loads_the_manifest_before_it_answers
       - tests/unit/test_work_order_type_manifest.py::test_importing_the_registry_reads_no_manifest_and_the_first_read_does
       - tests/unit/test_work_order_type_registry.py::test_a_type_registered_after_import_is_advertised_by_tools_list
+      - tests/unit/integrations/test_mcp_pack_declared_types.py::test_a_type_declared_after_the_first_call_is_accepted_and_then_gone_again
+      - tests/unit/integrations/test_mcp_pack_declared_types.py::test_an_unknown_type_is_invalid_params_with_no_pack_at_all
       - tests/unit/test_dashboard_truth_gate_is_a_registry_flag.py::test_a_type_a_pack_flags_is_gated_and_one_it_does_not_flag_is_not
     note: >
       Issue #897. The registry was a Python API no pack could reach. The manifest is read
