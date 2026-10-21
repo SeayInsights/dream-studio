@@ -618,6 +618,41 @@ def pytest_runtest_teardown(item, nextitem):
 
 
 @pytest.fixture(autouse=True)
+def installer_does_not_edit_the_real_shell_profile(monkeypatch):
+    """No test appends a PATH line to the operator's PowerShell, zsh or bash profile.
+
+    ``_write_global_launcher`` (run by every ``ClaudeCodeInstaller.install("execute")`` from a
+    source checkout) ends in ``_write_path_to_profile``, which on Windows asks ``powershell
+    -Command $PROFILE`` where the profile is. That answer comes from the registry's Documents
+    folder, NOT from HOME or USERPROFILE -- measured: with both pointed at an empty directory it
+    still names ``C:\\Users\\<operator>\\...\\WindowsPowerShell\\Microsoft.PowerShell_profile.ps1``
+    -- so redirecting the home protects nothing. 77 tests across 26 files reached it; the first
+    run on a machine without the marker appended to the operator's real profile, and every
+    later run read it.
+
+    The stub replaces the module-level name the launcher looks up at call time. A test that
+    exercises the real function imports it by name from the installer facade (bound at
+    collection, so unaffected), and a test that patches it itself replaces this stub for its
+    own duration.
+    """
+    try:
+        from integrations.installer import claude_code_launcher as launcher
+    except ImportError:
+        # A copy of this conftest run outside the repository (the guard tests do that) has no
+        # installer to protect the profile from.
+        return
+
+    def _no_profile_edit(bin_dir):
+        return {
+            "profile": str(bin_dir),
+            "action": "skipped",
+            "reason": "tests never edit the operator's shell profile",
+        }
+
+    monkeypatch.setattr(launcher, "_write_path_to_profile", _no_profile_edit)
+
+
+@pytest.fixture(autouse=True)
 def tests_run_from_the_repository_root(monkeypatch):
     """Every test starts in the repository root, whichever directory pytest was launched from.
 
