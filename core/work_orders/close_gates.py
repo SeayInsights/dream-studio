@@ -66,6 +66,74 @@ KNOWN_GATES = frozenset(
 )
 
 
+#: The three states a previewed gate can be in. NOT_RUN is its own state, never PASS and never
+#: FAIL: a gate whose evidence could not be gathered without executing something says so, and
+#: a caller that wants a yes/no cannot get one out of it by accident.
+GATE_PASS = "pass"
+GATE_FAIL = "fail"
+GATE_NOT_RUN = "not_run"
+
+
+def _require_not_run_sink(
+    run_checks: bool, not_run: list[str] | None, read_planning_dir: bool = True
+) -> None:
+    """A non-executing evaluation needs somewhere to say what it did not do.
+
+    ``run_gate_check`` and ``_run_ac_gate`` return a bare pass/fail. Without a sink, a gate
+    that skipped its execution would return the same ``(True, "")`` as one that ran and
+    passed -- the exact collapse this mode exists to prevent -- so the combination is
+    refused rather than defaulted. The same holds for ``read_planning_dir=False``.
+    """
+    if not (run_checks and read_planning_dir) and not_run is None:
+        raise ValueError(
+            "run_checks=False or read_planning_dir=False needs a not_run list: a gate that was"
+            " not evaluated must be able to report that, or it reads as a pass"
+        )
+
+
+def _disk_not_run(not_run: list[str] | None, gate: str, what: str) -> tuple[bool, str]:
+    """A gate that reads ``what`` from ``.planning`` on disk, called by a process that has no
+    project directory to read it from. ``(True, "")`` with a note, which the caller turns into
+    ``not_run``; it is never "not found", because the file was never looked for."""
+    assert not_run is not None
+    not_run.append(
+        f"{gate}: not evaluated -- it reads {what} from the project's .planning directory,"
+        " and this process has no project directory to read it from"
+    )
+    return True, ""
+
+
+def _absent_and_unreadable(
+    work_order_id: str,
+    kind: str,
+    db_path: Path | None,
+    read_planning_dir: bool,
+    not_run: list[str] | None,
+    gate: str,
+) -> bool:
+    """True, with a note, when an artifact gate has nothing to judge and no way to look further.
+
+    These gates read the authority first and ``.planning`` on disk as a fallback. With a
+    readable directory nothing changes. Without one, an artifact the authority holds is judged
+    as usual (the disk is never reached), and one it does not hold is NOT reported as missing:
+    it may exist on disk where this process cannot look.
+    """
+    if read_planning_dir:
+        return False
+    from core.work_orders.artifacts import get_wo_artifact_envelope
+
+    content, _ = get_wo_artifact_envelope(work_order_id, kind, db_path=db_path)
+    if content is not None:
+        return False
+    assert not_run is not None
+    not_run.append(
+        f"{gate}: not evaluated -- no {kind} artifact in the authority, and its on-disk copy"
+        " under .planning cannot be located: this process has no project directory to read it"
+        " from"
+    )
+    return True
+
+
 def _envelope_absence_is_legacy(conn: Any, work_order_id: str) -> bool:
     """True when this WO predates provenance envelopes, so a missing one is expected.
 
@@ -108,17 +176,33 @@ def _provenance_staleness(
     work_order_id: str,
     conn: Any,
     db_path: Path | None,
+    run_checks: bool = True,
+    not_run: list[str] | None = None,
 ) -> str | None:
     """WO-scoped staleness: WO-attributed commits landed after the artifact's sha.
 
     Returns a human-readable staleness description, or None when the artifact is
     fresh or staleness cannot be determined (no envelope/sha, no git, unknown sha
     — envelope *presence* is enforced separately by gates that require it).
+
+    ``run_checks=False`` is the non-executing preview: the comparison needs ``git log`` in
+    the project's repository, which is a subprocess, so it is not made. Where the executing
+    path WOULD have run git, this appends to ``not_run`` and returns None; where it would
+    have returned None without git (no envelope, no recorded sha), it does the same.
     """
+    _require_not_run_sink(run_checks, not_run)
     if not envelope:
         return None
     sha = envelope.get("head_commit_sha")
     if not sha or db_path is None:
+        return None
+    if not run_checks:
+        assert not_run is not None
+        not_run.append(
+            f"provenance staleness not checked: comparing the artifact's recorded commit"
+            f" ({sha[:12]}) with the repository needs `git log`, which a non-executing"
+            " preview does not start"
+        )
         return None
     from core.work_orders.artifact_envelope import wo_commits_after
     from core.work_orders.verify import resolve_project_root
@@ -151,8 +235,22 @@ def run_gate_check(
     project_id: str,
     conn: Any,
     db_path: Path | None = None,
+    run_checks: bool = True,
+    not_run: list[str] | None = None,
+    read_planning_dir: bool = True,
 ) -> tuple[bool, str]:
     """Return (passed, failure_reason). failure_reason is empty string when passed=True.
+
+    ``read_planning_dir=False`` says this process has no project directory: a gate that reads
+    ``.planning`` on disk is reported in ``not_run`` instead of failing as "not found". Like
+    ``run_checks=False`` it needs ``not_run``; the default reads the disk as it always has.
+
+    ``run_checks=False`` evaluates only what can be read: it starts no subprocess, sends no
+    request and writes no event. Whatever the gate would have had to execute to decide is
+    appended to ``not_run`` instead, so ``(True, "")`` with a non-empty ``not_run`` means
+    "nothing read so far objects, and these parts were NOT evaluated" -- never "passed".
+    ``not_run`` is required in that mode (see ``_require_not_run_sink``). A definite failure
+    that needs no execution is still returned as a failure, ahead of anything not run.
 
     The optional ``db_path`` argument is used by the ``all_tests_pass`` gate to
     execute TEST-CHECKs from the WO's task acceptance criteria. Without a db_path
@@ -160,6 +258,7 @@ def run_gate_check(
     ``test-results.md`` file-presence fallback was retired by WO-CI-COMPLETENESS,
     since a hand-writable file containing "PASSED" is not evidence.
     """
+    _require_not_run_sink(run_checks, not_run, read_planning_dir)
     if not gate_name:
         return True, ""
 
@@ -199,6 +298,10 @@ def run_gate_check(
     if gate_name == "api_contract_exists":
         from core.gates.spec_ratification import evaluate_api_contract
 
+        if _absent_and_unreadable(
+            work_order_id, "api_contract", db_path, read_planning_dir, not_run, gate_name
+        ):
+            return True, ""
         contract, _contract_env = _artifact_with_envelope(
             work_order_id, wo_dir, "api_contract", db_path
         )
@@ -212,7 +315,12 @@ def run_gate_check(
         if _missing_env and contract is not None:
             return False, f"api_contract_exists: {_missing_env}"
         _stale = _provenance_staleness(
-            _contract_env, work_order_id=work_order_id, conn=conn, db_path=db_path
+            _contract_env,
+            work_order_id=work_order_id,
+            conn=conn,
+            db_path=db_path,
+            run_checks=run_checks,
+            not_run=not_run,
         )
         if _stale:
             return False, (
@@ -225,15 +333,25 @@ def run_gate_check(
     if gate_name == "api_contract_and_security_review":
         from core.gates.spec_ratification import evaluate_api_contract
 
+        if _absent_and_unreadable(
+            work_order_id, "api_contract", db_path, read_planning_dir, not_run, gate_name
+        ):
+            return True, ""
         contract = _artifact_text(work_order_id, wo_dir, "api_contract", db_path)
         ok, reason = evaluate_api_contract(contract, _wo_created_at(conn, work_order_id))
         if not ok:
             return False, f"api_contract_and_security_review: {reason}"
+        if _absent_and_unreadable(
+            work_order_id, "security_scan", db_path, read_planning_dir, not_run, gate_name
+        ):
+            return True, ""
         if _artifact_text(work_order_id, wo_dir, "security_scan", db_path) is None:
             return False, "api_contract_and_security_review: security-scan.md not found"
         return True, ""
 
     if gate_name == "spec_approved":
+        if not read_planning_dir:
+            return _disk_not_run(not_run, gate_name, "spec.md")
         if not (wo_dir / "spec.md").is_file():
             return False, "spec_approved: spec.md not found"
         return True, ""
@@ -245,13 +363,29 @@ def run_gate_check(
         # file-presence fallback (WO-CI-COMPLETENESS retired it).
         if db_path is not None:
             _tasks = _read_wo_tasks(conn, work_order_id)
-            from core.work_orders.verify import resolve_project_root, run_executable_checks
+            if run_checks:
+                from core.work_orders.verify import resolve_project_root, run_executable_checks
 
-            _proot = resolve_project_root(work_order_id, db_path)
-            _ac_results = run_executable_checks(_tasks, db_path, project_root=_proot)
+                _proot = resolve_project_root(work_order_id, db_path)
+                _ac_results = run_executable_checks(_tasks, db_path, project_root=_proot)
+            else:
+                # Parse only: which TEST-CHECKs are registered is readable without running
+                # them, and so is the absence of any (that is the UNVERIFIED failure below).
+                from core.work_orders.verify_executor import preview_executable_checks
+
+                _proot = None
+                _ac_results = preview_executable_checks(_tasks, db_path)
             _test_checks: list[dict[str, Any]] = []
             for _task_checks in _ac_results.values():
                 _test_checks.extend(c for c in _task_checks if c.get("kind") == "TEST-CHECK")
+            if _test_checks and not run_checks:
+                assert not_run is not None
+                not_run.append(
+                    f"all_tests_pass: {len(_test_checks)} TEST-CHECK(s) registered and not run"
+                    " -- running them starts a subprocess, which a non-executing preview does"
+                    " not do, so this gate has no verdict"
+                )
+                return True, ""
             if _test_checks:
                 _failed = [c for c in _test_checks if not c.get("passed")]
                 # MISADDRESSED IS NOT FAILED (WO-VERIFY-GRADES-DELIVERY). A check that
@@ -303,6 +437,8 @@ def run_gate_check(
     if gate_name == "design_critique":
         import re as _re
 
+        if not read_planning_dir:
+            return _disk_not_run(not_run, gate_name, "design-critique.md")
         critique_path = wo_dir / "design-critique.md"
         if not critique_path.is_file():
             return False, "design_critique: design-critique.md not found"
@@ -319,7 +455,12 @@ def run_gate_check(
         if _missing_env:
             return False, f"design_critique: {_missing_env}"
         _stale = _provenance_staleness(
-            _critique_env, work_order_id=work_order_id, conn=conn, db_path=db_path
+            _critique_env,
+            work_order_id=work_order_id,
+            conn=conn,
+            db_path=db_path,
+            run_checks=run_checks,
+            not_run=not_run,
         )
         if _stale:
             return False, (
@@ -337,6 +478,10 @@ def run_gate_check(
         return True, ""
 
     if gate_name == "security_scan":
+        if _absent_and_unreadable(
+            work_order_id, "security_scan", db_path, read_planning_dir, not_run, gate_name
+        ):
+            return True, ""
         content, _scan_env = _artifact_with_envelope(
             work_order_id, wo_dir, "security_scan", db_path
         )
@@ -361,7 +506,12 @@ def run_gate_check(
             return False, f"security_scan: {_missing_env}"
         # WO-VERIFY-PROVENANCE: enveloped scans must not predate newer WO commits.
         _stale = _provenance_staleness(
-            _scan_env, work_order_id=work_order_id, conn=conn, db_path=db_path
+            _scan_env,
+            work_order_id=work_order_id,
+            conn=conn,
+            db_path=db_path,
+            run_checks=run_checks,
+            not_run=not_run,
         )
         if _stale:
             return False, (
@@ -375,11 +525,15 @@ def run_gate_check(
         return True, ""
 
     if gate_name == "game_validate":
+        if not read_planning_dir:
+            return _disk_not_run(not_run, gate_name, "game-validate.md")
         if not (wo_dir / "game-validate.md").is_file():
             return False, "game_validate: game-validate.md not found"
         return True, ""
 
     if gate_name == "anti_slop_passed":
+        if not read_planning_dir:
+            return _disk_not_run(not_run, gate_name, "lint-results.md")
         lint_path = wo_dir / "lint-results.md"
         if not lint_path.is_file():
             return False, (
@@ -395,6 +549,8 @@ def run_gate_check(
         return True, ""
 
     if gate_name == "independent_review_passed":
+        if not read_planning_dir:
+            return _disk_not_run(not_run, gate_name, "independent-review.md")
         review_path = wo_dir / "independent-review.md"
         if not review_path.is_file():
             return False, (
@@ -416,6 +572,10 @@ def run_gate_check(
     if gate_name == "independent_review":
         import json as _json
 
+        if _absent_and_unreadable(
+            work_order_id, "review_verdict", db_path, read_planning_dir, not_run, gate_name
+        ):
+            return True, ""
         verdict_raw, verdict_envelope = _artifact_with_envelope(
             work_order_id, wo_dir, "review_verdict", db_path
         )
@@ -437,7 +597,12 @@ def run_gate_check(
                 f"ds work-order verify {work_order_id}"
             )
         _stale = _provenance_staleness(
-            verdict_envelope, work_order_id=work_order_id, conn=conn, db_path=db_path
+            verdict_envelope,
+            work_order_id=work_order_id,
+            conn=conn,
+            db_path=db_path,
+            run_checks=run_checks,
+            not_run=not_run,
         )
         if _stale:
             return False, (
@@ -695,6 +860,8 @@ def _run_ac_gate(
     work_order_id: str,
     db_path: Path,
     stats: dict[str, Any] | None = None,
+    run_checks: bool = True,
+    not_run: list[str] | None = None,
 ) -> list[str]:
     """Run all executable checks across a WO's tasks.  Return list of failure reasons.
 
@@ -709,7 +876,13 @@ def _run_ac_gate(
     cannot re-derive it: re-running the checks to count them would pay the whole test
     suite twice. The failure-reason list is unchanged, so existing callers are not
     affected by asking.
+
+    ``run_checks=False`` is the non-executing preview (``not_run`` required): no check is run,
+    SQL-CHECK included (see ``verify_executor._NOT_RUN_KINDS``), and every registered check is
+    summarised into ``not_run``; the returned failures are only the ones that needed no
+    execution (an unrecognised check kind, no check at all).
     """
+    _require_not_run_sink(run_checks, not_run)
     from core.work_orders.verify import resolve_project_root, run_executable_checks
 
     tasks = _read_wo_tasks(conn, work_order_id)
@@ -738,9 +911,14 @@ def _run_ac_gate(
     if carried:
         tasks = [t for t in tasks if t.get("task_id") not in carried]
 
-    ac_results = run_executable_checks(
-        tasks, db_path, project_root=resolve_project_root(work_order_id, db_path)
-    )
+    if run_checks:
+        ac_results = run_executable_checks(
+            tasks, db_path, project_root=resolve_project_root(work_order_id, db_path)
+        )
+    else:
+        from core.work_orders.verify_executor import preview_executable_checks
+
+        ac_results = preview_executable_checks(tasks, db_path)
 
     # Flatten all check results.
     all_checks: list[dict[str, Any]] = []
@@ -772,7 +950,22 @@ def _run_ac_gate(
             "(or attest the WO if its deliverable is operator-local and has no code to check)"
         ]
 
-    failed = [c for c in all_checks if not c.get("passed")]
+    # A check the preview did not run carries ``not_run`` and ``passed: None``. It is neither
+    # failed nor passed: it is reported on its own, and only when a sink was supplied. The
+    # executing path never sets the key, so its behaviour here is unchanged.
+    unrun = [c for c in all_checks if c.get("not_run")]
+    if unrun and not_run is not None:
+        by_kind: dict[str, int] = {}
+        for c in unrun:
+            by_kind[str(c.get("kind"))] = by_kind.get(str(c.get("kind")), 0) + 1
+        counts = ", ".join(f"{n} {kind}" for kind, n in sorted(by_kind.items()))
+        first = "; ".join(repr(c.get("expr", "")) for c in unrun[:3])
+        more = f"; ...and {len(unrun) - 3} more" if len(unrun) > 3 else ""
+        not_run.append(
+            f"executable_ac: {counts} not run -- a non-executing preview starts no subprocess,"
+            f" sends no request and evaluates no authored query ({first}{more})"
+        )
+    failed = [c for c in all_checks if not c.get("passed") and not c.get("not_run")]
     if not failed:
         return []
 
@@ -1001,6 +1194,66 @@ def _evaluate_gates(
         if not passed:
             failures.append(reason)
     return failures
+
+
+def gate_outcome(gate: str, failures: list[str], not_run: list[str]) -> dict[str, Any]:
+    """One previewed gate as a record: ``fail`` if anything objected, else ``not_run`` if
+    any part went unevaluated, else ``pass``.
+
+    A definite failure outranks an unevaluated part: a gate that already objects does not
+    become "unknown" because some other part of it could not be checked. And ``not_run``
+    outranks ``pass`` for the same reason in reverse: a part nobody evaluated cannot be
+    certified by the parts that were.
+    """
+    if failures:
+        status = GATE_FAIL
+    elif not_run:
+        status = GATE_NOT_RUN
+    else:
+        status = GATE_PASS
+    return {"gate": gate, "status": status, "failures": list(failures), "not_run": list(not_run)}
+
+
+def _preview_gates(
+    conn: Any,
+    *,
+    pre_gate: str | None,
+    post_gate: str | None,
+    work_order_id: str,
+    project_id: str,
+    planning_root: Path,
+    db_path: Path | None = None,
+    read_planning_dir: bool = True,
+) -> list[dict[str, Any]]:
+    """``_evaluate_gates`` without executing: one ``gate_outcome`` per named gate."""
+    outcomes: list[dict[str, Any]] = []
+    for raw_gate in (pre_gate, post_gate):
+        for gate_name in (raw_gate or "").split("|"):
+            if not gate_name:
+                continue
+            notes: list[str] = []
+            passed, reason = run_gate_check(
+                gate_name,
+                planning_root=planning_root,
+                work_order_id=work_order_id,
+                project_id=project_id,
+                conn=conn,
+                db_path=db_path,
+                run_checks=False,
+                not_run=notes,
+                read_planning_dir=read_planning_dir,
+            )
+            outcomes.append(gate_outcome(gate_name, [] if passed else [reason], notes))
+    return outcomes
+
+
+def _preview_ac_gate(conn: Any, *, work_order_id: str, db_path: Path) -> dict[str, Any]:
+    """``_run_ac_gate`` without executing, as a ``gate_outcome`` named ``executable_ac``."""
+    notes: list[str] = []
+    failures = _run_ac_gate(
+        conn, work_order_id=work_order_id, db_path=db_path, run_checks=False, not_run=notes
+    )
+    return gate_outcome("executable_ac", failures, notes)
 
 
 def _carry_db_path(conn: Any) -> Any:
