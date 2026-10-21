@@ -602,6 +602,22 @@ def test_a_memory_error_while_parsing_is_a_manifest_error_naming_the_file(tmp_pa
     assert str(path) in str(exc.value) and "MemoryError" in str(exc.value)
 
 
+def test_a_recursion_error_while_composing_is_a_manifest_error_naming_the_file(
+    tmp_path, monkeypatch
+):
+    """The nesting bound normally refuses a deep document first; this pins the net under it."""
+    import yaml
+
+    def boom(*args, **kwargs):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    monkeypatch.setattr(yaml, "load", boom)
+    path = _manifest(tmp_path, "packs: {}\n")
+    with pytest.raises(PackManifestError) as exc:
+        _load(path)
+    assert str(path) in str(exc.value) and "RecursionError" in str(exc.value)
+
+
 def test_no_message_quotes_a_hostile_value_whole(tmp_path):
     """Every message the loader or the registry builds from manifest data is bounded: a huge
     string, a huge key list, a huge nested structure each cost a short message."""
