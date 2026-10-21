@@ -357,11 +357,19 @@ def test_without_a_checkout_etl_home_uses_the_env_then_the_default(monkeypatch, 
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=tmp_path,
         env={**base, "DREAM_STUDIO_HOME": str(tmp_path / "custom")},
     )
     default = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, cwd=tmp_path, env=base
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=tmp_path,
+        env=base,
     )
     assert custom.stdout.strip() == str(tmp_path / "custom"), custom.stderr
     assert default.stdout.strip() == str(Path.home() / ".dream-studio"), default.stderr
