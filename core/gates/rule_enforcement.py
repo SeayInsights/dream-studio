@@ -47,7 +47,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from core.gates.pytest_node_resolver import NodeResolver
+from core.gates.pytest_node_resolver import CollectionConfigError, NodeResolver
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = REPO_ROOT / "canonical" / "rules.yml"
@@ -60,11 +60,7 @@ _CODE_SUFFIXES = (".py", ".md", ".yml", ".yaml", ".json", ".toml", ".txt")
 
 
 def _inside_repo(ref: str) -> bool:
-    try:
-        (REPO_ROOT / ref).resolve().relative_to(REPO_ROOT.resolve())
-    except ValueError:
-        return False
-    return True
+    return (REPO_ROOT / ref).resolve().is_relative_to(REPO_ROOT.resolve())
 
 
 def _resolve(reference: Any, resolver: NodeResolver | None = None) -> str | None:
@@ -130,7 +126,10 @@ def audit(registry_path: Path | None = None) -> dict[str, Any]:
     declared: list[dict[str, Any]] = []
     guidance: list[dict[str, Any]] = []
     checked = 0
-    resolver = NodeResolver(REPO_ROOT)
+    try:
+        resolver = NodeResolver(REPO_ROOT)
+    except CollectionConfigError as exc:
+        raise RegistryError(str(exc)) from exc
 
     for rule in rules or []:
         rule_id = rule.get("id", "<no id>")

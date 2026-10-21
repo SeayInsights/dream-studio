@@ -895,3 +895,28 @@ def test_the_real_repository_config_is_the_one_read():
     changes, the resolver follows it and this test says what it saw."""
     config = NodeResolver(REPO_ROOT).config
     assert config["python_functions"] and config["python_classes"] and config["python_files"]
+
+
+@pytest.mark.parametrize(
+    "name,body",
+    [
+        ("pytest.ini", "[pytest\npython_functions = x\n"),
+        ("pyproject.toml", "[tool.pytest.ini_options\n"),
+        ("tox.ini", "[pytest\n"),
+    ],
+)
+def test_a_pytest_config_that_cannot_be_read_is_an_error_not_a_fall_back_to_defaults(
+    tmp_path, name, body
+):
+    """Judging names by defaults the repo does not use would accept or refuse the wrong
+    tests, silently."""
+    from core.gates.pytest_node_resolver import CollectionConfigError
+
+    (tmp_path / name).write_text(body, encoding="utf-8")
+    with pytest.raises(CollectionConfigError, match="cannot read pytest config"):
+        NodeResolver(tmp_path)
+
+
+def test_a_relative_import_that_climbs_out_of_the_tree_is_refused_not_a_crash(tmp_path):
+    root = _tree(tmp_path, {"test_a.py": "from ........ import test_x\n"})
+    assert _why(root, "test_a.py::test_x") is not None

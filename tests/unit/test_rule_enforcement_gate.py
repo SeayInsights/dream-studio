@@ -623,3 +623,27 @@ def test_the_gate_is_registered_in_the_pre_push_manifest():
     assert entry["command"] == ["py", "-m", "core.gates.rule_enforcement"]
     assert entry["tier"] == "blocking"
     assert "fail_hint" in entry
+
+
+def test_a_pytest_config_that_cannot_be_read_fails_the_gate_in_one_line(
+    tmp_path, monkeypatch, capsys
+):
+    from core.gates import rule_enforcement
+
+    (tmp_path / "pytest.ini").write_text("[pytest\n", encoding="utf-8")
+    registry = _registry(
+        tmp_path,
+        """\
+        rules:
+          - id: a-rule
+            statement: Something ought to be true.
+            source: nowhere.py
+            enforced_by:
+              - canonical/rules.yml
+        """,
+    )
+    monkeypatch.setattr(rule_enforcement, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(rule_enforcement, "REGISTRY", registry)
+    assert rule_enforcement.main() == 1
+    out = capsys.readouterr().out
+    assert "cannot read pytest config" in out and "Traceback" not in out

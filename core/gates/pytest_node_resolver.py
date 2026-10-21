@@ -70,24 +70,34 @@ def _split(value: Any) -> tuple[str, ...] | None:
     return tuple(str(value).split())
 
 
+class CollectionConfigError(ValueError):
+    """The repo's pytest config exists and cannot be read. Falling back to pytest's defaults
+    would judge names by rules the repo does not use, so it is an error, not a shrug."""
+
+
+def _read_ini(path: Path) -> configparser.ConfigParser:
+    parser = configparser.ConfigParser(interpolation=None)
+    try:
+        parser.read(path, encoding="utf-8")
+    except (configparser.Error, OSError, UnicodeDecodeError) as exc:
+        raise CollectionConfigError(f"cannot read pytest config {path.name}: {exc}") from exc
+    return parser
+
+
 def _ini_section(root: Path) -> dict[str, Any]:
     """The pytest ini section pytest itself would pick, in its order of precedence."""
     for name in ("pytest.ini", ".pytest.ini"):
         path = root / name
         if path.is_file():
-            parser = configparser.ConfigParser(interpolation=None)
-            try:
-                parser.read(path, encoding="utf-8")
-            except (configparser.Error, OSError, UnicodeDecodeError):
-                return {}
+            parser = _read_ini(path)
             return dict(parser["pytest"]) if parser.has_section("pytest") else {}
 
     pyproject = root / "pyproject.toml"
     if pyproject.is_file():
         try:
             data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-        except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError):
-            data = {}
+        except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError) as exc:
+            raise CollectionConfigError(f"cannot read pytest config pyproject.toml: {exc}") from exc
         options = data.get("tool", {}).get("pytest", {}).get("ini_options")
         if isinstance(options, dict):
             return options
@@ -95,11 +105,7 @@ def _ini_section(root: Path) -> dict[str, Any]:
     for name, section in (("tox.ini", "pytest"), ("setup.cfg", "tool:pytest")):
         path = root / name
         if path.is_file():
-            parser = configparser.ConfigParser(interpolation=None)
-            try:
-                parser.read(path, encoding="utf-8")
-            except (configparser.Error, OSError, UnicodeDecodeError):
-                continue
+            parser = _read_ini(path)
             if parser.has_section(section):
                 return dict(parser[section])
     return {}
@@ -328,22 +334,16 @@ class NodeResolver:
     def _inside(self, file_part: str) -> Path | None:
         """The resolved path when it lies within the repository, else None."""
         resolved = (self.root / file_part).resolve()
-        try:
-            resolved.relative_to(self.root)
-        except ValueError:
-            return None
-        return resolved
+        return resolved if resolved.is_relative_to(self.root) else None
 
     def _find_module(self, name: str, level: int, origin: _Module) -> _Module | str | None:
         """An imported module that lives in the repository, best effort. None when it does
         not (a stdlib or third-party import)."""
         if level:
-            try:
-                bases = (
-                    [origin.path.parent.parents[level - 2]] if level > 1 else [origin.path.parent]
-                )
-            except IndexError:
+            parents = origin.path.parent.parents
+            if level > len(parents) + 1:  # a relative import that climbs out of the filesystem
                 return None
+            bases = [parents[level - 2]] if level > 1 else [origin.path.parent]
         else:
             bases = [self.root, origin.path.parent]
         parts = [p for p in name.split(".") if p]
