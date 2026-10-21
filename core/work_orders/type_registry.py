@@ -77,6 +77,50 @@ MAX_NAME_LENGTH = 64
 #: A description is one row of a markdown table in the generated AGENTS.md.
 MAX_DESCRIPTION_LENGTH = 200
 
+#: Names core itself writes into ``business_work_orders.work_order_type`` without going through
+#: the declared set, or has written, and so cannot be declared by anything else. A name here is
+#: not a declared type (``create_work_order`` still refuses it); it is a name nobody else may
+#: take, because declaring it would retroactively change how EXISTING work orders of that type
+#: are reviewed and closed: a pack declaring ``cleanup`` as an exempt document type would turn
+#: every spawned cleanup work order into one that closes with no independent review.
+#:
+#: DERIVED, not remembered: ``cleanup`` is what core's writers file (``verify_gaps`` spawns gap
+#: work orders as cleanup and reads that default back; ``ds prove`` formats it into the review
+#: prompts, whose schema also lists it), found by a scan of production code that
+#: ``tests/unit/test_work_order_type_names_core_writes.py`` re-runs and fails on if a writer
+#: files a name that is neither built in nor listed here. The other three are values live
+#: authorities hold from earlier versions, which no scan of today's code can find: they are
+#: listed from a census of a real authority's distinct ``work_order_type`` values (UNVERIFIED
+#: from this repository, which holds no authority) and cannot be re-derived, only extended.
+RESERVED_WORK_ORDER_TYPES: dict[str, str] = {
+    "cleanup": (
+        "core files it: verify_gaps spawns gap work orders as cleanup (and defaults a gap"
+        " with no type to it), and the review prompts list it; live authorities hold many"
+    ),
+    "migration": "held by live authorities from earlier versions of the work-order surface",
+    "investigation": "held by live authorities from earlier versions of the work-order surface",
+    "chore": "held by live authorities from earlier versions of the work-order surface",
+}
+
+#: Longest fragment of a caller-supplied value an error message will quote. A manifest is data
+#: from outside this process, and a message that repr()s it whole is a way to make this process
+#: build a huge string.
+_QUOTE_LIMIT = 40
+
+
+def quote(value: object) -> str:
+    """A bounded, safe rendering of a caller-supplied value for an error message.
+
+    A string is quoted up to ``_QUOTE_LIMIT`` characters; anything else is named by its type
+    only, never ``repr()``-ed, so a nested or self-multiplying structure costs nothing.
+    """
+    if isinstance(value, str):
+        shown = value[:_QUOTE_LIMIT]
+        return repr(shown) + ("..." if len(value) > _QUOTE_LIMIT else "")
+    if value is None or isinstance(value, (bool, int, float)):
+        return repr(value)[:_QUOTE_LIMIT]
+    return f"<{type(value).__name__}>"
+
 
 @dataclass(frozen=True)
 class WorkOrderType:
@@ -113,10 +157,11 @@ _REGISTRY: dict[str, WorkOrderType] = {}
 
 #: The built-in names, in declaration order. Filled once, below, and never changed.
 _BUILTIN_NAMES: list[str] = []
+_BUILTIN: dict[str, WorkOrderType] = {}
 
 #: Process-local: has the running checkout's manifest been applied, and is a load in progress
 #: (so the registrations the loader itself makes do not recurse into ensure_loaded).
-_STATE = {"loaded": False, "loading": False}
+_STATE: dict[str, object] = {"loaded": False, "loading": False}
 _LOCK = threading.RLock()
 
 
@@ -141,13 +186,19 @@ def _build(
     # API is fed manifest data, and a plain str is the only thing it declares.
     if type(name) is not str or not _NAME_RE.fullmatch(name):
         raise ValueError(
-            f"work-order type name {name!r} must be lowercase letters, digits and underscores,"
+            f"work-order type name {quote(name)} must be lowercase letters, digits and underscores,"
             " starting with a letter (a plain str, not a subclass)"
         )
     if len(name) > MAX_NAME_LENGTH:
         raise ValueError(
             f"work-order type name {name[:20]!r}... is {len(name)} characters;"
             f" it must be at most {MAX_NAME_LENGTH}"
+        )
+    if name in RESERVED_WORK_ORDER_TYPES:
+        raise ValueError(
+            f"work-order type name {name!r} is reserved: {RESERVED_WORK_ORDER_TYPES[name]}."
+            " Declaring it would change how existing work orders of that type are reviewed"
+            " and closed."
         )
     flags = {
         "ui_bearing": ui_bearing,
@@ -159,15 +210,15 @@ def _build(
         # `type is bool`, not isinstance or truthiness: "no" is truthy and 1 is not a flag.
         # stales_design_brief alone may be None, meaning "follow ui_bearing".
         if type(value) is not bool and not (flag == "stales_design_brief" and value is None):
-            raise ValueError(f"work-order type {name!r}: {flag} must be a bool, got {value!r}")
+            raise ValueError(f"work-order type {name!r}: {flag} must be a bool, got {quote(value)}")
     if type(artifact_class) is not str or artifact_class not in ARTIFACT_CLASSES:
         raise ValueError(
-            f"work-order type {name!r} names unknown artifact class {artifact_class!r}."
+            f"work-order type {name!r} names unknown artifact class {quote(artifact_class)}."
             f" Known: {', '.join(sorted(ARTIFACT_CLASSES))}."
         )
     if type(description) is not str:
         raise ValueError(
-            f"work-order type {name!r}: description must be a string, got {description!r}"
+            f"work-order type {name!r}: description must be a string, got {quote(description)}"
         )
     if (
         len(description) > MAX_DESCRIPTION_LENGTH
@@ -181,7 +232,7 @@ def _build(
         )
     if order is not None and (type(order) is not int or order < 0):
         raise ValueError(
-            f"work-order type {name!r}: order must be a non-negative integer, got {order!r}"
+            f"work-order type {name!r}: order must be a non-negative integer, got {quote(order)}"
         )
     stales = ui_bearing if stales_design_brief is None else stales_design_brief
     if ui_bearing and not stales:
@@ -266,10 +317,34 @@ def ensure_loaded() -> None:
     with _LOCK:
         if _STATE["loaded"] or _STATE["loading"]:
             return
-        from .type_manifest import load_pack_work_order_types
+        from .type_manifest import fingerprint, load_pack_work_order_types
 
+        # The fingerprint is taken BEFORE the read, so an edit that lands during the load is
+        # reported as a change rather than recorded as already seen.
+        seen = fingerprint()
         load_pack_work_order_types()
         _STATE["loaded"] = True
+        _STATE["fingerprint"] = seen
+
+
+def manifest_changed_since_load() -> str | None:
+    """A one-line warning if the manifest this process loaded has changed on disk, else None.
+
+    The manifest is read once per process, so a long-lived one (``ds mcp serve``) keeps serving
+    the types it loaded until it is restarted. This compares the file's size and mtime with
+    what was seen at load (no read), so it is cheap enough to call on every request.
+    """
+    recorded = _STATE.get("fingerprint")
+    if not recorded:
+        return None
+    from .type_manifest import fingerprint
+
+    if fingerprint(Path(recorded[0])) == recorded:
+        return None
+    return (
+        f"the pack manifest {recorded[0]} changed on disk after this process loaded its"
+        " work-order types; restart the process to pick up the edit"
+    )
 
 
 @contextmanager
@@ -295,6 +370,33 @@ def loading() -> Iterator[None]:
             _STATE["loading"] = False
 
 
+#: Who is inside a scope (thread id) and how deeply. Scopes swap the process-global registry, so
+#: two of them on different threads would interleave their saves and restores and leave a
+#: type registered for good; a second thread entering one is refused instead.
+_SCOPE: dict[str, int | None] = {"owner": None, "depth": 0}
+
+
+@contextmanager
+def _one_thread_at_a_time(what: str) -> Iterator[None]:
+    me = threading.get_ident()
+    with _LOCK:
+        if _SCOPE["owner"] not in (None, me):
+            raise RuntimeError(
+                f"{what}: another thread is already inside a scoped registration. Scopes swap the"
+                " process-wide registry and are for single-threaded tests; two overlapping on"
+                " different threads would leave a type registered permanently."
+            )
+        _SCOPE["owner"] = me
+        _SCOPE["depth"] = (_SCOPE["depth"] or 0) + 1
+    try:
+        yield
+    finally:
+        with _LOCK:
+            _SCOPE["depth"] = (_SCOPE["depth"] or 1) - 1
+            if _SCOPE["depth"] == 0:
+                _SCOPE["owner"] = None
+
+
 @contextmanager
 def scoped_registration() -> Iterator[None]:
     """Let a test register types and have them gone afterwards.
@@ -303,43 +405,55 @@ def scoped_registration() -> Iterator[None]:
     should be able to remove a declaration other code has already read. A test that registers
     one wraps the registering in this and the registry is exactly what it was on the way out,
     whether the block returned or raised.
+
+    SINGLE-THREADED BY CONTRACT. The scope swaps the registry for the whole process, so a reader
+    on another thread sees the scoped state while it lasts, and a second thread entering a scope
+    is refused with a RuntimeError rather than interleaved.
     """
     ensure_loaded()
-    with _LOCK:
-        saved = dict(_REGISTRY)
-    try:
-        yield
-    finally:
+    with _one_thread_at_a_time("scoped_registration"):
         with _LOCK:
-            _REGISTRY.clear()
-            _REGISTRY.update(saved)
+            saved = dict(_REGISTRY)
+        try:
+            yield
+        finally:
+            with _LOCK:
+                _REGISTRY.clear()
+                _REGISTRY.update(saved)
 
 
 @contextmanager
-def scoped_pack_manifest(packs_yaml_path: Path) -> Iterator[None]:
+def scoped_pack_manifest(
+    packs_yaml_path: Path, *, trusted: frozenset[str] = frozenset()
+) -> Iterator[None]:
     """Run a block against the built-ins plus ONE manifest, then restore everything.
 
     For tests of the loader and of a pack-declared type end to end: the real checkout's
-    manifest is set aside inside the block, ``packs_yaml_path`` is applied in its place, and
-    on the way out the registry and its loaded/unloaded state are what they were.
+    manifest is set aside inside the block, ``packs_yaml_path`` is applied in its place (with
+    ``trusted`` as the packs the operator has allowed to declare an exemption: none, unless a
+    test names them; the operator's real trust file is never read), and on the way out the registry and its loaded/unloaded state are exactly what they were.
+
+    Single-threaded by contract, like ``scoped_registration``.
     """
     from .type_manifest import load_pack_work_order_types
 
-    with _LOCK:
-        saved = dict(_REGISTRY)
-        saved_state = dict(_STATE)
-    try:
+    with _one_thread_at_a_time("scoped_pack_manifest"):
         with _LOCK:
-            for name in [n for n in _REGISTRY if n not in _BUILTIN_NAMES]:
-                del _REGISTRY[name]
-            _STATE["loaded"] = True
-        load_pack_work_order_types(packs_yaml_path=packs_yaml_path)
-        yield
-    finally:
-        with _LOCK:
-            _REGISTRY.clear()
-            _REGISTRY.update(saved)
-            _STATE.update(saved_state)
+            saved = dict(_REGISTRY)
+            saved_state = dict(_STATE)
+        try:
+            with _LOCK:
+                for name in [n for n in _REGISTRY if n not in _BUILTIN_NAMES]:
+                    del _REGISTRY[name]
+                _STATE["loaded"] = True
+            load_pack_work_order_types(packs_yaml_path=packs_yaml_path, trusted=trusted)
+            yield
+        finally:
+            with _LOCK:
+                _REGISTRY.clear()
+                _REGISTRY.update(saved)
+                _STATE.clear()
+                _STATE.update(saved_state)
 
 
 def work_order_type_names() -> tuple[str, ...]:
@@ -352,6 +466,15 @@ def builtin_work_order_type_names() -> tuple[str, ...]:
     """The ten types the platform itself declares, in declaration order. Fixed: no manifest
     and no registration changes it. For tests and generators that mean the built-in subset."""
     return tuple(_BUILTIN_NAMES)
+
+
+def builtin_work_order_types() -> tuple[WorkOrderType, ...]:
+    """The ten built-in declarations, by presentation order, without loading any manifest.
+
+    For a generator that renders a manifest it was handed (``build_agents_md``) without
+    touching the process-wide registry.
+    """
+    return tuple(sorted((_BUILTIN[n] for n in _BUILTIN_NAMES), key=lambda t: (t.order, t.name)))
 
 
 def work_order_types_in_presentation_order() -> tuple[WorkOrderType, ...]:
@@ -397,8 +520,9 @@ def design_brief_staling_types() -> tuple[str, ...]:
 
 
 def _register_builtin(order: int, name: str, description: str, **facts: object) -> None:
-    _store(_build(name, description=description, order=order, **facts))  # type: ignore[arg-type]
+    declared = _store(_build(name, description=description, order=order, **facts))  # type: ignore[arg-type]
     _BUILTIN_NAMES.append(name)
+    _BUILTIN[name] = declared
 
 
 # The ten built-ins, in the alphabetical order the closed tuple declared them. ``order`` is

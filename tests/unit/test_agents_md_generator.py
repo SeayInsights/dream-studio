@@ -171,6 +171,8 @@ packs:
         - name: contract_review
           artifact_class: document
           description: Reviewing a contract or policy for completeness and accuracy
+          ui_bearing: false
+          exempt_from_verification: false
 """
 
 

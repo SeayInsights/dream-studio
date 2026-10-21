@@ -166,7 +166,7 @@ rules:
       - tests/unit/test_work_order_type_manifest.py::test_a_bad_declaration_is_refused_naming_the_file_and_the_pack
       - tests/unit/test_work_order_type_manifest.py::test_a_manifest_with_one_bad_entry_registers_none_of_its_entries
       - tests/unit/test_work_order_type_manifest.py::test_an_unreadable_running_manifest_is_an_explicit_error_on_every_read_until_fixed
-      - tests/unit/test_work_order_type_manifest.py::test_every_reader_loads_the_manifest_before_answering
+      - tests/unit/test_work_order_type_manifest.py::test_each_public_reader_loads_the_manifest_before_it_answers
       - tests/unit/test_work_order_type_manifest.py::test_importing_the_registry_reads_no_manifest_and_the_first_read_does
       - tests/unit/test_work_order_type_registry.py::test_a_type_registered_after_import_is_advertised_by_tools_list
       - tests/unit/test_dashboard_truth_gate_is_a_registry_flag.py::test_a_type_a_pack_flags_is_gated_and_one_it_does_not_flag_is_not

@@ -43,12 +43,18 @@ packs:
         - name: contract_review
           artifact_class: document
           description: Reviewing a contract or policy for completeness and accuracy
+          ui_bearing: false
+          exempt_from_verification: false
         - name: compliance_report
           artifact_class: data
           description: A compliance extract the live dashboard must agree with
+          ui_bearing: false
           dashboard_truth_gated: true
           exempt_from_verification: true
 """
+
+#: The operator allows the legal pack to declare an exemption (compliance_report is exempt).
+TRUSTED = frozenset({"legal"})
 
 
 @pytest.fixture
@@ -256,7 +262,7 @@ def test_a_pack_declared_type_is_created_started_reviewed_and_closed(
     refused = _create(db_path, home, project_id, milestone_id, "contract_review")
     assert refused["ok"] is False and "contract_review" in refused["error"]
 
-    with scoped_pack_manifest(packs_yaml):
+    with scoped_pack_manifest(packs_yaml, trusted=TRUSTED):
         # CREATED, through the door the CLI and MCP share.
         created = _create(db_path, home, project_id, milestone_id, "contract_review")
         assert created["ok"] is True, created
@@ -377,7 +383,7 @@ def test_a_type_the_manifest_flagged_for_dashboard_truth_is_held_to_it_at_close(
             )
         return result.get("failures", [])
 
-    with scoped_pack_manifest(packs_yaml):
+    with scoped_pack_manifest(packs_yaml, trusted=TRUSTED):
         assert any("dashboard_truth" in f for f in close_failures("compliance_report"))
         assert not any("dashboard_truth" in f for f in close_failures("contract_review"))
 
@@ -395,7 +401,7 @@ def test_removing_the_manifest_leaves_the_work_order_readable_closable_and_unsta
 
     project_id, milestone_id = _seed_project_and_milestone(db_path)
     _seed_sibling(db_path, project_id, milestone_id)
-    with scoped_pack_manifest(packs_yaml):
+    with scoped_pack_manifest(packs_yaml, trusted=TRUSTED):
         created = _create(db_path, home, project_id, milestone_id, "contract_review")
         assert created["ok"] is True, created
         wo_id = created["work_order_id"]
@@ -447,7 +453,7 @@ def test_project_state_labels_a_pack_declared_type_that_has_no_row(
     from core.projects.queries import get_project_state
 
     project_id, milestone_id = _seed_project_and_milestone(db_path)
-    with scoped_pack_manifest(packs_yaml):
+    with scoped_pack_manifest(packs_yaml, trusted=TRUSTED):
         created = _create(db_path, home, project_id, milestone_id, "contract_review")
         assert created["ok"] is True, created
         state = get_project_state(

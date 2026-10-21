@@ -30,12 +30,13 @@ every fresh install, which is why they are separate now and why
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from pathlib import Path
 
-from core.work_orders.type_manifest import default_manifest_path
+from core.work_orders.type_manifest import default_manifest_path, read_pack_work_order_types
 from core.work_orders.type_registry import (
     WorkOrderType,
-    scoped_pack_manifest,
+    builtin_work_order_types,
     work_order_types_in_presentation_order,
 )
 from integrations.compiler.claude_code import _build_routing_table
@@ -198,8 +199,12 @@ def _declared_types(packs_yaml_path: Path | None) -> tuple[WorkOrderType, ...]:
         or Path(packs_yaml_path).resolve() == default_manifest_path().resolve()
     ):
         return work_order_types_in_presentation_order()
-    with scoped_pack_manifest(Path(packs_yaml_path)):
-        return work_order_types_in_presentation_order()
+    # Read, not registered: rendering a manifest this process is not running must not swap the
+    # process-wide registry under whoever else is reading it.
+    extra = read_pack_work_order_types(Path(packs_yaml_path))
+    base = builtin_work_order_types()
+    last = max(t.order for t in base)
+    return base + tuple(replace(t, order=last + 10 * (i + 1)) for i, t in enumerate(extra))
 
 
 def _wo_types_section(packs_yaml_path: Path | None = None) -> str:

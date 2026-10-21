@@ -185,8 +185,9 @@ def test_a_type_a_pack_flags_is_gated_and_one_it_does_not_flag_is_not(
         "    contributes:\n"
         "      work_order_types:\n"
         "        - {name: ledger_extract, artifact_class: data, description: An extract,"
-        " dashboard_truth_gated: true}\n"
-        "        - {name: policy_memo, artifact_class: document, description: A memo}\n",
+        " ui_bearing: false, exempt_from_verification: false, dashboard_truth_gated: true}\n"
+        "        - {name: policy_memo, artifact_class: document, description: A memo,"
+        " ui_bearing: false, exempt_from_verification: false}\n",
         encoding="utf-8",
     )
     with scoped_pack_manifest(packs):
