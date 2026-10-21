@@ -7,22 +7,26 @@ older install as current.
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 from core.health.doctor_checks import _check_version_current
+from tests.helpers.git_repo import commit, git, init_repo
 
-REPO = Path(__file__).resolve().parents[2]
+VERSION = "0.1.0"
 
 
-def _head() -> str:
-    return subprocess.run(
-        ["git", "-C", str(REPO), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=True,
-    ).stdout.strip()
+def _source(tmp_path: Path) -> tuple[Path, str]:
+    """A source checkout of this test's own and the commit it is at.
+
+    The tests compared against THIS clone's ``HEAD``, so they needed the clone to be a git
+    repository (a source tarball is not) and answered for whichever commit happened to be
+    checked out. The property is the same for any commit: the doctor reads the commit of the
+    code it runs and compares it with the one recorded at install.
+    """
+    root = init_repo(tmp_path / "src")
+    head = commit(root, "one", files={"VERSION": VERSION + "\n"})
+    assert git(root, "rev-parse", "HEAD") == head
+    return root, head
 
 
 def _home(tmp_path: Path, marker: str) -> Path:
@@ -33,21 +37,21 @@ def _home(tmp_path: Path, marker: str) -> Path:
 
 
 def test_an_older_commit_with_the_same_version_is_not_current(tmp_path):
-    version = (REPO / "VERSION").read_text(encoding="utf-8").strip()
-    info = _check_version_current(REPO, _home(tmp_path, f"{version} {'0' * 40}"))
+    root, head = _source(tmp_path)
+    info = _check_version_current(root, _home(tmp_path, f"{VERSION} {'0' * 40}"))
     assert info["current"] is False
-    assert info["code_sha"] == _head()
+    assert info["code_sha"] == head
 
 
 def test_the_same_commit_is_current(tmp_path):
-    version = (REPO / "VERSION").read_text(encoding="utf-8").strip()
-    info = _check_version_current(REPO, _home(tmp_path, f"{version} {_head()}"))
+    root, head = _source(tmp_path)
+    info = _check_version_current(root, _home(tmp_path, f"{VERSION} {head}"))
     assert info["current"] is True
 
 
 def test_a_marker_without_a_sha_is_unknown_not_current(tmp_path):
-    version = (REPO / "VERSION").read_text(encoding="utf-8").strip()
-    info = _check_version_current(REPO, _home(tmp_path, version))
+    root, _head = _source(tmp_path)
+    info = _check_version_current(root, _home(tmp_path, VERSION))
     assert info["current"] is None
     assert info["reason"]
 

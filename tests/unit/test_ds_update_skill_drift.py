@@ -64,8 +64,7 @@ def _manifest_from_plan(source_root: Path) -> dict:
 def canonical_copy(tmp_path: Path) -> Path:
     """A source root whose canonical/ is a real copy, so plan() behaves as in production."""
     src = REPO_ROOT / "canonical"
-    if not src.is_dir():
-        pytest.skip("no canonical/ tree in this checkout")
+    assert src.is_dir(), "canonical/ is tracked and must exist in every checkout"
     shutil.copytree(
         src,
         tmp_path / "canonical",
@@ -201,7 +200,7 @@ def test_a_never_installed_mode_file_counts_as_drift(tmp_path, monkeypatch) -> N
     assert str(known) not in drift, f"a recorded, present, unchanged file must not be: {drift}"
 
 
-def test_scope_mismatch_does_not_flag_the_whole_tree(canonical_copy: Path) -> None:
+def test_scope_mismatch_does_not_flag_the_whole_tree(canonical_copy: Path, monkeypatch) -> None:
     """A user-scope manifest must be compared against the user tree.
 
     Standing in the repo the detector reports ``project`` (<repo>/.claude) while a
@@ -218,8 +217,17 @@ def test_scope_mismatch_does_not_flag_the_whole_tree(canonical_copy: Path) -> No
     drift list is the full set of planned targets and their common root is directly
     observable.
     """
+    # The user tree is the config root: CLAUDE_CONFIG_DIR, else <home>/.claude. Fix both, so
+    # the answer is neither this machine's ~/.claude nor a second identity's override.
+    home = canonical_copy / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+
     drift = _canonical_skill_drift(canonical_copy, {"scope": "user", "files": []})
-    user_root = str(Path.home() / ".claude")
+    user_root = str(home / ".claude")
 
     assert drift, "an empty manifest must flag planned files as never installed"
     strays = [p for p in drift if not p.startswith(user_root)]
