@@ -293,8 +293,8 @@ core/expansion/validation.py|227|falsy-return
 core/expansion/validation.py|242|falsy-return
 core/expansion/validation.py|420|falsy-return
 core/expansion/validation.py|517|falsy-return
-core/findings/mutations.py|182|bare-except-pass
-core/findings/mutations.py|254|bare-except-pass
+core/findings/mutations.py|184|bare-except-pass
+core/findings/mutations.py|256|bare-except-pass
 core/gates/blast_radius.py|625|falsy-return
 core/gates/brief_currency.py|73|falsy-return
 core/gates/brief_currency.py|83|falsy-return
