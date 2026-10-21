@@ -30,6 +30,7 @@ from .doctor_checks import (
     _check_handoff_spawner,
     _check_hook_freshness,
     _check_installed_app,
+    _check_pack_work_order_types,
     _check_stale_dbs,
     _check_version_current,
 )
@@ -100,6 +101,7 @@ def run_doctor_checks(
     stale_dbs_info = _check_stale_dbs(paths.dream_studio_home)
     hook_freshness_info = _check_hook_freshness(source_root, claude_dir)
     installed_app_info = _check_installed_app(paths.dream_studio_home)
+    pack_types_info = _check_pack_work_order_types()
 
     from core.config.schema_coherence import check_schema_coherence
 
@@ -200,6 +202,9 @@ def run_doctor_checks(
         overall = "fail"
     elif authority_attention:
         overall = "attention_required"
+    elif not pack_types_info["ok"]:
+        # A manifest that does not load breaks every command that reads a work-order type.
+        overall = "attention_required"
     elif not core_pass:
         overall = "attention_required"
     elif has_warnings:
@@ -294,6 +299,7 @@ def run_doctor_checks(
             "hook_freshness": hook_freshness_info,
             "bypass_audit": bypass_audit_info,
             "installed_app": installed_app_info,
+            "pack_work_order_types": pack_types_info,
             "authority_data": authority_data_info,
             "main_ci": main_ci_info,
         },

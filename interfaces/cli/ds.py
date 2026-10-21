@@ -36,6 +36,7 @@ REPO_ROOT = code_root()
 # via interfaces.cli.ds.installed_runtime_model — the single patch-point convention.
 from core.installed_runtime import resolve_installed_runtime_paths  # noqa: E402
 from core.installed_runtime import installed_runtime_model  # noqa: E402,F401
+from core.work_orders.type_registry import PackManifestError  # noqa: E402
 
 # Per-group command modules
 from interfaces.cli.commands import analyze  # noqa: E402
@@ -286,6 +287,14 @@ def _run(parser, args, source_root: Path, home: Path | None) -> int:
         if lost:
             print(json.dumps({"ok": False, "error": lost}, indent=2), file=sys.stderr)
             return 1
+    if getattr(args, "manifest_error", None):
+        # The parser built without --type's choices because the pack manifest does not load
+        # (see work_order_dispatch._declared_type_choices); this command needs the types.
+        print(
+            f"error: {args.manifest_error} (run `ds doctor` for the manifest check)",
+            file=sys.stderr,
+        )
+        return 1
     try:
         # System-level flat commands
         if args.command in system.SYSTEM_COMMANDS:
@@ -378,6 +387,11 @@ def _run(parser, args, source_root: Path, home: Path | None) -> int:
         if args.command == "eval":
             return eval_cmd.dispatch(args, source_root=source_root)
 
+    except PackManifestError as exc:
+        # ONE line, naming the file and the pack, and where to look: the registry is read by
+        # every command that touches a work-order type, so this is what an operator sees first.
+        print(f"error: {exc} (run `ds doctor` for the manifest check)", file=sys.stderr)
+        return 1
     except (RuntimeError, sqlite3.Error, ValueError) as exc:
         message = str(exc)
         if isinstance(exc, sqlite3.DatabaseError) and (

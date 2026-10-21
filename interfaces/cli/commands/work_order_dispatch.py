@@ -18,7 +18,7 @@ from core.work_orders.models import (
     DEFAULT_WORK_ORDER_PRIORITY,
     WORK_ORDER_PRIORITIES,
 )
-from core.work_orders.type_registry import work_order_type_names
+from core.work_orders.type_registry import PackManifestError, work_order_type_names
 
 from interfaces.cli.commands.work_order_lifecycle import (
     _work_order_block,
@@ -58,6 +58,21 @@ from interfaces.cli.commands.work_order_tasks import (
 # ---------------------------------------------------------------------------
 
 
+def _declared_type_choices() -> tuple[tuple[str, ...] | None, str | None]:
+    """(the declared types for `--type`'s choices, None) or (None, why they cannot be read).
+
+    This runs while the parser is BUILT, which is before every command, so a manifest that does
+    not load must not make it raise: `ds --help`, `version`, `status`, `doctor` and `project
+    list` would all die with a traceback, and `ds doctor` is the command that diagnoses it. The
+    reason is returned, not dropped: it is attached to `create` as `manifest_error`, and `ds.py`
+    prints it as one line when that command runs, as every command that reads a type does.
+    """
+    try:
+        return work_order_type_names(), None
+    except PackManifestError as exc:
+        return None, str(exc)
+
+
 def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     """Attach the ``work-order`` subparser tree to *subcommands*."""
     work_order = subcommands.add_parser("work-order", help="Manage work orders")
@@ -92,6 +107,7 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
     # SQL by an adapter -- a rule violation on its own, and the reason no structural
     # invariant could be enforced anywhere: there was no single place to enforce one.
     # Measured 2026-08-28: 49 of 128 open work orders carry one task or none.
+    type_choices, type_error = _declared_type_choices()
     wo_create = work_order_sub.add_parser(
         "create", help="Create a work order (the single authoring door)"
     )
@@ -116,9 +132,10 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         # REFUSED AT THE DOOR, not filed as infrastructure. This accepted any string while
         # its help said "one of the declared types"; nothing declared them where it could
         # ask. argparse prints the choices in the refusal, so the operator sees the list.
-        choices=work_order_type_names(),
+        choices=type_choices,
         help="One of the declared work-order types (selects which standards review it)",
     )
+    wo_create.set_defaults(manifest_error=type_error)
     wo_create.add_argument(
         "--priority",
         default=DEFAULT_WORK_ORDER_PRIORITY,
