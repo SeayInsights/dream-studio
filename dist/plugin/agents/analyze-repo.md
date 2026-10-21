@@ -177,6 +177,12 @@ py <skill-dir>/modes/repo/analyze-repos.py repo1/ repo2/ repo3/ --domain career 
 py <skill-dir>/modes/repo/analyze-repos.py /path/to/repo --auto-detect --verbose
 ```
 
+An explicit `--domain <name>` (other than `general`) or `--auto-detect` that
+cannot load the domain analyzers fails: the command prints `[ERROR]` naming the
+import failure to stderr, exits 1, and produces no report. It never falls back
+to the general analysis, which is a different report. Without `--domain` the
+general analysis runs as usual.
+
 The wrapper automatically:
 - Detects GitHub URLs and clones them to temp directory
 - Validates local paths

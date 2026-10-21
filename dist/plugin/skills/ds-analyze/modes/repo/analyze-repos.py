@@ -228,6 +228,11 @@ Examples:
         if args.verbose:
             print("\n[DONE] Analysis complete!")
 
+    except _repo_analyzer.DomainSupportUnavailable as e:
+        # An explicit --domain that cannot be honoured is a failed request, not a
+        # reason to hand back the general analysis under a domain-shaped label.
+        print(f"[ERROR] {e}", file=sys.stderr)
+        sys.exit(1)
     except KeyboardInterrupt:
         print("\n[ABORT] Analysis interrupted by user", file=sys.stderr)
         sys.exit(130)
