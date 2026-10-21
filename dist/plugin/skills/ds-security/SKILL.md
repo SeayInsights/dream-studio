@@ -26,3 +26,19 @@ description: 'Enterprise security analysis — automated scanning, compliance ma
 | comply | modes/comply/SKILL.md | comply:, compliance map:, SOC 2:, NIST:, audit evidence:, compliance audit:, gdpr audit:, privacy audit:, dbc audit: |
 | netcompat | modes/netcompat/SKILL.md | netcompat:, Zscaler check:, proxy compatibility: |
 | dashboard | modes/dashboard/SKILL.md | security dashboard:, export dataset: |
+
+## Scripts and templates: `<skill-dir>`
+
+**`<skill-dir>` in the mode docs is this skill's own directory**: the one holding this `SKILL.md`
+and `modes/`. Claude Code reports it when the skill loads. The scripts the modes run (the
+`etl/*.py` parsers, `scan_coverage.py`, `header_analysis.py`) and the templates they render or
+read (`binary/`, `dast/`, `semgrep-rules/`, `github-actions/`, `compliance/`, `mitigations/`,
+`powerbi/`) are shipped inside it, under `<skill-dir>/templates/security/`, with the layout the
+scripts expect (`etl/` beside `compliance/` and `mitigations/`). The scripts run from any
+working directory, import only their own directory, and find the Dream Studio home from
+`DREAM_STUDIO_HOME`, else `~/.dream-studio`. They need Python 3.12 and, for some, PyYAML.
+
+In a source checkout of dream-studio the same files are at `templates/security/` in the
+repository root, with no `<skill-dir>` in front: `<skill-dir>/templates/security/etl/parse_dast.py`
+is `templates/security/etl/parse_dast.py`. Never substitute a repository-relative path when the
+skill is installed.

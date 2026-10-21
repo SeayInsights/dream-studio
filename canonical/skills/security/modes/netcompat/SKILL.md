@@ -29,7 +29,7 @@ This skill never runs scanners directly. It generates Semgrep rules for the user
 ## Modes
 - `analyze` — Scan repos for proxy/network compatibility issues. Reads client network config from profile. Runs netcompat Semgrep rules. Calculates per-repo compatibility score. Writes results to `~/.dream-studio/security/datasets/{client}/netcompat.csv`.
 - `report` — Generate a compatibility report with fix recommendations per finding, grouped by repo and severity.
-- `rules` — Generate Semgrep rules for network compatibility checks by rendering `templates/security/semgrep-rules/netcompat.yaml.j2` with the client's network profile.
+- `rules` — Generate Semgrep rules for network compatibility checks by rendering `<skill-dir>/templates/security/semgrep-rules/netcompat.yaml.j2` with the client's network profile.
 
 ---
 
@@ -37,7 +37,7 @@ This skill never runs scanners directly. It generates Semgrep rules for the user
 See `docs/security-storage-layout.md`. See skill-specific paths in layout doc.
 
 ## Templates
-See `templates/security/README.md` for template registry.
+See `<skill-dir>/templates/security/README.md` for template registry.
 
 ## Client Profile
 See `docs/client-profile-schema.md`. Required fields vary by mode.

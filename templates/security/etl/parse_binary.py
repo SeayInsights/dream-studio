@@ -29,20 +29,13 @@ import json
 import sys
 from pathlib import Path
 
-# This script runs in place from the repo (`py -3.12 templates/security/etl/...py`,
-# see templates/security/README.md), which puts its own directory on sys.path, not
-# the repo root -- the resolver import below needs a manual add.
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
 # scan_coverage.py is a sibling of this script (shared with the other parse_* scripts).
 _ETL_DIR = Path(__file__).resolve().parent
 if str(_ETL_DIR) not in sys.path:
     sys.path.insert(0, str(_ETL_DIR))
 
 import scan_coverage  # noqa: E402
-from core.config.paths import home_dir  # noqa: E402
+from etl_home import home_dir  # noqa: E402
 
 #: Every step `binary-scan analyze` runs when all its tooling is present
 #: (examples.md A4-A7). Coverage is complete only when each one is recorded as run

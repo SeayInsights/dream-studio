@@ -17,6 +17,8 @@ The output layout (plugin root):
     <out>/
       .claude-plugin/plugin.json   # build_plugin_manifest()
       skills/<skill-id>/SKILL.md    # synthesized frontmatter + canonical body (+ mode files)
+      skills/<skill-id>/<support>   # files a skill's modes run or read from outside canonical/
+                                    #   (SKILL_SUPPORT_TREES: ds-security/templates/security/)
       agents/<agent>.md
       .mcp.json
 """
@@ -119,6 +121,28 @@ NOT_PROJECTED: dict[str, str] = {
 }
 
 
+#: Files a skill's own modes EXECUTE or READ that live outside canonical/, shipped inside the
+#: skill's directory in the plugin: skill id -> ((source path under the repo root, path under
+#: the skill's directory), ...).
+#:
+#: WHY THIS EXISTS. The security modes tell the agent to run
+#: `py -3.12 templates/security/etl/parse_binary.py`, render `templates/security/**/*.j2` and
+#: read `templates/security/compliance/*.yaml`. None of that is under canonical/, so the plugin
+#: shipped the instructions and not the thing they run: an installed plugin had a binary-scan
+#: mode whose ingest step named a script that did not exist on the machine. The tree keeps
+#: its internal layout (etl/ beside compliance/ and mitigations/, which the scripts find by
+#: relative path), and the docs name it `<skill-dir>/templates/security/...`.
+#:
+#: The source stays in templates/security/: the jinja templates, the scripts, the tests and
+#: the publication-readiness scans all address it there, and moving it is the pack
+#: extraction the pack-capability contract describes (docs/contracts/pack-capability-
+#: contract.md), not this slice. Only the PLUGIN projection ships it; the `ds self-install`
+#: channel copies canonical/skills/<pack>/ only and still lacks it.
+SKILL_SUPPORT_TREES: dict[str, tuple[tuple[str, str], ...]] = {
+    "ds-security": (("templates/security", "templates/security"),),
+}
+
+
 def projection_exclusion(skill_dir_name: str) -> str | None:
     """The declared reason this canonical skill ships nowhere, or None if it should ship.
 
@@ -183,6 +207,28 @@ def build_plugin_dist(
         for op in _collect_skill_dir_ops(skill_dir, target_dir, skill_id, out_dir / ".backups"):
             _materialize(op)
         _normalize_pack_frontmatter(skill_id, target_dir / "SKILL.md")
+
+        # 1b. Support trees: what the skill's modes run or read, from outside canonical/.
+        for source_rel, dest_rel in SKILL_SUPPORT_TREES.get(skill_id, ()):
+            source_root = repo_root / source_rel
+            if not source_root.is_dir():
+                raise FileNotFoundError(
+                    f"{skill_id} ships {source_rel}/ in its skill directory, and it is not "
+                    f"under {repo_root}: the plugin would name scripts it does not carry"
+                )
+            for file_path in sorted(p for p in source_root.rglob("*") if p.is_file()):
+                target = target_dir / dest_rel / file_path.relative_to(source_root)
+                if _is_cruft(target):
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    # Deterministic LF, like every other text file in the artifact.
+                    text = file_path.read_text(encoding="utf-8")
+                except (UnicodeDecodeError, ValueError):
+                    shutil.copyfile(file_path, target)
+                else:
+                    target.write_text(text, encoding="utf-8", newline="\n")
+                written.append(target)
 
     # 2. Agents — copy every canonical agent card verbatim.
     agents_src = canonical_root / "agents"

@@ -6,7 +6,7 @@ Extracted from SKILL.md to reduce context injection size.
 See `docs/security-storage-layout.md`. See skill-specific paths in layout doc.
 
 ## Templates
-See `templates/security/README.md` for template registry.
+See `<skill-dir>/templates/security/README.md` for template registry.
 
 ## Client Profile
 See `docs/client-profile-schema.md`. Required fields vary by mode.
@@ -49,7 +49,7 @@ Extract from user input:
 
 For each web app target in `targets.web_apps`:
 
-1. Read `builds/dream-studio-clean/templates/security/dast/zap-config.yaml.j2`.
+1. Read `<skill-dir>/templates/security/dast/zap-config.yaml.j2`.
 2. Fill Jinja2 variables from the target entry and client profile.
 3. Write rendered file to `~/.dream-studio/security/dast/{client}/{target.name}/zap-config.yaml`.
 
@@ -68,7 +68,7 @@ For each web app target in `targets.web_apps`:
 
 For each web app target:
 
-1. Read `builds/dream-studio-clean/templates/security/dast/nuclei-config.yaml.j2`.
+1. Read `<skill-dir>/templates/security/dast/nuclei-config.yaml.j2`.
 2. Select template tags based on:
    - `scan_profile: full` → tags: `cve,misconfig,exposure,takeover,tech-detect`
    - `scan_profile: api-only` → tags: `cve,misconfig,exposure,api`
@@ -78,7 +78,7 @@ For each web app target:
 
 ### Step S4: Generate GitHub Actions DAST Workflow
 
-1. Read `builds/dream-studio-clean/templates/security/github-actions/dast-scan.yml.j2`.
+1. Read `<skill-dir>/templates/security/github-actions/dast-scan.yml.j2`.
 2. Fill variables from all web app targets.
 3. Write to `~/.dream-studio/security/actions/{client}/dast-scan.yml`.
 
@@ -233,7 +233,7 @@ Extract from user input:
 
 1. Run parse_dast.py:
    ```bash
-   py -3.12 templates/security/etl/parse_dast.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json
+   py -3.12 <skill-dir>/templates/security/etl/parse_dast.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json
    ```
 2. This normalizes ZAP + Nuclei outputs to unified findings with `target_type: webapp`.
    Each finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`,

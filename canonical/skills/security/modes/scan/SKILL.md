@@ -40,7 +40,7 @@ See `docs/security-storage-layout.md`. Uses:
 - `actions/{client}/` — Generated GitHub Actions workflow
 
 ## Templates
-See `templates/security/README.md`. Uses:
+See `<skill-dir>/templates/security/README.md`. Uses:
 - `semgrep-rules/*.yaml.j2` — Custom rule templates
 - `github-actions/security-scan.yml.j2` — CI workflow template
 
@@ -136,7 +136,7 @@ Extract from user input:
    omit `run`, `planned_steps` and `steps`.
 
 5. Parse SARIF to extract finding counts: iterate `runs[].results[]`, group by `level` (error=critical/high, warning=medium, note=low).
-6. Run `py -3.12 templates/security/etl/parse_sarif.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json`. Every finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`; `coverage.json` holds the same per scan directory and is the only place coverage shows when a scan produced no findings. It reads the scanner outputs directly in `{scan_dir}` (SARIF, Bandit, TruffleHog and pip-audit JSON); an output it has no reader for (npm audit) leaves that scanner `ran` but unread, so the scan is `partial` and the file is named.
+6. Run `py -3.12 <skill-dir>/templates/security/etl/parse_sarif.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json`. Every finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`; `coverage.json` holds the same per scan directory and is the only place coverage shows when a scan produced no findings. It reads the scanner outputs directly in `{scan_dir}` (SARIF, Bandit, TruffleHog and pip-audit JSON); an output it has no reader for (npm audit) leaves that scanner `ran` but unread, so the scan is `partial` and the file is named.
 
 #### Step I4: Present Summary
 

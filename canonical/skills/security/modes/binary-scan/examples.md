@@ -6,7 +6,7 @@ Extracted from SKILL.md to reduce context injection size.
 See `docs/security-storage-layout.md`. See skill-specific paths in layout doc.
 
 ## Templates
-See `templates/security/README.md` for template registry.
+See `<skill-dir>/templates/security/README.md` for template registry.
 
 ## Client Profile
 See `docs/client-profile-schema.md`. Required fields vary by mode.
@@ -49,14 +49,14 @@ Extract from user input:
 
 For each binary target:
 
-1. Read `builds/dream-studio-clean/templates/security/binary/yara-rules.yar.j2`.
+1. Read `<skill-dir>/templates/security/binary/yara-rules.yar.j2`.
 2. Fill variables from client profile: `data.pii_patterns`, `data.critical` terms, `data.sensitive` terms.
 3. Include hardcoded signature patterns for: hardcoded credentials, embedded URLs/IPs, known packer signatures.
 4. Write to `~/.dream-studio/security/binary/{client}/{target.name}/yara-rules.yar`.
 
 ### Step S3: Generate checksec Config
 
-1. Read `builds/dream-studio-clean/templates/security/binary/checksec-config.yaml.j2`.
+1. Read `<skill-dir>/templates/security/binary/checksec-config.yaml.j2`.
 2. Configure checks based on `target.platform`:
    - Linux: NX, PIE, RELRO, Stack Canaries, FORTIFY, RUNPATH
    - Windows: DEP, ASLR, CFG, SafeSEH, Authenticode
@@ -65,13 +65,13 @@ For each binary target:
 
 ### Step S4: Generate Analysis Script
 
-1. Read `builds/dream-studio-clean/templates/security/binary/analyze.sh.j2`.
+1. Read `<skill-dir>/templates/security/binary/analyze.sh.j2`.
 2. Render platform-appropriate commands.
 3. Write to `~/.dream-studio/security/binary/{client}/{target.name}/analyze.sh`.
 
 ### Step S5: Generate GitHub Actions Workflow
 
-1. Read `builds/dream-studio-clean/templates/security/github-actions/binary-scan.yml.j2`.
+1. Read `<skill-dir>/templates/security/github-actions/binary-scan.yml.j2`.
 2. Fill variables from all binary targets.
 3. Write to `~/.dream-studio/security/actions/{client}/binary-scan.yml`.
 
@@ -178,7 +178,7 @@ Run the header analysis script; it picks the format from the file's magic bytes,
 library for it, and writes `header-analysis.json` in exactly the shape ingest reads:
 
 ```bash
-py -3.12 templates/security/etl/header_analysis.py {binary_path} --output header-analysis.json
+py -3.12 <skill-dir>/templates/security/etl/header_analysis.py {binary_path} --output header-analysis.json
 ```
 
 Its exit status is the run record for this step:
@@ -272,7 +272,7 @@ Find `checksec.json`, `yara-matches.json`, `strings-findings.txt` and `header-an
 
 Run parse_binary.py:
 ```bash
-py -3.12 templates/security/etl/parse_binary.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json
+py -3.12 <skill-dir>/templates/security/etl/parse_binary.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json
 ```
 
 Each finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`,

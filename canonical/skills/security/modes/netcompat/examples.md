@@ -24,7 +24,7 @@ Extract from user input:
 
 #### Step R2: Render Semgrep Template
 
-1. Read `builds/dream-studio-clean/templates/security/semgrep-rules/netcompat.yaml.j2`.
+1. Read `<skill-dir>/templates/security/semgrep-rules/netcompat.yaml.j2`.
 2. Render Jinja2 template with client profile data:
    - `client.name` → rule ID prefix and messages
    - `network.proxy.type` → conditional blocks per proxy type

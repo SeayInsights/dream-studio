@@ -11,44 +11,44 @@ Extracted from SKILL.md to reduce context injection size.
 
 2. **Run parse_sarif.py**
    ```
-   py -3.12 templates/security/etl/parse_sarif.py --client {client}
+   py -3.12 <skill-dir>/templates/security/etl/parse_sarif.py --client {client}
    ```
    Reads all SARIF/JSON files from `scans/{client}/`. Normalizes across scanner outputs (Semgrep SARIF, Bandit JSON, TruffleHog JSON, pip-audit JSON). Deduplicates. Outputs normalized findings JSON to stdout.
 
 3. **Run score_findings.py**
    ```
-   py -3.12 templates/security/etl/parse_sarif.py --client {client} | \
-   py -3.12 templates/security/etl/score_findings.py --client {client}
+   py -3.12 <skill-dir>/templates/security/etl/parse_sarif.py --client {client} | \
+   py -3.12 <skill-dir>/templates/security/etl/score_findings.py --client {client}
    ```
    Reads normalized findings from stdin. Assigns CVSS scores from rule severity + CWE. Adds business impact score from client profile data classification. Calculates per-repo risk score. Outputs scored findings JSON to stdout.
 
 4. **Run map_compliance.py**
    ```
-   py -3.12 ... | py -3.12 templates/security/etl/map_compliance.py --client {client}
+   py -3.12 ... | py -3.12 <skill-dir>/templates/security/etl/map_compliance.py --client {client}
    ```
    Reads scored findings from stdin. Cross-references against compliance framework mapping YAMLs. Adds framework control IDs to each finding. Identifies gap controls (controls with no scan coverage). Outputs compliance-enriched JSON to stdout.
 
 5. **Run generate_mitigations.py**
    ```
-   py -3.12 ... | py -3.12 templates/security/etl/generate_mitigations.py --client {client}
+   py -3.12 ... | py -3.12 <skill-dir>/templates/security/etl/generate_mitigations.py --client {client}
    ```
    Reads compliance-enriched findings from stdin. Matches each finding to mitigation templates by rule ID, CWE, or OWASP category. Adds fix recommendations (code before/after, verification test, effort estimate). Outputs fully enriched JSON to stdout.
 
 6. **Run analyze_netcompat.py** (parallel with steps 3-5 if desired)
    ```
-   py -3.12 templates/security/etl/analyze_netcompat.py --client {client}
+   py -3.12 <skill-dir>/templates/security/etl/analyze_netcompat.py --client {client}
    ```
    Reads SARIF findings filtered to ZSC-* rules + client network profile. Calculates per-repo Zscaler compatibility score. Writes `netcompat.csv` directly to the datasets directory.
 
 7. **Run export_dataset.py**
    ```
-   py -3.12 ... | py -3.12 templates/security/etl/export_dataset.py --client {client}
+   py -3.12 ... | py -3.12 <skill-dir>/templates/security/etl/export_dataset.py --client {client}
    ```
    Reads fully enriched findings JSON from stdin. Exports all Power BI-ready CSVs. Calculates org risk score using weights from client profile. Writes `metadata.json` with summary statistics.
 
 ### Full pipeline command (chained)
 ```bash
-ETL="builds/dream-studio-clean/templates/security/etl"
+ETL="<skill-dir>/templates/security/etl"
 py -3.12 $ETL/parse_sarif.py --client {client} | \
 py -3.12 $ETL/score_findings.py --client {client} | \
 py -3.12 $ETL/map_compliance.py --client {client} | \
@@ -114,7 +114,7 @@ DASHBOARD REFRESHED: {client}
 
 ## Mode: `template`
 
-No `.pbit` file ships with this repo — only `templates/security/powerbi/dashboard-spec.md`,
+No `.pbit` file ships with this repo — only `<skill-dir>/templates/security/powerbi/dashboard-spec.md`,
 a markdown specification (data model, DAX measures, page layouts, M-query source
 configuration) that a human follows in Power BI Desktop to build the real `.pbit`.
 This mode hands off that spec plus the connection details needed to wire it to a
@@ -123,7 +123,7 @@ client's dataset; it does not produce a binary template itself.
 ### Orchestration Steps
 
 1. Check that the dataset directory exists: `~/.dream-studio/security/datasets/{client}/`
-2. Point the user at `templates/security/powerbi/dashboard-spec.md`.
+2. Point the user at `<skill-dir>/templates/security/powerbi/dashboard-spec.md`.
 3. Generate a connection README at `~/Downloads/enterprise-security-{client}-README.txt` containing:
    - Dataset directory path (absolute)
    - CSV file list with column descriptions
@@ -146,7 +146,7 @@ Document these relationships in the README:
 
 ```
 TEMPLATE SPEC HANDED OFF: {client}
-  Power BI spec:     templates/security/powerbi/dashboard-spec.md
+  Power BI spec:     <skill-dir>/templates/security/powerbi/dashboard-spec.md
   Connection README: ~/Downloads/enterprise-security-{client}-README.txt
   Dataset path:      ~/.dream-studio/security/datasets/{client}/
   Next step:         open Power BI Desktop, follow the spec, build the .pbit by hand

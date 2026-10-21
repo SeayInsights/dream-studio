@@ -29,7 +29,7 @@ This skill never modifies scan results or client code. It reads from upstream sk
 ## Modes
 - `generate` — Run the full ETL pipeline from scratch. Parses all scan results, scores, maps, mitigates, and exports the complete dataset.
 - `refresh` — Re-run ETL with latest scan data. Preserves trends history (appends to trends.csv instead of overwriting). Use after new scans are ingested via `scan:ingest`.
-- `template` — Hand off the Power BI dashboard spec (`templates/security/powerbi/dashboard-spec.md`) and a connection-info README showing the dataset path for this client. No `.pbit` file ships with this repo today; a human builds the actual `.pbit` in Power BI Desktop by following the spec.
+- `template` — Hand off the Power BI dashboard spec (`<skill-dir>/templates/security/powerbi/dashboard-spec.md`) and a connection-info README showing the dataset path for this client. No `.pbit` file ships with this repo today; a human builds the actual `.pbit` in Power BI Desktop by following the spec.
 
 ---
 
@@ -37,7 +37,7 @@ This skill never modifies scan results or client code. It reads from upstream sk
 See `docs/security-storage-layout.md`. See skill-specific paths in layout doc.
 
 ## Templates
-See `templates/security/README.md` for template registry.
+See `<skill-dir>/templates/security/README.md` for template registry.
 
 ## Client Profile
 See `docs/client-profile-schema.md`. Required fields vary by mode.
@@ -72,14 +72,14 @@ Before running `generate`, these must exist:
 ## Mode: `template`
 
 **This delivers a spec, not a binary template.** No `.pbit` file ships anywhere in
-this repo — only `templates/security/powerbi/dashboard-spec.md`, a markdown
+this repo — only `<skill-dir>/templates/security/powerbi/dashboard-spec.md`, a markdown
 specification of the dashboard's data model, DAX measures, page layouts, and M-query
 data source configuration. Building the real `.pbit` from that spec is a manual step
 in Power BI Desktop; this skill does not automate it.
 
 ### Steps
 1. Check that the dataset directory exists: `~/.dream-studio/security/datasets/{client}/`
-2. Point the user at `templates/security/powerbi/dashboard-spec.md` and the dataset path.
+2. Point the user at `<skill-dir>/templates/security/powerbi/dashboard-spec.md` and the dataset path.
 3. Generate a connection-info README summarizing the CSV files and how to wire the
    spec's parameters (`ClientName`, `Enterprise`, `DatasetPath`, `RulePrefix`) to
    this client's data.
