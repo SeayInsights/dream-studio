@@ -21,19 +21,25 @@ def consumer_service(
     *,
     legal_documents: bool = False,
     tags: tuple[str, ...] = (),
+    web_ui: bool = True,
+    stores_email: bool = True,
 ) -> Path:
     """A consumer-facing service: a web UI plus a schema that stores an email address.
 
-    ``legal_documents`` adds the terms of service and privacy policy the consumer rules
-    (pl-001, pl-002) look for. ``tags`` are release tags on the single commit.
+    Either signal alone makes the service a consumer one (``web_ui=False`` leaves only the
+    schema; ``stores_email=False`` leaves a schema with no personal data), so a test can say
+    which one it relies on. ``legal_documents`` adds the terms of service and privacy policy the
+    consumer rules (pl-001, pl-002) look for. ``tags`` are release tags on the single commit.
     """
+    column = "email text not null" if stores_email else "label text not null"
     files = {
-        "src/app/page.tsx": "export default function Home() { return null }\n",
         "supabase/migrations/001_users.sql": (
-            "create table users (id uuid primary key, email text not null);\n"
+            f"create table users (id uuid primary key, {column});\n"
         ),
         "README.md": "A small consumer service.\n",
     }
+    if web_ui:
+        files["src/app/page.tsx"] = "export default function Home() { return null }\n"
     if legal_documents:
         files["TERMS.md"] = "# Terms of Service\n"
         files["PRIVACY.md"] = "# Privacy Policy\n"

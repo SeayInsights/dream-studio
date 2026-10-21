@@ -252,6 +252,20 @@ class TestConsumerServiceLaunch:
         result = SkillDispatcher.launch(consumer_service(tmp_path / "svc"))
         assert result.service_type == "consumer"
 
+    def test_a_schema_that_stores_an_email_alone_makes_a_consumer_service(self, tmp_path):
+        project = consumer_service(tmp_path / "svc", web_ui=False)
+        assert SkillDispatcher.launch(project).service_type == "consumer"
+
+    def test_a_web_ui_alone_makes_a_consumer_service(self, tmp_path):
+        project = consumer_service(tmp_path / "svc", stores_email=False)
+        assert SkillDispatcher.launch(project).service_type == "consumer"
+
+    def test_neither_signal_is_not_a_consumer_service(self, tmp_path):
+        """The control for the two above: with no web UI and no personal data in the schema the
+        project is not inferred to be a consumer service, so they are not vacuous."""
+        project = consumer_service(tmp_path / "svc", web_ui=False, stores_email=False)
+        assert SkillDispatcher.launch(project).service_type != "consumer"
+
     def test_launch_consumer_service_is_blocked(self, tmp_path):
         result = SkillDispatcher.launch(consumer_service(tmp_path / "svc"))
         assert result.verdict == "LAUNCH_BLOCKED"

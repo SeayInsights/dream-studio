@@ -187,6 +187,12 @@ _REDIRECTED = {
         "    monkeypatch.setenv('CLAUDE_CONFIG_DIR', str(tmp_path))\n"
         "    claude_config_root()\n"
     ),
+    "a class-level usefixtures mark": (
+        "import pytest\nfrom pathlib import Path\n"
+        "@pytest.mark.usefixtures('isolated_home')\n"
+        "class TestX:\n"
+        "    def test_x(self):\n        Path.home()\n"
+    ),
     "a module-level autouse fixture": (
         "import pytest\nfrom pathlib import Path\n"
         "@pytest.fixture(autouse=True)\n"
@@ -283,6 +289,11 @@ def test_a_test_file_the_gate_cannot_parse_is_a_finding_not_a_pass(tmp_path):
     assert result["status"] == "fail"
     assert _kinds(result) == ["unreadable-test-file"]
     assert "NOT checked" in result["offenders"][0]["message"]
+
+
+def test_a_conftest_the_gate_cannot_parse_is_a_finding_too(tmp_path):
+    result = _run(tmp_path, "def (:\n", rel="tests/conftest.py")
+    assert _kinds(result) == ["unreadable-test-file"]
 
 
 def test_a_file_pytest_does_not_collect_may_be_unparseable(tmp_path):

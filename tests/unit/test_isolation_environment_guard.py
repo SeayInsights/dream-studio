@@ -122,3 +122,29 @@ def test_a_test_that_changes_home_or_the_config_root_is_failed_and_restored(tmp_
     assert "left the isolation environment changed" in out, out
     assert "HOME:" in out and "CLAUDE_CONFIG_DIR:" in out, out
     assert "test_after PASSED" in out, out
+
+
+_FIXTURE_LEAK = """
+import os
+
+import pytest
+
+
+@pytest.fixture
+def sloppy_home():
+    os.environ["DREAM_STUDIO_HOME"] = "C:/set/by/a/fixture"
+
+
+def test_uses_the_sloppy_fixture(sloppy_home):
+    assert os.environ["DREAM_STUDIO_HOME"] == "C:/set/by/a/fixture"
+
+
+def test_after():
+    assert os.environ["DREAM_STUDIO_HOME"] != "C:/set/by/a/fixture"
+"""
+
+
+def test_a_fixture_that_leaks_is_caught_because_the_snapshot_precedes_the_fixtures(tmp_path):
+    out = _session(tmp_path, _FIXTURE_LEAK)
+    assert "left the isolation environment changed" in out, out
+    assert "test_after PASSED" in out, out
