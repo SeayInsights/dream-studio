@@ -100,3 +100,25 @@ def test_monkeypatch_is_not_a_leak(tmp_path):
     out = _session(tmp_path, _CLEAN)
     assert "left the isolation environment changed" not in out, out
     assert "2 passed" in out, out
+
+
+_HOME_LEAK = """
+import os
+
+
+def test_changes_home_and_the_config_root():
+    os.environ["HOME"] = "C:/not/the/home"
+    os.environ["CLAUDE_CONFIG_DIR"] = "C:/not/the/identity"
+
+
+def test_after():
+    assert os.environ.get("HOME") != "C:/not/the/home"
+    assert os.environ.get("CLAUDE_CONFIG_DIR") != "C:/not/the/identity"
+"""
+
+
+def test_a_test_that_changes_home_or_the_config_root_is_failed_and_restored(tmp_path):
+    out = _session(tmp_path, _HOME_LEAK)
+    assert "left the isolation environment changed" in out, out
+    assert "HOME:" in out and "CLAUDE_CONFIG_DIR:" in out, out
+    assert "test_after PASSED" in out, out
