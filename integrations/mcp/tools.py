@@ -38,10 +38,41 @@ REPO_ROOT = code_root()
 
 
 @dataclass(frozen=True)
+class CallContext:
+    """What the SERVER binds to a call; a client has no way to name any of it.
+
+    A handler receives this as its one positional-only parameter and its client-supplied
+    arguments as keywords, and the keywords are exactly the properties of its advertised
+    ``input_schema`` -- `server._handle_tools_call` validates them against that schema (unknown
+    names refused) before the handler is reached. So the Dream Studio home a call reads or
+    writes is the one the server was started with, and the identity it is attributed to is the
+    one that authenticated: neither can arrive as an argument, because neither is a parameter
+    a client's arguments can fill. `tests/unit/integrations/test_mcp_tool_arguments_guard.py`
+    fails if a handler grows a parameter the schema does not advertise, or an
+    authority-selecting one that it does.
+    """
+
+    #: The home `ds mcp serve` was started with; None means the default resolution (the
+    #: environment, then the user's home), exactly as for the CLI.
+    dream_studio_home: Path | None
+    #: Who authenticated; None only for a direct/internal call that never did.
+    identity: Identity | None = None
+
+    @property
+    def identity_name(self) -> str:
+        if self.identity is None:
+            raise PermissionError("this tool is attributed to an identity and none authenticated")
+        return self.identity.name
+
+
+@dataclass(frozen=True)
 class Tool:
     name: str
     description: str
     input_schema: dict[str, Any]
+    #: ``handler(ctx: CallContext, /, **arguments)``: `ctx` is bound by the server, and the
+    #: keyword parameters are exactly the properties of `input_schema` (nothing else, and no
+    #: ``**kwargs``) -- a standing test enforces both.
     handler: Callable[..., Any]
     #: None (most tools below) means read-only: reachable by the root token or any
     #: authenticated named client, regardless of that client's own granted
@@ -66,35 +97,35 @@ class Tool:
         return schema
 
 
-def _project_list(*, status_filter: str = "active", dream_studio_home: Path | None = None) -> Any:
+def _project_list(ctx: CallContext, /, *, status_filter: str = "active") -> Any:
     from core.projects.queries import get_project_list
 
     return get_project_list(
-        status_filter=status_filter, source_root=REPO_ROOT, dream_studio_home=dream_studio_home
+        status_filter=status_filter, source_root=REPO_ROOT, dream_studio_home=ctx.dream_studio_home
     )
 
 
-def _project_state(*, dream_studio_home: Path | None = None) -> Any:
+def _project_state(ctx: CallContext, /) -> Any:
     from core.projects.queries import get_project_state
 
-    return get_project_state(source_root=REPO_ROOT, dream_studio_home=dream_studio_home)
+    return get_project_state(source_root=REPO_ROOT, dream_studio_home=ctx.dream_studio_home)
 
 
-def _project_status(*, project_id: str, dream_studio_home: Path | None = None) -> Any:
+def _project_status(ctx: CallContext, /, *, project_id: str) -> Any:
     from core.projects.queries import get_project_status
 
     return get_project_status(
-        project_id=project_id, source_root=REPO_ROOT, dream_studio_home=dream_studio_home
+        project_id=project_id, source_root=REPO_ROOT, dream_studio_home=ctx.dream_studio_home
     )
 
 
 def _project_create(
+    ctx: CallContext,
+    /,
     *,
     name: str,
-    identity: Identity,
     description: str = "",
     project_path: str | None = None,
-    dream_studio_home: Path | None = None,
 ) -> Any:
     from core.projects.mutations_register import register_project
 
@@ -103,24 +134,24 @@ def _project_create(
         description=description,
         project_path=Path(project_path) if project_path else None,
         source_root=REPO_ROOT,
-        dream_studio_home=dream_studio_home,
+        dream_studio_home=ctx.dream_studio_home,
     )
     # register_project does a bare INSERT, no CanonicalEventEnvelope/trace to extend
     # the way create_work_order/close_work_order have -- attribution lives only in
     # this response, the same "once, to the caller" shape ds_review_dispatch's
     # dispatched_by already uses for a function with no persisted trace of its own.
-    result["registered_by"] = identity.name
+    result["registered_by"] = ctx.identity_name
     return result
 
 
 def _milestone_create(
+    ctx: CallContext,
+    /,
     *,
     project_id: str,
     title: str,
-    identity: Identity,
-    description: str = "",
+    description: str,
     order_index: int = 0,
-    dream_studio_home: Path | None = None,
 ) -> Any:
     from core.milestones.mutations import create_milestone
 
@@ -130,16 +161,17 @@ def _milestone_create(
         description=description,
         order_index=order_index,
         source_root=REPO_ROOT,
-        dream_studio_home=dream_studio_home,
-        actor=identity.name,
+        dream_studio_home=ctx.dream_studio_home,
+        actor=ctx.identity_name,
     )
 
 
 def _work_order_list(
+    ctx: CallContext,
+    /,
     *,
     project_id: str | None = None,
     status_filter: str | None = None,
-    dream_studio_home: Path | None = None,
 ) -> Any:
     from core.work_orders.queries import list_work_orders
 
@@ -147,19 +179,19 @@ def _work_order_list(
         project_id=project_id,
         status_filter=status_filter,
         source_root=REPO_ROOT,
-        dream_studio_home=dream_studio_home,
+        dream_studio_home=ctx.dream_studio_home,
     )
 
 
-def _work_order_tasks(*, work_order_id: str, dream_studio_home: Path | None = None) -> Any:
+def _work_order_tasks(ctx: CallContext, /, *, work_order_id: str) -> Any:
     from core.work_orders.queries import list_tasks
 
     return list_tasks(
-        work_order_id=work_order_id, source_root=REPO_ROOT, dream_studio_home=dream_studio_home
+        work_order_id=work_order_id, source_root=REPO_ROOT, dream_studio_home=ctx.dream_studio_home
     )
 
 
-def _gate_check(*, work_order_id: str, dream_studio_home: Path | None = None) -> Any:
+def _gate_check(ctx: CallContext, /, *, work_order_id: str) -> Any:
     """The close-gate preview, in its NON-EXECUTING form only.
 
     Calls ``check_close_gates(run_checks=False)`` and nothing else. The executing form runs a
@@ -184,7 +216,7 @@ def _gate_check(*, work_order_id: str, dream_studio_home: Path | None = None) ->
     result = check_close_gates(
         work_order_id=work_order_id,
         source_root=REPO_ROOT,
-        dream_studio_home=dream_studio_home,
+        dream_studio_home=ctx.dream_studio_home,
         run_checks=False,
         read_planning_dir=False,
     )
@@ -209,40 +241,40 @@ def _require_work_order(work_order_id: str, db_path: Path) -> None:
         raise ValueError(f"no work order {work_order_id!r}")
 
 
-def _review_status(*, work_order_id: str, dream_studio_home: Path | None = None) -> Any:
+def _review_status(ctx: CallContext, /, *, work_order_id: str) -> Any:
     from core.installed_runtime import resolve_installed_runtime_paths
     from core.work_orders.review_answers import review_status
 
     paths = resolve_installed_runtime_paths(
-        source_root=REPO_ROOT, dream_studio_home=dream_studio_home
+        source_root=REPO_ROOT, dream_studio_home=ctx.dream_studio_home
     )
     _require_work_order(work_order_id, paths.sqlite_path)
     return review_status(work_order_id, db_path=paths.sqlite_path)
 
 
-def _review_findings(*, work_order_id: str, dream_studio_home: Path | None = None) -> Any:
+def _review_findings(ctx: CallContext, /, *, work_order_id: str) -> Any:
     from core.installed_runtime import resolve_installed_runtime_paths
     from core.work_orders.review_answers import open_findings
 
     paths = resolve_installed_runtime_paths(
-        source_root=REPO_ROOT, dream_studio_home=dream_studio_home
+        source_root=REPO_ROOT, dream_studio_home=ctx.dream_studio_home
     )
     _require_work_order(work_order_id, paths.sqlite_path)
     return {"open_findings": open_findings(work_order_id, db_path=paths.sqlite_path)}
 
 
 def _review_dispatch(
+    ctx: CallContext,
+    /,
     *,
     work_order_id: str,
-    identity: Identity,
     force_new_round: bool = False,
-    dream_studio_home: Path | None = None,
 ) -> Any:
     from core.installed_runtime import resolve_installed_runtime_paths
     from core.work_orders.review_answers import dispatch_review_round
 
     paths = resolve_installed_runtime_paths(
-        source_root=REPO_ROOT, dream_studio_home=dream_studio_home
+        source_root=REPO_ROOT, dream_studio_home=ctx.dream_studio_home
     )
     doc = dispatch_review_round(
         work_order_id,
@@ -255,38 +287,38 @@ def _review_dispatch(
     # established shape, not yet extended here). This is visible only in the response
     # handed back to whichever identity called this tool -- the same "once, to the
     # caller" reach every other value in this dict already has.
-    doc["dispatched_by"] = identity.name
+    doc["dispatched_by"] = ctx.identity_name
     return doc
 
 
 def _review_run(
+    ctx: CallContext,
+    /,
     *,
     work_order_id: str,
     command: str,
-    identity: Identity,
-    dream_studio_home: Path | None = None,
 ) -> Any:
     from core.installed_runtime import resolve_installed_runtime_paths
     from core.work_orders.review_answers import run_review_command
 
     paths = resolve_installed_runtime_paths(
-        source_root=REPO_ROOT, dream_studio_home=dream_studio_home
+        source_root=REPO_ROOT, dream_studio_home=ctx.dream_studio_home
     )
     result = run_review_command(work_order_id, command, db_path=paths.sqlite_path)
-    result["run_by"] = identity.name
+    result["run_by"] = ctx.identity_name
     return result
 
 
 def _review_record(
+    ctx: CallContext,
+    /,
     *,
     work_order_id: str,
     reviewer: str,
     credential: str,
     answers: list[dict[str, Any]],
-    identity: Identity,
-    dream_studio_home: Path | None = None,
 ) -> Any:
-    """The recording door. `identity` is the MCP caller's own identity (what
+    """The recording door. `ctx.identity` is the MCP caller's own identity (what
     `review:record` gates); `reviewer`/`credential` are a SEPARATE, narrower claim --
     which named reviewer this submission is FOR, proved by record_answers' own
     per-reviewer credential check. An MCP client holding review:record can call this
@@ -299,7 +331,7 @@ def _review_record(
     from core.work_orders.review_answers import record_answers
 
     paths = resolve_installed_runtime_paths(
-        source_root=REPO_ROOT, dream_studio_home=dream_studio_home
+        source_root=REPO_ROOT, dream_studio_home=ctx.dream_studio_home
     )
     result = record_answers(
         work_order_id,
@@ -309,18 +341,18 @@ def _review_record(
         project_root=REPO_ROOT,
         credential=credential,
     )
-    result["recorded_by"] = identity.name
+    result["recorded_by"] = ctx.identity_name
     return result
 
 
 def _work_order_start(
+    ctx: CallContext,
+    /,
     *,
     work_order_id: str,
-    identity: Identity,
     accept_no_brief: bool = False,
     in_sequence: bool = False,
     accept_structure: str | None = None,
-    dream_studio_home: Path | None = None,
 ) -> Any:
     """The other missing phase move: created -> in_progress. Without it, a work order
     made over MCP sat at 'created' forever -- ds_work_order_task_start moves a TASK,
@@ -337,20 +369,20 @@ def _work_order_start(
     return start_work_order(
         work_order_id=work_order_id,
         source_root=REPO_ROOT,
-        dream_studio_home=dream_studio_home,
+        dream_studio_home=ctx.dream_studio_home,
         accept_no_brief=accept_no_brief,
         in_sequence=in_sequence,
         accept_structure=accept_structure,
-        actor=identity.name,
+        actor=ctx.identity_name,
     )
 
 
 def _work_order_task_start(
+    ctx: CallContext,
+    /,
     *,
     work_order_id: str,
     task_id: str,
-    identity: Identity,
-    dream_studio_home: Path | None = None,
 ) -> Any:
     from core.work_orders.mutations import start_task
 
@@ -358,17 +390,17 @@ def _work_order_task_start(
         work_order_id=work_order_id,
         task_id=task_id,
         source_root=REPO_ROOT,
-        dream_studio_home=dream_studio_home,
-        actor=identity.name,
+        dream_studio_home=ctx.dream_studio_home,
+        actor=ctx.identity_name,
     )
 
 
 def _work_order_task_done(
+    ctx: CallContext,
+    /,
     *,
     work_order_id: str,
     task_id: str,
-    identity: Identity,
-    dream_studio_home: Path | None = None,
 ) -> Any:
     from core.work_orders.mutations import mark_task_done
 
@@ -376,23 +408,23 @@ def _work_order_task_done(
         work_order_id=work_order_id,
         task_id=task_id,
         source_root=REPO_ROOT,
-        dream_studio_home=dream_studio_home,
-        actor=identity.name,
+        dream_studio_home=ctx.dream_studio_home,
+        actor=ctx.identity_name,
     )
 
 
 def _work_order_create(
+    ctx: CallContext,
+    /,
     *,
     project_id: str,
     milestone_id: str,
     title: str,
     description: str,
-    identity: Identity,
     work_order_type: str | None = None,
     priority: str | None = None,
     originating_symptom: str | None = None,
     module_boundary: str | None = None,
-    dream_studio_home: Path | None = None,
 ) -> Any:
     from core.work_orders.mutations import DEFAULT_WORK_ORDER_PRIORITY, create_work_order
 
@@ -406,21 +438,21 @@ def _work_order_create(
         originating_symptom=originating_symptom,
         module_boundary=module_boundary,
         source_root=REPO_ROOT,
-        dream_studio_home=dream_studio_home,
-        actor=identity.name,
+        dream_studio_home=ctx.dream_studio_home,
+        actor=ctx.identity_name,
     )
 
 
 def _work_order_add_task(
+    ctx: CallContext,
+    /,
     *,
     work_order_id: str,
     title: str,
-    identity: Identity,
     description: str = "",
     acceptance_criteria: str | None = None,
     why: str | None = None,
     project_id: str | None = None,
-    dream_studio_home: Path | None = None,
 ) -> Any:
     """The missing half of ds_work_order_create: a work order created over MCP has no
     tasks, task_start is what moves created -> in_progress, and nothing else can seed
@@ -438,16 +470,16 @@ def _work_order_add_task(
         why=why,
         project_id=project_id,
         source_root=REPO_ROOT,
-        dream_studio_home=dream_studio_home,
-        actor=identity.name,
+        dream_studio_home=ctx.dream_studio_home,
+        actor=ctx.identity_name,
     )
 
 
 def _work_order_close(
+    ctx: CallContext,
+    /,
     *,
     work_order_id: str,
-    identity: Identity,
-    dream_studio_home: Path | None = None,
 ) -> Any:
     """Never exposes force or skip_verify -- both bypass this work order's own
     close gates, and there is no watched terminal on the other end of an MCP call
@@ -462,18 +494,18 @@ def _work_order_close(
         force=False,
         skip_verify=False,
         source_root=REPO_ROOT,
-        dream_studio_home=dream_studio_home,
-        actor=identity.name,
+        dream_studio_home=ctx.dream_studio_home,
+        actor=ctx.identity_name,
     )
 
 
 def _work_order_advance(
+    ctx: CallContext,
+    /,
     *,
     work_order_id: str,
     to: str,
-    identity: Identity,
     note: str | None = None,
-    dream_studio_home: Path | None = None,
 ) -> Any:
     """The other half of ds_work_order_close: `to="pushed"`/`"ci_issues"` are the only
     phases close() accepts from, and nothing upstream of this tool could ever move a
@@ -487,38 +519,41 @@ def _work_order_advance(
         to=to,
         note=note,
         source_root=REPO_ROOT,
-        dream_studio_home=dream_studio_home,
-        actor=identity.name,
+        dream_studio_home=ctx.dream_studio_home,
+        actor=ctx.identity_name,
     )
 
 
-def _skill_list(*, pack_filter: str | None = None, dream_studio_home: Path | None = None) -> Any:
+def _skill_list(ctx: CallContext, /, *, pack_filter: str | None = None) -> Any:
     from core.skills.queries import list_skills
 
     return list_skills(
-        pack_filter=pack_filter, source_root=REPO_ROOT, dream_studio_home=dream_studio_home
+        pack_filter=pack_filter, source_root=REPO_ROOT, dream_studio_home=ctx.dream_studio_home
     )
 
 
-def _doctor(*, dream_studio_home: Path | None = None) -> Any:
+def _doctor(ctx: CallContext, /) -> Any:
     from core.health.doctor_main import run_doctor_checks
 
-    return run_doctor_checks(source_root=REPO_ROOT, dream_studio_home=dream_studio_home, fix=False)
+    return run_doctor_checks(
+        source_root=REPO_ROOT, dream_studio_home=ctx.dream_studio_home, fix=False
+    )
 
 
 def _memory_query(
+    ctx: CallContext,
+    /,
     *,
     text: str | None = None,
     category: str | None = None,
     tags: list[str] | None = None,
     limit: int = 10,
-    dream_studio_home: Path | None = None,
 ) -> Any:
     from core.config.paths import home_dir
     from core.memory.store_shared import MemoryQuery
     from core.memory.store_main import MemoryStore
 
-    home = dream_studio_home or home_dir()
+    home = ctx.dream_studio_home or home_dir()
     db_path = home / "state" / "studio.db"
     store = MemoryStore(db_path=str(db_path))
     query = MemoryQuery(text=text, category=category, tags=tags, limit=limit)
@@ -546,6 +581,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "status_filter": {
                     "type": "string",
@@ -561,7 +597,7 @@ TOOLS: list[Tool] = [
             "Single-query snapshot of where work stands: the active project, the next "
             "open work order, which gates are open, and recorded gotchas. Read-only."
         ),
-        input_schema={"type": "object", "properties": {}},
+        input_schema={"type": "object", "additionalProperties": False, "properties": {}},
         handler=_project_state,
     ),
     Tool(
@@ -569,6 +605,7 @@ TOOLS: list[Tool] = [
         description="Detailed status for one project by id. Read-only.",
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {"project_id": {"type": "string"}},
             "required": ["project_id"],
         },
@@ -583,6 +620,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "name": {"type": "string"},
                 "description": {"type": "string"},
@@ -613,6 +651,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "project_id": {"type": "string"},
                 "title": {"type": "string"},
@@ -632,6 +671,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "project_id": {"type": "string"},
                 "status_filter": {"type": "string"},
@@ -644,6 +684,7 @@ TOOLS: list[Tool] = [
         description="List the tasks under one work order by id. Read-only.",
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {"work_order_id": {"type": "string"}},
             "required": ["work_order_id"],
         },
@@ -671,6 +712,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {"work_order_id": {"type": "string"}},
             "required": ["work_order_id"],
         },
@@ -694,6 +736,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "work_order_id": {"type": "string"},
                 "accept_no_brief": {
@@ -734,6 +777,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "work_order_id": {"type": "string"},
                 "task_id": {"type": "string"},
@@ -751,6 +795,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "work_order_id": {"type": "string"},
                 "task_id": {"type": "string"},
@@ -773,6 +818,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "project_id": {"type": "string"},
                 "milestone_id": {"type": "string"},
@@ -820,6 +866,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "work_order_id": {"type": "string"},
                 "title": {"type": "string"},
@@ -855,6 +902,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {"work_order_id": {"type": "string"}},
             "required": ["work_order_id"],
         },
@@ -875,6 +923,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "work_order_id": {"type": "string"},
                 "to": {"type": "string", "enum": ["in_review", "pushed", "ci_issues"]},
@@ -896,6 +945,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {"work_order_id": {"type": "string"}},
             "required": ["work_order_id"],
         },
@@ -906,6 +956,7 @@ TOOLS: list[Tool] = [
         description="Open review findings for a work order. Read-only.",
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {"work_order_id": {"type": "string"}},
             "required": ["work_order_id"],
         },
@@ -939,6 +990,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "work_order_id": {"type": "string"},
                 "force_new_round": {
@@ -969,6 +1021,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "work_order_id": {"type": "string"},
                 "command": {"type": "string"},
@@ -995,6 +1048,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "work_order_id": {"type": "string"},
                 "reviewer": {"type": "string"},
@@ -1006,6 +1060,7 @@ TOOLS: list[Tool] = [
                     "type": "array",
                     "items": {
                         "type": "object",
+                        "additionalProperties": False,
                         "properties": {
                             "lane": {"type": "string"},
                             "verdict": {
@@ -1014,11 +1069,27 @@ TOOLS: list[Tool] = [
                             },
                             "reproduction": {
                                 "type": "object",
+                                "additionalProperties": False,
                                 "properties": {
                                     "command": {"type": "string"},
                                     "exit_code": {"type": "integer"},
                                 },
                             },
+                            # The four method fields below are read by record_answers'
+                            # lane-method checks (_method_gaps) and were never advertised;
+                            # with the nested object closed they must be, or a lane that
+                            # needs one could not submit it.
+                            "counterfactual": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "command": {"type": "string"},
+                                    "exit_code": {"type": "integer"},
+                                },
+                            },
+                            "paired_sites": {"type": "array", "items": {"type": "string"}},
+                            "docs_consulted": {"type": "array", "items": {"type": "string"}},
+                            "citations_verified": {"type": "array", "items": {"type": "string"}},
                             "evidence": {"type": "string"},
                             "why": {"type": "string"},
                             "check": {"type": "string"},
@@ -1046,7 +1117,11 @@ TOOLS: list[Tool] = [
     Tool(
         name="ds_skill_list",
         description="List available skill packs and modes, optionally filtered by pack. Read-only.",
-        input_schema={"type": "object", "properties": {"pack_filter": {"type": "string"}}},
+        input_schema={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {"pack_filter": {"type": "string"}},
+        },
         handler=_skill_list,
     ),
     Tool(
@@ -1055,7 +1130,7 @@ TOOLS: list[Tool] = [
             "Health check: skills, agents, hooks, and routing status for the Claude "
             "Code integration plane. Read-only (never runs with --fix)."
         ),
-        input_schema={"type": "object", "properties": {}},
+        input_schema={"type": "object", "additionalProperties": False, "properties": {}},
         handler=_doctor,
     ),
     Tool(
@@ -1066,6 +1141,7 @@ TOOLS: list[Tool] = [
         ),
         input_schema={
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "text": {"type": "string"},
                 "category": {"type": "string"},

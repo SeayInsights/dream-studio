@@ -1229,7 +1229,8 @@ rules:
     enforced_by:
       - tests/unit/test_graded_range_includes_own_commits.py::test_a_range_missing_its_own_commits_fails_loudly
       - tests/unit/test_graded_range_includes_own_commits.py::test_a_range_with_its_own_commits_reports_ownership
-      - tests/unit/test_delivery_boundary.py::test_the_live_attribution_does_not_carry_a_standing_neighbour_caveat
+      - tests/unit/test_delivery_boundary.py::test_a_neighbour_commit_that_predates_the_range_is_not_a_standing_caveat
+      - tests/unit/test_delivery_boundary.py::test_a_neighbour_commit_that_could_be_in_the_range_still_raises_the_caveat
     note: >
       Exclusion is one-sided: a commit goes only when ANOTHER work order recorded it, and
       this work order's own record is the only defence. So an empty or out-of-range record
@@ -1493,3 +1494,29 @@ rules:
       directory. And the readers the preview calls open the authority mode=rw by default;
       read_only_authority() forces them read-only for the preview, so a write through them
       fails instead of merely not happening today.
+  - id: an-mcp-client-never-chooses-the-authority
+    statement: >
+      The MCP server uses the Dream Studio home it was started with and no other: no tool
+      argument selects a home, a root, a database, a directory or an identity, and an
+      argument the advertised input schema does not name, at any depth, is refused as
+      invalid params before any handler runs.
+    source: integrations/mcp/server.py
+    enforced_by:
+      - tests/unit/integrations/test_mcp_tool_arguments_guard.py::test_no_tool_exposes_an_authority_selecting_argument
+      - tests/unit/integrations/test_mcp_tool_arguments_guard.py::test_the_checker_catches_a_tool_that_breaks_the_rule
+      - tests/unit/integrations/test_mcp_home_is_the_servers.py::test_every_tool_refuses_a_client_supplied_home_and_changes_nothing
+      - tests/unit/integrations/test_mcp_home_is_the_servers.py::test_a_mutating_tool_cannot_write_to_another_home
+      - tests/unit/integrations/test_mcp_home_is_the_servers.py::test_a_call_outside_the_advertised_schema_is_invalid_params_and_changes_nothing
+      - tests/unit/integrations/test_mcp_home_is_the_servers.py::test_a_handler_is_never_reached_with_an_argument_the_schema_does_not_name
+    note: >
+      Every handler took dream_studio_home as a parameter and tools/call built
+      {"dream_studio_home": <server's home>, **arguments}, so a client's argument of that
+      name replaced the binding. A read-only client could read another home on the server's
+      disk through every read tool, and a client holding a mutating capability could write
+      to one (#903). The capability model says what a client may do, never which authority
+      it does it against. The home now arrives as a CallContext the server builds, passed
+      positionally; a handler's keywords are exactly its schema's properties; and the schema,
+      closed at every level, is enforced before the handler. The guard fails on a new tool
+      that names an authority-selecting or unreviewed path-shaped argument, takes **kwargs or
+      a parameter its schema does not advertise, or leaves an object open, and its own
+      checker is run over deliberately bad tools so it cannot stop checking unnoticed.
