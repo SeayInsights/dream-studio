@@ -144,6 +144,40 @@ def _work_order_tasks(*, work_order_id: str, dream_studio_home: Path | None = No
     )
 
 
+def _gate_check(*, work_order_id: str, dream_studio_home: Path | None = None) -> Any:
+    """The close-gate preview, in its NON-EXECUTING form only.
+
+    Calls ``check_close_gates(run_checks=False)`` and nothing else. The executing form runs a
+    work order's TEST-CHECKs as subprocesses, sends its API-CHECKs to the projections app and
+    writes events, so it is never reachable from a tool with no capability -- and there is no
+    tool here that runs it. A gate part that needed execution comes back as ``not_run``,
+    distinct from ``pass`` and ``fail``.
+
+    ``read_planning_dir=False``: seven gates read ``.planning/work-orders/<id>/`` on disk
+    (``spec_approved``, ``design_critique``, ``game_validate``, ``anti_slop_passed``,
+    ``independent_review_passed``, and the on-disk fallback of the artifact gates). The CLI
+    reads its working directory's ``.planning``; this server has no project directory, and
+    pointing it at the code root or at wherever ``ds mcp serve`` was launched would report
+    "not found" -- a FAIL -- for work orders that pass with the right directory. So those
+    gates report ``not_run`` instead. The project's recorded path is deliberately not used:
+    ``project:create`` lets a client record any path, and reading one chosen by a client
+    would make the preview a file-existence oracle for the server's disk. An id that names
+    no work order is refused (by the database lookup, before any path is built from it).
+    """
+    from core.work_orders.close_main import check_close_gates
+
+    result = check_close_gates(
+        work_order_id=work_order_id,
+        source_root=REPO_ROOT,
+        dream_studio_home=dream_studio_home,
+        run_checks=False,
+        read_planning_dir=False,
+    )
+    if not result.get("ok"):
+        raise ValueError(str(result.get("error") or f"no work order {work_order_id!r}"))
+    return result
+
+
 def _require_work_order(work_order_id: str, db_path: Path) -> None:
     """Raise if `work_order_id` names no work order at all.
 
@@ -599,6 +633,33 @@ TOOLS: list[Tool] = [
             "required": ["work_order_id"],
         },
         handler=_work_order_tasks,
+    ),
+    Tool(
+        name="ds_gate_check",
+        description=(
+            "Preview a work order's close gates WITHOUT running anything. Read-only: starts "
+            "no subprocess, sends no request, writes no event, opens the authority read-only "
+            "and evaluates no authored query. Each gate comes back as pass, fail or not_run. "
+            "not_run, with the reason, is a gate part that was not evaluated: any "
+            "SQL-CHECK, TEST-CHECK or API-CHECK acceptance criterion, the git comparison "
+            "behind a stale-artifact check, and every gate that reads a .planning file from "
+            "disk (spec_approved, design_critique, game_validate, anti_slop_passed, "
+            "independent_review_passed, or an artifact absent from the authority) because "
+            "this server has no project directory to read it from. It is never reported "
+            "as passed, and never as failed for a file that could not be looked for. "
+            "overall is fail if "
+            "anything objects, else not_run if anything went unevaluated, else pass; "
+            "gates_pass is true only for pass. This is NOT a closability verdict: closing "
+            "also enforces tasks_done, the originating-symptom re-run, the default-on "
+            "independent_review, lane_review, dashboard_truth and a green main, which this "
+            "preview does not evaluate. Running the checks is a CLI-only operation."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {"work_order_id": {"type": "string"}},
+            "required": ["work_order_id"],
+        },
+        handler=_gate_check,
     ),
     Tool(
         name="ds_work_order_start",

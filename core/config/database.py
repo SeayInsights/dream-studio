@@ -15,6 +15,7 @@ import logging
 import threading
 import atexit
 from contextlib import contextmanager
+from contextvars import ContextVar
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,29 @@ def _default_db_path() -> Path:
     return home_dir() / "state" / "studio.db"
 
 
+#: While True, ``connect_existing`` opens ``mode=ro`` whatever its caller asked for. A
+#: ContextVar rather than a patched function or a module flag, so it is scoped to the calling
+#: thread or task and cannot leak into a concurrent request.
+_read_only_authority: ContextVar[bool] = ContextVar("read_only_authority", default=False)
+
+
+@contextmanager
+def read_only_authority():
+    """Inside this scope every ``connect_existing`` is read-only, so a reader that only means
+    to SELECT is unable to do anything else.
+
+    The non-executing gate preview calls readers that open the authority ``mode=rw`` by
+    default (artifact, runtime-state and carry-over reads). They only SELECT, but "only
+    SELECTs today" is a property of their code, not of the handle. Under this scope it is a
+    property of the handle: a write through any of them fails with "readonly database".
+    """
+    token = _read_only_authority.set(True)
+    try:
+        yield
+    finally:
+        _read_only_authority.reset(token)
+
+
 def connect_existing(
     db_path: str | Path, *, read_only: bool = False, timeout: float = 30.0
 ) -> sqlite3.Connection:
@@ -43,7 +67,7 @@ def connect_existing(
     so a missing file raises sqlite3.OperationalError ("unable to open database file")
     for the caller's existing sqlite3.Error handling instead.
     """
-    mode = "ro" if read_only else "rw"
+    mode = "ro" if (read_only or _read_only_authority.get()) else "rw"
     return sqlite3.connect(
         f"{Path(db_path).resolve().as_uri()}?mode={mode}", uri=True, timeout=timeout
     )
