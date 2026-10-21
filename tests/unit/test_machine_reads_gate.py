@@ -54,6 +54,14 @@ _READS = {
         "import os\ndef test_x():\n    os.path.expanduser('~/.dream-studio')\n",
         "home-read",
     ),
+    "expanduser of a computed path": (
+        "import os\ndef test_x(where):\n    os.path.expanduser(where)\n",
+        "home-read",
+    ),
+    "Path.expanduser of a computed path": (
+        "from pathlib import Path\ndef test_x(where):\n    Path(where).expanduser()\n",
+        "home-read",
+    ),
     "Path.expanduser": (
         "from pathlib import Path\ndef test_x():\n    Path('~/x').expanduser()\n",
         "home-read",
