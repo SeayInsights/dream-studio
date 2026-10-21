@@ -287,14 +287,6 @@ def _run(parser, args, source_root: Path, home: Path | None) -> int:
         if lost:
             print(json.dumps({"ok": False, "error": lost}, indent=2), file=sys.stderr)
             return 1
-    if getattr(args, "manifest_error", None):
-        # The parser built without --type's choices because the pack manifest does not load
-        # (see work_order_dispatch._declared_type_choices); this command needs the types.
-        print(
-            f"error: {args.manifest_error} (run `ds doctor` for the manifest check)",
-            file=sys.stderr,
-        )
-        return 1
     try:
         # System-level flat commands
         if args.command in system.SYSTEM_COMMANDS:
