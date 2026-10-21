@@ -65,11 +65,10 @@ def test_adapter_config_projection_refuses_unknown_adapter(tmp_path: Path) -> No
 
 def test_adapter_config_projection_uses_temp_db_not_live_db(tmp_path: Path) -> None:
     db_path = _db(tmp_path)
-    live_db = Path.home() / ".dream-studio" / "state" / "studio.db"
     with _connect(db_path) as conn:
         register_default_adapter_authority_profiles(conn)
         report = adapter_config_projection_report(conn)
 
     assert report["adapter_count"] == 8
     assert db_path.is_file()
-    assert db_path != live_db
+    assert db_path.is_relative_to(tmp_path)

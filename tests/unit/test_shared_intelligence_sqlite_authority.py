@@ -33,9 +33,8 @@ def test_migration_038_creates_shared_intelligence_tables(tmp_path: Path) -> Non
 
 def test_shared_intelligence_tests_use_temp_db_not_live_db(tmp_path: Path) -> None:
     db_path = _db(tmp_path)
-    live_db = Path.home() / ".dream-studio" / "state" / "studio.db"
     with _connect(db_path) as conn:
         require_shared_intelligence_tables(conn)
 
     assert db_path.is_file()
-    assert db_path != live_db
+    assert db_path.is_relative_to(tmp_path)

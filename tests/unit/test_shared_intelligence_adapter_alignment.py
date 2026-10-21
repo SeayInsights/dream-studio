@@ -79,9 +79,8 @@ def test_adapter_projection_policy_forbids_config_writes_without_future_approval
 
 def test_adapter_alignment_uses_temp_db_not_live_db(tmp_path: Path) -> None:
     db_path = _db(tmp_path)
-    live_db = Path.home() / ".dream-studio" / "state" / "studio.db"
     with _connect(db_path) as conn:
         register_default_adapter_authority_profiles(conn)
 
     assert db_path.is_file()
-    assert db_path != live_db
+    assert db_path.is_relative_to(tmp_path)

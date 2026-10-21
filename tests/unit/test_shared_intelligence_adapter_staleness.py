@@ -105,7 +105,6 @@ def test_adapter_staleness_detects_aligned_stale_and_missing_configs(
 
 def test_adapter_staleness_empty_state_and_temp_db_boundary(tmp_path: Path) -> None:
     db_path = _db(tmp_path)
-    live_db = Path.home() / ".dream-studio" / "state" / "studio.db"
     with _connect(db_path) as conn:
         report = adapter_staleness_report(conn, config_root=tmp_path / "configs")
 
@@ -113,7 +112,7 @@ def test_adapter_staleness_empty_state_and_temp_db_boundary(tmp_path: Path) -> N
     assert report["adapter_count"] == 0
     assert report["empty_state"] == "No adapter projections are registered for staleness detection."
     assert db_path.is_file()
-    assert db_path != live_db
+    assert db_path.is_relative_to(tmp_path)
 
 
 def test_adapter_staleness_validator_rejects_repair_execution() -> None:

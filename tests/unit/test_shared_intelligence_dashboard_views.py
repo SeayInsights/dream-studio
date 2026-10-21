@@ -21,7 +21,6 @@ def _db(tmp_path: Path) -> Path:
 
 def test_learning_hardening_dashboard_view_empty_state_is_non_authoritative(tmp_path: Path) -> None:
     db_path = _db(tmp_path)
-    live_db = Path.home() / ".dream-studio" / "state" / "studio.db"
     with _connect(db_path) as conn:
         view = learning_hardening_dashboard_view(conn, project_id="missing")
 
@@ -31,7 +30,7 @@ def test_learning_hardening_dashboard_view_empty_state_is_non_authoritative(tmp_
         "No learning or hardening attention items are pending."
     )
     assert db_path.is_file()
-    assert db_path != live_db
+    assert db_path.is_relative_to(tmp_path)
 
 
 def test_learning_hardening_dashboard_validator_rejects_authority_drift(tmp_path: Path) -> None:

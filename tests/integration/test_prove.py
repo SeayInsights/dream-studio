@@ -5,23 +5,11 @@ authority DB.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
-import sqlite3
 import pathlib
-from pathlib import Path
 
 from interfaces.cli.commands.prove import prove_main
-
-_LIVE_DB = Path.home() / ".dream-studio" / "state" / "studio.db"
-
-
-def _live_fingerprint() -> tuple[bool, str | None, int | None]:
-    if not _LIVE_DB.exists():
-        return (False, None, None)
-    data = _LIVE_DB.read_bytes()
-    return (True, hashlib.sha256(data).hexdigest(), len(data))
 
 
 def test_prove_all_four_claims_pass(capsys):
