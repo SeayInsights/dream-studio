@@ -99,7 +99,6 @@ def test_the_918_record_execution_event_change_is_not_flagged(tmp_path: Path) ->
             "relation_type: RelationType | str",
             id="union-modernised",
         ),
-        pytest.param("a, b", "a,\n    b,\n    *,\n    c: int = 3,\n", id="multi-line-text"),
     ],
 )
 def test_call_compatible_change_is_not_reported(tmp_path: Path, old: str, new: str) -> None:

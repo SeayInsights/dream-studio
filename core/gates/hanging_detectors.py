@@ -444,7 +444,10 @@ def _parse_params(param_str: str) -> list[_Param]:
 
     try:
         tree = ast.parse("def _f(" + param_str + "):\n    pass\n")
-    except (SyntaxError, ValueError, RecursionError) as exc:
+    except (SyntaxError, ValueError, RecursionError, MemoryError) as exc:
+        # MemoryError is real: ast.parse raises it ("Parser stack overflowed") for a
+        # pathologically nested line, 50,000 `not` operators for instance, rather than
+        # the RecursionError one would expect.
         raise ValueError(f"not a Python parameter list: {param_str!r}") from exc
     a = tree.body[0].args  # type: ignore[attr-defined]
     positional = [*a.posonlyargs, *a.args]
@@ -539,19 +542,127 @@ def _SETATTR_TARGET_RE(name: str):
     return re.compile(pattern)
 
 
+# A cheap textual pre-filter: only a file naming one of these is worth an AST parse.
+_INTROSPECTION_HINT_RE = re.compile(
+    r"signature|getfullargspec|getargspec|getcallargs|from_callable"
+    r"|__code__|__defaults__|__kwdefaults__"
+)
+# Calls that read a callable's parameters, and attributes that expose them.
+_INTROSPECTION_CALLS = frozenset(
+    {"signature", "getfullargspec", "getargspec", "getcallargs", "from_callable"}
+)
+_INTROSPECTION_ATTRS = frozenset({"__code__", "__signature__", "__defaults__", "__kwdefaults__"})
+
+
+def _introspection_text_re(name: str):
+    """Textual stand-in for `_inspects_symbol` when the file is not parseable Python: an
+    introspection call whose arguments name the function, or an introspection attribute
+    read off it. One level of nested parentheses is allowed in the arguments."""
+    n = re.escape(name)
+    calls = "|".join(sorted(_INTROSPECTION_CALLS))
+    attrs = "|".join(sorted(_INTROSPECTION_ATTRS))
+    arg = r"(?:[^()]|\([^()]*\))*?"
+    return re.compile(rf"(?:{calls})\s*\({arg}(?<!\w){n}\b|(?<!\w){n}\s*\.\s*(?:{attrs})\b")
+
+
+def _inspects_symbol(text: str, name: str) -> bool:
+    """Does this file READ THE PARAMETERS of ``name``?
+
+    ``inspect.signature(fn).parameters``, ``getfullargspec(fn).args``,
+    ``fn.__code__.co_argcount`` / ``co_varnames``, ``fn.__signature__``,
+    ``fn.__defaults__``: a consumer of the OLD SHAPE. A call-compatible change keeps every
+    call valid and still changes every one of these answers, so such a file breaks exactly
+    as a mock does. tests/unit/test_workflow_runner.py asserts
+    ``list(sig.parameters) == ["self", "node_id", "ynode"]``.
+
+    The introspection must be OF THIS FUNCTION. "The file contains ``inspect.signature``
+    anywhere" would report every test that ever inspected anything, so the AST is asked
+    whether the call's arguments (or the attribute's owner) mention the name -- as a name,
+    an attribute (``Cls.name``), a string (``getattr(mod, "name")``), or a variable bound
+    from one of those by a plain assignment or loop. A file that is not parseable Python
+    gets the textual equivalent.
+
+    NOT DETECTED: a computed name (``getattr(Cls, method)``), and a stub or fake handed in
+    without the name appearing in the file at all.
+    """
+    if name not in text or not _INTROSPECTION_HINT_RE.search(text):
+        return False
+    import ast  # function-local: see _parse_params
+
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError, RecursionError, MemoryError):
+        return bool(_introspection_text_re(name).search(text))
+
+    names = {name}
+
+    def mentions(node: Any) -> bool:
+        for n in ast.walk(node):
+            if isinstance(n, ast.Name) and n.id in names:
+                return True
+            if isinstance(n, ast.Attribute) and n.attr in names:
+                return True
+            if isinstance(n, ast.Constant) and isinstance(n.value, str):
+                if n.value in names or any(n.value.endswith("." + x) for x in names):
+                    return True
+        return False
+
+    # Variables bound from the function (one assignment hop, repeated to a fixed point).
+    for _ in range(3):
+        before = len(names)
+        for node in ast.walk(tree):
+            source, targets = None, []
+            if isinstance(node, ast.Assign):
+                source, targets = node.value, node.targets
+            elif isinstance(node, (ast.AnnAssign, ast.NamedExpr)) and node.value is not None:
+                source, targets = node.value, [node.target]
+            elif isinstance(node, (ast.For, ast.comprehension)):
+                source, targets = node.iter, [node.target]
+            if isinstance(source, ast.Call) and mentions(source.func):
+                continue  # `result = do_work(1)` binds what the function RETURNS
+            if source is not None and mentions(source):
+                for target in targets:
+                    names.update(t.id for t in ast.walk(target) if isinstance(t, ast.Name))
+        if len(names) == before:
+            break
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            called = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+            if called in _INTROSPECTION_CALLS and any(
+                mentions(a) for a in [*node.args, *(k.value for k in node.keywords)]
+            ):
+                return True
+        elif isinstance(node, ast.Attribute):
+            if node.attr in _INTROSPECTION_ATTRS and mentions(node.value):
+                return True
+    return False
+
+
+def _string_reference(text: str, name: str) -> bool:
+    """A reference to ``name`` that `_code_only` blanks because it lives in a string: a
+    ``setattr`` / ``delattr`` / ``patch.object`` target, or introspection by a string name.
+    Reported for ANY signature change, compatible or not: a string patch target is a
+    dependency whichever way the signature moved."""
+    return bool(_SETATTR_TARGET_RE(name).search(text)) or _inspects_symbol(text, name)
+
+
 def _mocks_symbol(text: str, name: str, *, referenced_in_code: bool) -> bool:
-    """Does this file MOCK ``name`` -- the one way a call-compatible change still breaks it?
+    """Does this file MOCK or INTROSPECT ``name`` -- the ways a call-compatible change
+    still breaks it?
 
     #353 was a compatible widening: ``_write_handoff_packet_to_db(session_id, cwd)``
     gained ``handoff_path=None``, and what broke was a test asserting the OLD CALL SHAPE
     through a mock. A default parameter protects a real call and nothing that records
-    one. So a compatible change is reported for a file that names the function as a
-    patch target, hands its name to ``setattr`` / ``patch.object``, or references it in
-    code alongside mock call assertions -- and for no other file.
+    one or reads the parameters. So a compatible change is reported for a file that names
+    the function as a patch target, hands its name to ``setattr`` / ``patch.object``,
+    introspects its signature (`_inspects_symbol`), or references it in code alongside mock
+    call assertions -- and for no other file.
     """
     if _PATCH_TARGET_RE(name).search(text):
         return True
-    if _SETATTR_TARGET_RE(name).search(text):
+    if _string_reference(text, name):
         return True
     return referenced_in_code and bool(_MOCK_ASSERTION_RE.search(_code_only(text)))
 
@@ -686,6 +797,43 @@ def _aliased_to_a_different_name(text: str, name: str) -> bool:
     return bool(m) and m.group(1) != name
 
 
+def _classify_pair(old_item: tuple[str, bool], new_item: tuple[str, bool]):
+    """One removed/added def pair -> (old names, new names, mock_only), or None."""
+    (old_text, old_py), (new_text, new_py) = old_item, new_item
+    old_names, new_names = _param_names(old_text), _param_names(new_text)
+    verdict = _signature_compatibility(old_text, new_text) if old_py and new_py else "unparseable"
+    if verdict == "unchanged":
+        return None
+    if verdict == "unparseable" and old_names == new_names:
+        return None  # cannot tell, and the names did not change: as before
+    return old_names, new_names, verdict == "compatible"
+
+
+def _classify_changes(old_items: list[tuple[str, bool]], new_items: list[tuple[str, bool]]):
+    """Every same-named def of one file, not just the last.
+
+    Two classes can each define ``render``; keeping only the last pair let an incompatible
+    change followed by a compatible one pass. The removed and added defs are paired in
+    order and the file is reported if ANY pair is incompatible; it is compatible-only if
+    every changed pair is. When the counts differ no pairing is trustworthy, so the name
+    lists are compared as sets: any shape present on one side only is a change, reported
+    without a compatibility verdict.
+    """
+    if len(old_items) != len(new_items):
+        old_shapes = {_param_names(t) for t, _ in old_items}
+        new_shapes = {_param_names(t) for t, _ in new_items}
+        if old_shapes == new_shapes:
+            return None
+        return _param_names(old_items[-1][0]), _param_names(new_items[-1][0]), False
+    changes = [
+        c for c in (_classify_pair(o, n) for o, n in zip(old_items, new_items)) if c is not None
+    ]
+    if not changes:
+        return None
+    strict = [c for c in changes if not c[2]]
+    return strict[0] if strict else changes[0]
+
+
 def detect_changed_signature_callers(
     diff_text: str, *, repo_root: Path | str = REPO_ROOT
 ) -> list[Finding]:
@@ -714,8 +862,25 @@ def detect_changed_signature_callers(
     COMPATIBLE IS NOT "SAFE FOR A MOCK". #353 was a compatible widening whose break was a
     test asserting the old call shape through ``mock.patch``. A compatible change is
     therefore still reported for a file that names the function as a patch target, passes
-    its name to ``setattr`` / ``patch.object``, or references it next to mock call
-    assertions (``_mocks_symbol``).
+    its name to ``setattr`` / ``patch.object``, introspects its signature
+    (``inspect.signature``, ``getfullargspec``, ``__code__``, ``__signature__``,
+    ``__defaults__``: ``_inspects_symbol``), or references it next to mock call assertions
+    (``_mocks_symbol``). A string patch target or string-named introspection is reported
+    for an incompatible change as well (``_string_reference``): it is a dependency whichever
+    way the signature moved.
+
+    EVERY same-named def of a file is classified, not the last (``_classify_changes``):
+    two classes may each define ``render``. Removed and added defs are paired in order and
+    the file is reported if any pair is incompatible; with unequal counts the name lists
+    are compared as sets.
+
+    NOT DETECTED, by design or for want of a signal: a fake or stub handed in without the
+    function's name appearing in the file; introspection through a computed name
+    (``getattr(Cls, method)``); and a gate ``main()`` whose parameters
+    ``core/gates/registry.py`` counts to decide whether to pass argv (``main`` is ambiguous,
+    so it is matched only by its module). That last assumption is enforced by
+    tests/unit/gates/test_gate_registry.py instead. A registry or dispatch table that CALLS
+    with the old arity needs no detector: a compatible change keeps every old call valid.
 
     DECIDED EDGE: a caller that today passes a key named like the new parameter through
     ``**values`` (``spool=...``) now binds it to the parameter instead. That is a semantic
@@ -724,7 +889,10 @@ def detect_changed_signature_callers(
     named keyword is what this refinement removes.
 
     KNOWN LIMIT, unchanged: ``_SIG_RE`` reads one line and stops at the first ``)``, so a
-    multi-line ``def`` or a default containing a call is not extracted whole.
+    multi-line ``def`` or a default containing a call is not extracted whole. A one-line def
+    rewritten across lines therefore produces NO finding, whatever it changed
+    (tests/unit/test_blast_radius_signature_hardening.py pins this; widening detection is a
+    separate change).
     """
     root = Path(repo_root)
     files = _parse_diff(diff_text, repo_root=root)
@@ -735,30 +903,29 @@ def detect_changed_signature_callers(
     changed_sigs: dict[str, tuple[tuple[str, ...], tuple[str, ...], bool]] = {}
     sig_origin: dict[str, str] = {}
     for f in files:
-        # name -> (parameter text, is a Python `def`). Only Python parameter lists get the
-        # compatibility analysis: a default in JS is not a keyword-only contract.
-        old: dict[str, tuple[str, bool]] = {}
-        new: dict[str, tuple[str, bool]] = {}
+        # name -> every (parameter text, is a Python `def`) in the file, in order. Only
+        # Python parameter lists get the compatibility analysis: a default in JS is not a
+        # keyword-only contract.
+        old: dict[str, list[tuple[str, bool]]] = {}
+        new: dict[str, list[tuple[str, bool]]] = {}
         is_py = _normalize(f["path"]).endswith(".py")
         for ln in f["removed"]:
             m = _SIG_RE.search(ln)
             if m:
-                old[m.group(1)] = (m.group(2), is_py and m.group(0).startswith("def"))
+                old.setdefault(m.group(1), []).append(
+                    (m.group(2), is_py and m.group(0).startswith("def"))
+                )
         for ln in f["added"]:
             m = _SIG_RE.search(ln)
             if m:
-                new[m.group(1)] = (m.group(2), is_py and m.group(0).startswith("def"))
+                new.setdefault(m.group(1), []).append(
+                    (m.group(2), is_py and m.group(0).startswith("def"))
+                )
         for name in set(old) & set(new):
-            (old_text, old_py), (new_text, new_py) = old[name], new[name]
-            old_names, new_names = _param_names(old_text), _param_names(new_text)
-            verdict = (
-                _signature_compatibility(old_text, new_text) if old_py and new_py else "unparseable"
-            )
-            if verdict == "unchanged":
+            change = _classify_changes(old[name], new[name])
+            if change is None:
                 continue
-            if verdict == "unparseable" and old_names == new_names:
-                continue  # cannot tell, and the names did not change: as before
-            mock_only = verdict == "compatible"
+            old_names, new_names, mock_only = change
             # The stricter verdict wins when two files change a function of this name.
             if name in changed_sigs and not changed_sigs[name][2]:
                 continue
@@ -810,18 +977,19 @@ def detect_changed_signature_callers(
             in_code = pat.search(_code_only(text))
             in_patch_target = _PATCH_TARGET_RE(name).search(text)
             old_p, new_p, mock_only = changed_sigs[name]
-            in_setattr_target = mock_only and _SETATTR_TARGET_RE(name).search(text)
-            if in_code or in_patch_target or in_setattr_target:
+            # A string target or string-named introspection is a reference for ANY change.
+            in_string_reference = _string_reference(text, name) if name in text else False
+            if in_code or in_patch_target or in_string_reference:
                 if mock_only:
                     # A CALL-COMPATIBLE CHANGE BREAKS NO REAL CALL. It can still break a
                     # file that mocks the function and asserts the old call shape (#353).
                     if not _mocks_symbol(text, name, referenced_in_code=bool(in_code)):
                         continue
                     message = (
-                        f"{rel} mocks {name}(), whose signature changed in this diff "
-                        f"({list(old_p)} -> {list(new_p)}). The change is call-compatible, but "
-                        f"a mock or assertion written against the old call shape can still "
-                        f"break and this file was not updated."
+                        f"{rel} mocks or introspects {name}(), whose signature changed in this "
+                        f"diff ({list(old_p)} -> {list(new_p)}). The change is call-compatible, "
+                        f"but a mock, assertion or signature read written against the old shape "
+                        f"can still break and this file was not updated."
                     )
                 else:
                     shape = " (same names: a parameter kind or default changed)"
