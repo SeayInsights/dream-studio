@@ -26,7 +26,12 @@ from integrations.compiler.reviewers import (
     set_model_alias,
 )
 from integrations.installer.base import FileOp, FileOpPlan, InstallerBase, RefusalError
-from integrations.installer.file_ops import atomic_copy, atomic_write, backup_before_write
+from integrations.installer.file_ops import (
+    atomic_copy,
+    atomic_write,
+    backup_before_write,
+    file_newline,
+)
 from integrations.manifest import (
     build_manifest,
     compute_hash,
@@ -960,7 +965,11 @@ class ClaudeCodeInstaller(InstallerBase):
                 )
 
             if op.source_content is not None:
-                atomic_write(op.target, op.source_content)
+                # A merge into a file the operator owns (CLAUDE.md, settings.json) keeps that
+                # file's own newline; everything the installer projects is written as LF.
+                owned = op.op == "merge_json" or op.target == self.config_root / "CLAUDE.md"
+                keep = file_newline(op.target) if owned else None
+                atomic_write(op.target, op.source_content, newline=keep or "\n")
             elif op.source_path is not None:
                 atomic_copy(op.source_path, op.target)
 

@@ -8,16 +8,32 @@ from datetime import datetime, UTC
 from pathlib import Path
 
 
-def atomic_write(target: Path, content: str) -> None:
+def file_newline(path: Path) -> str | None:
+    """The newline an existing text file uses: "\\r\\n" when most of its line ends are CRLF,
+    "\\n" when most are bare LF (a tie goes to LF), None when it is missing or has no line end
+    (a lone CR is not one)."""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    crlf = data.count(b"\r\n")
+    lf = data.count(b"\n") - crlf
+    if crlf == 0 and lf == 0:
+        return None
+    return "\r\n" if crlf > lf else "\n"
+
+
+def atomic_write(target: Path, content: str, newline: str = "\n") -> None:
     """Write content atomically using temp-file + rename pattern.
 
-    The text is written exactly: LF, on every OS. It used to take the platform's newlines,
-    so on Windows an installed file was CRLF where the committed source is LF and no file
-    hashed equal to its source."""
+    The text is written with `newline` (default LF, on every OS). It used to take the
+    platform's newlines, so on Windows an installed file was CRLF where the committed source
+    is LF and no file hashed equal to its source. A caller merging into a file the operator
+    owns passes that file's own newline (file_newline)."""
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(target.suffix + ".tmp")
     try:
-        tmp.write_text(content, encoding="utf-8", newline="\n")
+        tmp.write_text(content, encoding="utf-8", newline=newline)
         os.replace(tmp, target)
     except Exception:
         try:
