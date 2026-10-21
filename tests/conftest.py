@@ -380,7 +380,8 @@ def _targets_guarded_repo(argv: list, cwd: object) -> bool:
 #: `reset`, `config`, `init`, `branch`, `symbolic-ref`, a verb git adds next year) still counts as
 #: able to have done it, so the list rotting makes the guard blame too much, never too little.
 #: `tag`, `remote` and `fetch` are absent from that effect: they write refs and config the
-#: fingerprint does not look at.
+#: fingerprint does not look at -- except a `fetch` allowed to overwrite the checked-out branch
+#: (`--update-head-ok`), which `_could_move_the_guarded_state` still counts.
 _READ_ONLY_GIT_VERBS = frozenset(
     {
         "blame",
@@ -440,7 +441,28 @@ def _could_move_the_guarded_state(argv: list) -> bool:
     when an operator's commit lands in another window -- which it was, on every run of
     tests/unit/test_audit_dispatcher.py, because the audit asks the checkout for its tags.
     """
-    return _git_verb(argv) not in _READ_ONLY_GIT_VERBS
+    verb = _git_verb(argv)
+    if verb == "fetch" and _fetch_may_update_the_current_branch(argv):
+        return True
+    return verb not in _READ_ONLY_GIT_VERBS
+
+
+def _fetch_may_update_the_current_branch(argv: list) -> bool:
+    """``git fetch`` writes only remote-tracking refs -- unless it is told it may overwrite the
+    branch that is checked out.
+
+    ``git fetch --update-head-ok origin +main:<current branch>`` moves the tip of the checked-out
+    branch, which is exactly what the fingerprint compares, and without the flag git refuses to.
+    So the flag (long form, or ``-u`` alone or inside a cluster of short options such as ``-pu``)
+    is what separates the fetch that is a read from the one that is a write. A fetch that names
+    it counts, as any other verb that could have moved the state does.
+    """
+    for token in (str(x) for x in argv[1:]):
+        if token == "--update-head-ok":
+            return True
+        if token.startswith("-") and not token.startswith("--") and "u" in token[1:]:
+            return True
+    return False
 
 
 class _GitCallRecorder:

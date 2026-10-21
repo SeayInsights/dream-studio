@@ -645,6 +645,12 @@ def test_a_rewrite_of_the_shared_config_that_leaves_core_alone_is_not_damage(tmp
         (["git", "-c", "core.quotepath=off", "ls-files"], False),
         (["git", "rev-parse", "HEAD"], False),
         (["git", "fetch", "origin"], False),
+        (["git", "fetch", "--tags", "origin", "main"], False),
+        (["git", "fetch", "origin", "+main:refs/remotes/origin/main"], False),
+        (["git", "fetch", "--update-head-ok", "origin", "+main:work"], True),
+        (["git", "-C", "/x", "fetch", "--update-head-ok", "origin"], True),
+        (["git", "fetch", "-u", "origin", "main:work"], True),
+        (["git", "fetch", "-pu", "origin", "main:work"], True),
         (["git", "commit", "-m", "x"], True),
         (["git", "checkout", "-b", "x"], True),
         (["git", "config", "core.bare", "true"], True),
@@ -711,6 +717,41 @@ def test_a_read_only_git_call_and_a_config_rewrite_elsewhere_do_not_abort_a_clea
     ), f"a test that only read tags was blamed for another session's work\n{output[-3000:]}"
     assert "modified the real git repository" not in output, output[-2000:]
     assert "[repo-guard]" in output, f"the external change went unreported\n{output[-2000:]}"
+
+
+def test_a_fetch_that_overwrites_the_checked_out_branch_is_blamed_on_the_test(tmp_path):
+    """`git fetch --update-head-ok <remote> +<src>:<current branch>` really moves the tip. It
+    used to count as a read because plain `fetch` is on the read-only list, so the guard called
+    the move an external change and let the run continue instead of naming the test."""
+    victim = _victim(tmp_path)
+    current = _run(victim, "branch", "--show-current").stdout.strip()
+    assert current
+    assert _run(victim, "checkout", "-q", "-b", "ahead").returncode == 0
+    (victim / "ahead.txt").write_text("ahead", encoding="utf-8")
+    assert _run(victim, "add", "ahead.txt").returncode == 0
+    assert _run(victim, "commit", "-q", "-m", "a commit the fetch will bring in").returncode == 0
+    assert _run(victim, "checkout", "-q", current).returncode == 0
+
+    tests_dir = victim / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "conftest.py").write_bytes((REPO_ROOT / "tests" / "conftest.py").read_bytes())
+    (tests_dir / "test_moves_the_tip_by_fetch.py").write_text(
+        "import subprocess\n"
+        "from pathlib import Path\n"
+        "VICTIM = Path(__file__).resolve().parent.parent\n"
+        "def test_a_test_that_fetches_over_the_checked_out_branch():\n"
+        "    done = subprocess.run(\n"
+        f"        ['git', 'fetch', '-q', '--update-head-ok', '.', '+ahead:{current}'],\n"
+        "        cwd=str(VICTIM), capture_output=True, text=True, check=False)\n"
+        "    assert done.returncode == 0, done.stderr\n",
+        encoding="utf-8",
+    )
+    result = _run_pytest_in(tests_dir)
+    output = result.stdout + result.stderr
+    assert result.returncode != 0, f"a fetch over the checked-out branch passed\n{output[-3000:]}"
+    assert "modified the real git repository" in output, output[-3000:]
+    assert "test_a_test_that_fetches_over_the_checked_out_branch" in output, output[-3000:]
+    assert "fetch" in output and "--update-head-ok" in output, output[-3000:]
 
 
 def test_a_bare_flip_is_still_named_with_the_setting_that_changed(tmp_path):
