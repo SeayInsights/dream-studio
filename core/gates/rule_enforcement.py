@@ -77,11 +77,19 @@ def _resolve(reference: Any, resolver: NodeResolver | None = None) -> str | None
     if "/" in ref or ref.endswith(_CODE_SUFFIXES):  # a path
         if not _inside_repo(ref):
             return "path escapes the repository"
-        return None if (REPO_ROOT / ref).exists() else "no such path"
+        if not (REPO_ROOT / ref).exists():
+            return "no such path"
+        # A test FILE named without a test is enforced only if a directory run collects it.
+        return (
+            (resolver or NodeResolver(REPO_ROOT)).file_problem(ref) if ref.endswith(".py") else None
+        )
 
     if "." in ref:  # a dotted module
         target = REPO_ROOT.joinpath(*ref.split("."))
-        if target.with_suffix(".py").is_file() or (target / "__init__.py").is_file():
+        if target.with_suffix(".py").is_file():
+            relative = target.with_suffix(".py").relative_to(REPO_ROOT).as_posix()
+            return (resolver or NodeResolver(REPO_ROOT)).file_problem(relative)
+        if (target / "__init__.py").is_file():
             return None
         return "no such module"
 

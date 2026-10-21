@@ -17,564 +17,28 @@ added below that the resolver and pytest disagree on fails that test.
 
 from __future__ import annotations
 
-import subprocess
-import sys
-import textwrap
 from pathlib import Path
 
 import pytest
 
 from core.gates.pytest_node_resolver import NodeResolver
+from tests.helpers.resolver_cases import (
+    _CASES,
+    _CASES_ITEM3,
+    _CASES_MORE,
+    _HELPER,
+    _PACKAGES,
+    _POISONED,
+    _STAR_HELPER,
+    _STAR_NOLIST,
+)
+from tests.helpers.resolver_cases import write_tree as _tree
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _tree(root: Path, files: dict[str, str | bytes]) -> Path:
-    for name, body in files.items():
-        path = root / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if isinstance(body, bytes):
-            path.write_bytes(body)
-        else:
-            path.write_text(textwrap.dedent(body), encoding="utf-8")
-    return root
-
-
 def _why(root: Path, reference: str) -> str | None:
     return NodeResolver(root).resolve(reference)
-
-
-# --------------------------------------------------------------------------
-# The cases, written once and judged by pytest
-# --------------------------------------------------------------------------
-
-_HELPER = """\
-def test_shared():
-    pass
-
-
-class TestBaseShared:
-    def test_from_base(self):
-        pass
-"""
-
-_CASES = """\
-import sys
-import unittest
-from typing import TYPE_CHECKING
-
-import helper
-import pytest
-from helper import TestBaseShared as AliasedBase
-from helper import TestBaseShared, test_shared
-
-
-def test_plain():
-    pass
-
-
-async def test_async():
-    pass
-
-
-@pytest.mark.parametrize("value", [1, 2])
-@pytest.mark.slow
-def test_decorated(value):
-    pass
-
-
-def helper_x():
-    pass
-
-
-def _test_x():
-    pass
-
-
-@pytest.fixture
-def test_a_fixture():
-    pass
-
-
-@pytest.fixture(scope="module")
-def test_a_scoped_fixture():
-    pass
-
-
-def test_orig():
-    pass
-
-
-test_alias = test_orig
-helper_alias = test_orig
-
-
-def test_shadowed_by_a_value():
-    pass
-
-
-test_shadowed_by_a_value = None
-
-
-def test_deleted():
-    pass
-
-
-del test_deleted
-
-
-def test_twice():
-    pass
-
-
-def test_twice():
-    pass
-
-
-def test_redefined_as_a_value_then_a_def():
-    pass
-
-
-test_redefined_as_a_value_then_a_def = 3
-
-
-def test_redefined_as_a_value_then_a_def():
-    pass
-
-
-if False:
-
-    def test_under_if_false():
-        pass
-
-
-if 0:
-
-    def test_under_if_zero():
-        pass
-
-
-if TYPE_CHECKING:
-
-    def test_under_type_checking():
-        pass
-
-
-if __name__ == "__main__":
-
-    def test_under_main_guard():
-        pass
-
-
-if sys.platform == "plan9":
-
-    def test_on_another_platform():
-        pass
-
-else:
-
-    def test_on_this_platform():
-        pass
-
-
-while False:
-
-    def test_under_while_false():
-        pass
-
-
-try:
-
-    def test_in_try():
-        pass
-
-except Exception:
-    pass
-else:
-
-    def test_in_try_else():
-        pass
-
-finally:
-
-    def test_in_finally():
-        pass
-
-
-with open(__file__):
-
-    def test_in_with():
-        pass
-
-
-for _index in range(1):
-
-    def test_in_for():
-        pass
-
-
-class TestNormal:
-    def test_a(self):
-        pass
-
-    def helper_b(self):
-        pass
-
-    class TestNested:
-        def test_c(self):
-            pass
-
-
-class NotNamedForPytest:
-    def test_in_the_wrong_class(self):
-        pass
-
-
-class TestWithInit:
-    def __init__(self):
-        pass
-
-    def test_never(self):
-        pass
-
-
-class TestOptedOut:
-    __test__ = False
-
-    def test_never(self):
-        pass
-
-
-class TestBase:
-    def test_inherited(self):
-        pass
-
-
-class TestChild(TestBase):
-    def test_own(self):
-        pass
-
-
-class TestGrandchild(TestChild):
-    pass
-
-
-class TestSharedChild(TestBaseShared):
-    pass
-
-
-class TestViaAlias(AliasedBase):
-    pass
-
-
-class TestViaModule(helper.TestBaseShared):
-    pass
-
-
-class TestOverridden(TestBase):
-    test_inherited = None
-
-
-class TestInheritsInit(TestWithInit):
-    pass
-
-
-TestAliasedClass = TestBase
-
-
-class TestUnit(unittest.TestCase):
-    def test_u(self):
-        pass
-
-    def check_u(self):
-        pass
-
-
-class UnittestNamedAnything(unittest.TestCase):
-    def test_n(self):
-        pass
-
-
-class TestMixed(TestBase, unittest.TestCase):
-    def test_m(self):
-        pass
-"""
-
-# A second module for the behaviours a mutation pass showed nothing pinned: base-class order,
-# a `__new__` constructor, a class inside a unittest class, names rebound by tuple/list/starred
-# targets, and a value assigned in an `except` handler that may never run.
-_CASES_MORE = """\
-import unittest
-
-
-class TestOrderA:
-    def test_x(self):
-        pass
-
-
-class TestOrderB:
-    test_x = None
-
-
-class TestFirstA(TestOrderA, TestOrderB):
-    pass
-
-
-class TestFirstB(TestOrderB, TestOrderA):
-    pass
-
-
-class TestWithNew:
-    def __new__(cls):
-        return object.__new__(cls)
-
-    def test_never(self):
-        pass
-
-
-class TestInheritsNew(TestWithNew):
-    pass
-
-
-class TestUnitWithNested(unittest.TestCase):
-    def test_u(self):
-        pass
-
-    class TestInner:
-        def test_i(self):
-            pass
-
-
-def test_tuple_shadowed():
-    pass
-
-
-def test_list_shadowed():
-    pass
-
-
-def test_star_shadowed():
-    pass
-
-
-test_tuple_shadowed, _unused_a = 1, 2
-[test_list_shadowed, _unused_b] = 1, 2
-*test_star_shadowed, _unused_c = 1, 2
-
-
-def test_kept_by_a_handler():
-    pass
-
-
-try:
-    pass
-except Exception:
-    test_kept_by_a_handler = None
-"""
-
-_MORE_CANDIDATES = [
-    "TestFirstA::test_x",
-    "TestFirstB::test_x",
-    "TestWithNew::test_never",
-    "TestInheritsNew::test_never",
-    "TestUnitWithNested::test_u",
-    "TestUnitWithNested::TestInner::test_i",
-    "test_tuple_shadowed",
-    "test_list_shadowed",
-    "test_star_shadowed",
-    "test_kept_by_a_handler",
-]
-
-# a file the default `python_files` reaches only through its `*_test.py` half
-_SUFFIX_FILE = "def test_in_a_suffix_named_file():\n    pass\n"
-
-# Node ids to ask both pytest and the resolver about. Every one names something, or
-# looks like it could.
-_CANDIDATES = [
-    "test_plain",
-    "test_async",
-    "test_decorated",
-    "helper_x",
-    "_test_x",
-    "test_a_fixture",
-    "test_a_scoped_fixture",
-    "test_orig",
-    "test_alias",
-    "helper_alias",
-    "test_shadowed_by_a_value",
-    "test_deleted",
-    "test_twice",
-    "test_redefined_as_a_value_then_a_def",
-    "test_under_if_false",
-    "test_under_if_zero",
-    "test_under_type_checking",
-    "test_under_main_guard",
-    "test_on_this_platform",
-    "test_under_while_false",
-    "test_in_try",
-    "test_in_try_else",
-    "test_in_finally",
-    "test_in_with",
-    "test_in_for",
-    "test_shared",  # imported from helper.py: pytest collects it
-    "test_missing",
-    "TestNormal",
-    "TestNormal::test_a",
-    "TestNormal::helper_b",
-    "TestNormal::TestNested",
-    "TestNormal::TestNested::test_c",
-    "TestNormal::test_c",
-    "NotNamedForPytest::test_in_the_wrong_class",
-    "TestWithInit::test_never",
-    "TestOptedOut::test_never",
-    "TestBase::test_inherited",
-    "TestChild::test_inherited",
-    "TestChild::test_own",
-    "TestGrandchild::test_inherited",
-    "TestGrandchild::test_own",
-    "TestSharedChild::test_from_base",
-    "TestViaAlias::test_from_base",
-    "TestViaModule::test_from_base",
-    "TestOverridden::test_inherited",
-    "TestInheritsInit::test_never",
-    "TestAliasedClass::test_inherited",
-    "TestBaseShared::test_from_base",
-    "TestUnit::test_u",
-    "TestUnit::check_u",
-    "UnittestNamedAnything::test_n",
-    "TestMixed::test_m",
-    "TestMixed::test_inherited",
-]
-
-
-def _collected(root: Path, target: str, config: Path) -> set[str]:
-    """What pytest itself collects under `target`: node ids with parameters dropped."""
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "--collect-only",
-            "-q",
-            "-p",
-            "no:cacheprovider",
-            "-o",
-            "addopts=",
-            "--rootdir",
-            str(root),
-            "-c",
-            str(config),
-            target,
-        ],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=120,
-    )
-    nodes = {
-        line.split("[", 1)[0].strip()
-        for line in result.stdout.splitlines()
-        if "::" in line and not line.startswith((" ", "="))
-    }
-    assert nodes, f"pytest collected nothing:\n{result.stdout}\n{result.stderr}"
-    return nodes
-
-
-def _would_pytest_collect(collected: set[str], file: str, candidate: str) -> bool:
-    node = f"{file}::{candidate}"
-    return node in collected or any(c.startswith(node + "::") for c in collected)
-
-
-def test_the_resolver_agrees_with_pytest_collection_on_every_candidate(tmp_path):
-    root = _tree(
-        tmp_path,
-        {
-            "pytest.ini": "[pytest]\n",
-            "tests/helper.py": _HELPER,
-            "tests/test_cases.py": _CASES,
-            "tests/test_more.py": _CASES_MORE,
-            "tests/other_test.py": _SUFFIX_FILE,
-            "tests/test_bom.py": b"\xef\xbb\xbfdef test_with_a_bom():\n    pass\n",
-            "tests/test_latin.py": (
-                b"# -*- coding: latin-1 -*-\n"
-                b"def test_latin_one():\n    assert '\xe9' == '\xe9'\n"
-            ),
-        },
-    )
-    collected = _collected(root, "tests", root / "pytest.ini")
-    resolver = NodeResolver(root)
-
-    disagreements = []
-    verdicts = []
-    for file, candidates in (
-        ("tests/test_cases.py", _CANDIDATES),
-        ("tests/test_more.py", _MORE_CANDIDATES),
-    ):
-        for candidate in candidates:
-            expected = _would_pytest_collect(collected, file, candidate)
-            verdicts.append(expected)
-            why = resolver.resolve(f"{file}::{candidate}")
-            if (why is None) != expected:
-                disagreements.append(
-                    f"{file}::{candidate}: pytest {'collects' if expected else 'does not collect'}"
-                    f" it, resolver says {why!r}"
-                )
-    for file, name in (
-        ("test_bom.py", "test_with_a_bom"),
-        ("test_latin.py", "test_latin_one"),
-        ("other_test.py", "test_in_a_suffix_named_file"),
-    ):
-        why = resolver.resolve(f"tests/{file}::{name}")
-        if why is not None:
-            disagreements.append(f"{file}::{name}: pytest collects it, resolver says {why!r}")
-    assert not disagreements, "\n".join(disagreements)
-
-    # the check is only as strong as its spread: both outcomes must be well represented
-    assert verdicts.count(True) >= 20 and verdicts.count(False) >= 20
-
-
-def test_the_resolver_agrees_with_pytest_when_the_repo_configures_its_own_names(tmp_path):
-    """The names are read from the repo's pytest config, not hardcoded."""
-    root = _tree(
-        tmp_path,
-        {
-            "pytest.ini": (
-                "[pytest]\n"
-                "python_files = spec_*.py\n"
-                "python_classes = Spec\n"
-                "python_functions = check_*\n"
-            ),
-            "tests/spec_a.py": """\
-                def check_ok():
-                    pass
-
-                def test_default_name():
-                    pass
-
-                class SpecThing:
-                    def check_in_class(self):
-                        pass
-
-                class TestDefaultName:
-                    def check_in_class(self):
-                        pass
-                """,
-            "tests/test_default_file.py": "def check_ok():\n    pass\n",
-        },
-    )
-    collected = _collected(root, "tests/spec_a.py", root / "pytest.ini")
-    resolver = NodeResolver(root)
-    for candidate in (
-        "check_ok",
-        "test_default_name",
-        "SpecThing::check_in_class",
-        "TestDefaultName::check_in_class",
-    ):
-        expected = _would_pytest_collect(collected, "tests/spec_a.py", candidate)
-        assert (resolver.resolve(f"tests/spec_a.py::{candidate}") is None) == expected, candidate
-    # a file the config does not name is not collected from a directory run
-    assert "python_files" in (resolver.resolve("tests/test_default_file.py::check_ok") or "")
 
 
 # --------------------------------------------------------------------------
@@ -781,7 +245,7 @@ def test_a_base_cycle_terminates(tmp_path):
         },
     )
     why = _why(root, "test_c.py::TestX::test_y")
-    assert why is not None and "no `test_y` defined in TestX" in why
+    assert why is not None and "inheritance cycle" in why and "TestX" in why
     assert "too deeply nested" not in why
 
 
@@ -1111,3 +575,575 @@ def test_a_pytest_config_that_cannot_be_read_is_an_error_not_a_fall_back_to_defa
 def test_a_relative_import_that_climbs_out_of_the_tree_is_refused_not_a_crash(tmp_path):
     root = _tree(tmp_path, {"test_a.py": "from ........ import test_x\n"})
     assert _why(root, "test_a.py::test_x") is not None
+
+
+# --------------------------------------------------------------------------
+# Follow-ups from the independent verifier of #913
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def item3(tmp_path):
+    return _tree(
+        tmp_path,
+        {
+            "tests/test_item3.py": _CASES_ITEM3,
+            "tests/star_helper.py": _STAR_HELPER,
+            "tests/star_nolist.py": _STAR_NOLIST,
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "candidate,fragment",
+    [
+        ("TestDiaE::test_x", "is not a function or class"),
+        ("TestDiaF::test_x", "is not a function or class"),
+        ("TestEmptyOne", "holds no test pytest would collect"),
+        ("TestOnlyHelpers", "holds no test pytest would collect"),
+        ("TestOnlyFixture", "holds no test pytest would collect"),
+        ("TestOnlyEmptyNested", "holds no test pytest would collect"),
+        ("TestZero::test_a", "sets __test__ = 0"),
+        ("TestNone::test_a", "sets __test__ = None"),
+        ("TestExternalFalse::test_a", "sets __test__ = False"),
+        ("TestChildFlag::test_p", "sets __test__ = False"),
+        ("TestMethodFlag::test_m", "sets __test__ = False"),
+        ("test_attr_false", "sets __test__ = False"),
+        ("test_with_before", "is not a function or class"),
+        ("test_for_before", "is not a function or class"),
+        ("test_for_range", "is not a function or class"),
+        ("test_under_debug", "no `test_under_debug` defined"),
+        ("test_and", "no `test_and` defined"),
+        ("test_hidden", "no `test_hidden` defined"),
+        ("TestHiddenBase::test_hidden_base", "no `TestHiddenBase` defined"),
+    ],
+)
+def test_nodes_the_verifier_found_accepted_are_refused_with_the_reason(item3, candidate, fragment):
+    why = _why(item3, f"tests/test_item3.py::{candidate}")
+    assert why is not None and fragment in why, why
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        "TestDiaG::test_x",
+        "TestDiaC::test_x",
+        "TestOnlyInherited",
+        "TestOnlyNested",
+        "TestOnlyNested::TestNested",
+        "TestOnlyNested::TestNested::test_n",
+        "TestStr::test_a",
+        "NotNamedButTrue::test_a",
+        "NotNamedAssignedTrue::test_a",
+        "TestChildBack::test_p",
+        "TestMethodFlag::test_n",
+        "helper_attr_true",
+        "test_lambda",
+        "test_with_after",
+        "test_for_empty",
+        "test_not_debug",
+        "test_flagged",
+        "test_or",
+        "test_not",
+        "test_exported",
+        "TestExportedBase::test_in_base",
+        "test_public",
+        "test_skipped_by_a_marker",
+        "TestSkippedClass::test_s",
+    ],
+)
+def test_nodes_the_verifier_found_refused_resolve(item3, candidate):
+    assert _why(item3, f"tests/test_item3.py::{candidate}") is None
+
+
+@pytest.mark.parametrize("name", sorted(_POISONED))
+def test_a_file_that_raises_on_import_refuses_every_reference_into_it(tmp_path, name):
+    body, candidates = _POISONED[name]
+    root = _tree(tmp_path, {name: body, "tests/helper.py": _HELPER, **_PACKAGES})
+    for candidate in candidates:
+        why = _why(root, f"{name}::{candidate}") or ""
+        assert "collects nothing from" in why, (candidate, why)
+
+
+def test_a_base_defined_later_in_the_file_is_named(tmp_path):
+    body, _ = _POISONED["tests/test_late_base.py"]
+    root = _tree(tmp_path, {"tests/test_late_base.py": body})
+    why = _why(root, "tests/test_late_base.py::test_beside_the_cause") or ""
+    assert "class `TestLateChild` (line 1) uses base `TestLateBase` before it is defined" in why
+    assert "NameError" in why
+
+
+def test_a_base_defined_earlier_or_by_a_star_import_is_not_late(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "helper.py": "class TestFromStar:\n    def test_h(self):\n        pass\n",
+            "test_a.py": (
+                "from helper import *\n\n\nclass TestChild(TestFromStar):\n    pass\n\n\n"
+                "class TestEarly:\n    def test_e(self):\n        pass\n\n\n"
+                "class TestLaterChild(TestEarly):\n    pass\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::TestChild::test_h") is None
+    assert _why(root, "test_a.py::TestLaterChild::test_e") is None
+
+
+def test_bases_with_no_consistent_mro_are_named(tmp_path):
+    body, _ = _POISONED["tests/test_bad_mro.py"]
+    root = _tree(tmp_path, {"tests/test_bad_mro.py": body})
+    why = _why(root, "tests/test_bad_mro.py::test_beside_the_cause") or ""
+    assert "TestBadC" in why and "no consistent method resolution order" in why
+    assert "collects nothing from" in why
+
+
+def test_a_diamond_is_linearised_the_way_python_does_it(tmp_path):
+    """E(C, B) with B overriding A's test: C3 puts B before A, so the override wins."""
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": """\
+                class TestA:
+                    def test_x(self): pass
+                    def test_y(self): pass
+
+                class TestB(TestA):
+                    test_x = None
+
+                class TestC(TestA):
+                    def test_y(self): pass
+
+                class TestE(TestC, TestB):
+                    pass
+                """,
+        },
+    )
+    assert "is not a function or class" in (_why(root, "test_a.py::TestE::test_x") or "")
+    assert _why(root, "test_a.py::TestE::test_y") is None
+
+
+def test_an_unreadable_base_in_a_diamond_is_still_named(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "from elsewhere import Mixin\n\n\nclass TestA:\n    def test_x(self):\n        pass\n\n\n"
+                "class TestB(Mixin, TestA):\n    pass\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::TestB::test_x") is None  # found beyond the opaque base
+    why = _why(root, "test_a.py::TestB::test_missing") or ""
+    assert "Mixin" in why and "bases not searched" in why
+
+
+def test_star_import_binds_what_all_lists_and_names_an_all_it_cannot_read(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "listed.py": (
+                "__all__ = ['test_a']\n__all__ += ['test_b']\n__all__.append('test_c')\n"
+                "__all__.extend(['test_d'])\n\n"
+                + "".join(f"def test_{c}(): pass\n" for c in "abcde")
+            ),
+            "opaque.py": "import listed\n__all__ = listed.__all__ + ['test_z']\ndef test_z(): pass\n",
+            "test_a.py": "from listed import *\nfrom opaque import *\n",
+        },
+    )
+    for name in "abcd":
+        assert _why(root, f"test_a.py::test_{name}") is None, name
+    assert "no `test_e` defined" in (_why(root, "test_a.py::test_e") or "")
+    why = _why(root, "test_a.py::test_z") or ""
+    assert "whose __all__ cannot be evaluated" in why and "opaque" in why
+
+
+def test_a_star_import_does_not_bind_private_names(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "helper.py": "class _Hidden:\n    def test_h(self):\n        pass\n",
+            "test_a.py": "from helper import *\n\n\nclass TestA(_Hidden):\n    pass\n",
+        },
+    )
+    why = _why(root, "test_a.py::TestA::test_h") or ""
+    assert "_Hidden (not defined in the file)" in why or "uses base `_Hidden`" in why
+
+
+def test_a_relative_import_in_a_directory_that_is_not_a_package_names_the_cause(tmp_path):
+    body, _ = _POISONED["tests/test_relative.py"]
+    root = _tree(tmp_path, {"tests/test_relative.py": body, "tests/helper.py": _HELPER})
+    why = _why(root, "tests/test_relative.py::test_beside_the_cause") or ""
+    assert "not a package" in why and "`.helper`" in why and "ImportError" in why
+
+
+def test_a_relative_import_reached_through_a_chain_in_a_plain_directory_is_refused(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "plain/base.py": "from .other import TestOther\n",
+            "plain/other.py": "class TestOther:\n    def test_o(self):\n        pass\n",
+            "pkg/__init__.py": "",
+            "pkg/test_a.py": (
+                "from plain.base import TestOther\n\n\nclass TestA(TestOther):\n    pass\n"
+            ),
+        },
+    )
+    why = _why(root, "pkg/test_a.py::TestA::test_o") or ""
+    assert "not a package" in why
+
+
+def test_the_relative_imports_a_package_allows_resolve(tmp_path):
+    root = _tree(tmp_path, {"tests/helper.py": _HELPER, **_PACKAGES})
+    assert _why(root, "tests/pkgrel/test_ok_rel.py::test_in_rel") is None
+    assert _why(root, "tests/pkgrel/sub/test_up.py::test_in_rel") is None
+
+
+def test_a_module_that_skips_itself_at_import_collects_nothing_but_a_skip_marker_does(tmp_path):
+    """The two skips differ in what pytest does with the items: a marker collects them and
+    skips at run time; `pytest.skip(allow_module_level=True)` raises while importing, so no
+    item exists. The first is a run-time outcome this resolver does not judge (documented);
+    the second is an import-time fact, like a NameError."""
+    root = _tree(
+        tmp_path,
+        {
+            "test_skip_marker.py": (
+                "import pytest\n\npytestmark = pytest.mark.skip\n\n\n" "def test_x():\n    pass\n"
+            ),
+            "test_skip_module.py": (
+                "from pytest import skip\n\nskip('x', allow_module_level=True)\n\n\n"
+                "def test_x():\n    pass\n"
+            ),
+            "test_skip_conditional.py": (
+                "import sys\nimport pytest\n\nif sys.platform == 'plan9':\n"
+                "    pytest.skip('x', allow_module_level=True)\n\n\ndef test_x():\n    pass\n"
+            ),
+        },
+    )
+    assert _why(root, "test_skip_marker.py::test_x") is None
+    assert "skips the module at import" in (_why(root, "test_skip_module.py::test_x") or "")
+    assert _why(root, "test_skip_conditional.py::test_x") is None
+
+
+def test_module_constants_decide_an_if_only_while_they_are_certain(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": """\
+                import sys
+
+                DEBUG = False
+                MAYBE = False
+                if sys.platform == "plan9":
+                    MAYBE = True
+
+                if DEBUG:
+                    def test_debug(): pass
+
+                if MAYBE:
+                    def test_maybe(): pass
+
+                class TestA:
+                    if DEBUG:
+                        def test_in_class_debug(self): pass
+                    def test_kept(self): pass
+                """,
+        },
+    )
+    assert "no `test_debug` defined" in (_why(root, "test_a.py::test_debug") or "")
+    # a conditional rebind makes the constant uncertain: either arm may run, so accept
+    assert _why(root, "test_a.py::test_maybe") is None
+    assert "no `test_in_class_debug` defined" in (
+        _why(root, "test_a.py::TestA::test_in_class_debug") or ""
+    )
+    assert _why(root, "test_a.py::TestA::test_kept") is None
+
+
+def test_the_for_target_rebinds_only_when_the_loop_certainly_runs(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": """\
+                def test_unknown(): pass
+                for test_unknown in make():
+                    pass
+
+                def test_literal(): pass
+                for test_literal in (1, 2):
+                    pass
+
+                def test_string(): pass
+                for test_string in "ab":
+                    pass
+
+                def test_range_one(): pass
+                for test_range_one in range(1):
+                    pass
+
+                def test_range_two_args(): pass
+                for test_range_two_args in range(2, 5):
+                    pass
+
+                def test_range_zero(): pass
+                for test_range_zero in range(0):
+                    pass
+
+                def test_range_empty_two(): pass
+                for test_range_empty_two in range(5, 5):
+                    pass
+
+                def test_empty_string(): pass
+                for test_empty_string in "":
+                    pass
+
+                def test_star(): pass
+                for test_star in [*make()]:
+                    pass
+
+                def test_dict(): pass
+                for test_dict in {"k": 1}:
+                    pass
+
+                def test_set(): pass
+                for test_set in {1}:
+                    pass
+
+                def test_body_assign(): pass
+                for _ in [1]:
+                    test_body_assign = None
+                """,
+        },
+    )
+    for kept in ("test_unknown", "test_range_zero", "test_range_empty_two", "test_empty_string"):
+        assert _why(root, f"test_a.py::{kept}") is None, kept
+    for shadowed in (
+        "test_literal",
+        "test_string",
+        "test_range_one",
+        "test_range_two_args",
+        "test_dict",
+        "test_set",
+        "test_body_assign",
+    ):
+        assert "not a function or class" in (_why(root, f"test_a.py::{shadowed}") or ""), shadowed
+    assert _why(root, "test_a.py::test_star") is None  # a starred element may be empty
+
+
+def test_boolean_conditions_on_constants_are_evaluated(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": """\
+                import sys
+                T = True
+                F = False
+
+                if F and sys.platform == "x":
+                    def test_false_and_unknown(): pass
+                if T or sys.platform == "x":
+                    def test_true_or_unknown(): pass
+                if T and sys.platform == "x":
+                    def test_true_and_unknown(): pass
+                if F or sys.platform == "x":
+                    def test_false_or_unknown(): pass
+                if T and T:
+                    def test_all_true(): pass
+                if F or F:
+                    def test_all_false(): pass
+                """,
+        },
+    )
+    assert "no `test_false_and_unknown`" in (_why(root, "test_a.py::test_false_and_unknown") or "")
+    assert _why(root, "test_a.py::test_true_or_unknown") is None
+    assert _why(root, "test_a.py::test_true_and_unknown") is None
+    assert _why(root, "test_a.py::test_false_or_unknown") is None
+    assert _why(root, "test_a.py::test_all_true") is None
+    assert "no `test_all_false`" in (_why(root, "test_a.py::test_all_false") or "")
+
+
+_SAMPLE_FOR_PARAMS = (
+    "def test_y():\n    pass\n\n\nclass TestA:\n    def test_x(self):\n        pass\n"
+)
+
+
+def test_a_parameter_id_may_only_close_the_last_segment(tmp_path):
+    root = _tree(tmp_path, {"test_a.py": _SAMPLE_FOR_PARAMS})
+    for bad in ("TestA[x]::test_x", "TestA[x]::test_x[1]", "TestA::test_x[1]::more"):
+        why = _why(root, f"test_a.py::{bad}") or ""
+        assert "can only close the last segment" in why, (bad, why)
+    for good in ("test_y[1]", "test_y[a::b]", "TestA::test_x[1]", "TestA::test_x[a-b]"):
+        assert _why(root, f"test_a.py::{good}") is None, good
+
+
+def test_a_decorator_that_replaces_the_function_cannot_be_judged_and_is_taken_at_its_word(
+    tmp_path,
+):
+    """Documented limit: `@deco` where deco returns None leaves `test_x = None` at import and
+    pytest collects nothing, but that needs running `deco`. The resolver does not."""
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": "def deco(f):\n    return None\n\n\n@deco\ndef test_x():\n    pass\n",
+        },
+    )
+    assert _why(root, "test_a.py::test_x") is None
+
+
+def test_a_def_in_a_try_whose_import_may_fail_is_accepted(tmp_path):
+    """Documented limit: whether the import fails is a fact about the environment."""
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "try:\n    import not_installed_anywhere\n\n    def test_x():\n        pass\n"
+                "except ImportError:\n    pass\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::test_x") is None
+
+
+def test_a_falsy_module_flag_collects_nothing_and_a_truthy_one_does_not_matter(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_off.py": "__test__ = 0\n\n\ndef test_x():\n    pass\n",
+            "test_on.py": "__test__ = 1\n\n\ndef test_x():\n    pass\n",
+        },
+    )
+    assert "the module sets __test__ = 0" in (_why(root, "test_off.py::test_x") or "")
+    assert _why(root, "test_on.py::test_x") is None
+
+
+def test_a_conditional_flag_assignment_is_not_trusted_either_way(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "import sys\n\n\nclass TestA:\n    def test_x(self):\n        pass\n\n\n"
+                "if sys.platform == 'plan9':\n    TestA.__test__ = False\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::TestA::test_x") is None
+
+
+def test_collect_imported_tests_false_leaves_imported_names_out(tmp_path):
+    files = {
+        "helper.py": (
+            "def test_shared():\n    pass\n\n\nclass TestShared:\n"
+            "    def test_s(self):\n        pass\n"
+        ),
+        "test_a.py": (
+            "from helper import TestShared, test_shared\n\n\ndef test_own():\n    pass\n\n\n"
+            "test_alias = test_own\n"
+        ),
+    }
+    root = _tree(tmp_path, {"pytest.ini": "[pytest]\n", **files})
+    for name in ("test_shared", "TestShared::test_s", "test_own", "test_alias"):
+        assert _why(root, f"test_a.py::{name}") is None, name
+    other = tmp_path / "other"
+    _tree(other, {"pytest.ini": "[pytest]\ncollect_imported_tests = false\n", **files})
+    why = _why(other, "test_a.py::test_shared") or ""
+    assert "imported from another module" in why and "collect_imported_tests" in why
+    assert "collect_imported_tests" in (_why(other, "test_a.py::TestShared::test_s") or "")
+    assert _why(other, "test_a.py::test_own") is None
+    assert _why(other, "test_a.py::test_alias") is None
+
+
+def test_collect_imported_tests_must_be_a_bool(tmp_path):
+    from core.gates.pytest_node_resolver import CollectionConfigError
+
+    (tmp_path / "pytest.ini").write_text("[pytest]\ncollect_imported_tests = maybe\n")
+    with pytest.raises(CollectionConfigError, match="collect_imported_tests"):
+        NodeResolver(tmp_path)
+
+
+def test_a_nested_class_inherited_from_a_base_resolves(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "class TestBase:\n    class TestInner:\n        def test_i(self):\n"
+                "            pass\n\n\nclass TestChild(TestBase):\n    pass\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::TestChild::TestInner::test_i") is None
+    assert _why(root, "test_a.py::TestChild") is None
+
+
+def test_a_class_nested_too_deeply_for_the_walk_is_not_a_test_holder(tmp_path):
+    levels = 12
+    body = "".join("    " * i + f"class TestL{i}:\n" for i in range(levels))
+    body += "    " * levels + "x = 1\n"
+    root = _tree(tmp_path, {"test_a.py": body})
+    assert "holds no test" in (_why(root, "test_a.py::TestL0") or "")
+
+
+def test_a_unittest_class_counts_its_test_methods_only(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "import unittest\n\n\nclass TestHas(unittest.TestCase):\n"
+                "    def test_a(self):\n        pass\n\n\n"
+                "class TestNone(unittest.TestCase):\n    def helper(self):\n        pass\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::TestHas") is None
+    assert "holds no test" in (_why(root, "test_a.py::TestNone") or "")
+
+
+def test_a_builtin_base_is_not_late_when_the_module_rebinds_its_name_afterwards(tmp_path):
+    """`Exception` resolves to the builtin when the class is made; defining a name `Exception`
+    further down does not make the earlier use a NameError."""
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "class TestA(Exception):\n    def test_a(self):\n        pass\n\n\nException = None\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::TestA::test_a") is None
+
+
+def test_a_base_from_a_star_import_is_not_late_when_the_module_redefines_it_below(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "helper.py": "class TestBase:\n    def test_h(self):\n        pass\n",
+            "test_a.py": (
+                "from helper import *\n\n\nclass TestChild(TestBase):\n    pass\n\n\n"
+                "class TestBase:\n    def test_local(self):\n        pass\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::TestChild::test_h") is None
+
+
+def test_only_pytest_skip_with_allow_module_level_skips_the_module(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": "configure(allow_module_level=True)\n\n\ndef test_x():\n    pass\n",
+            "test_b.py": "import pytest\n\npytest.skip('x', allow_module_level=False)\n\n\ndef test_x():\n    pass\n",
+        },
+    )
+    assert _why(root, "test_a.py::test_x") is None
+    assert _why(root, "test_b.py::test_x") is None
+
+
+def test_a_with_target_rebinds_a_def_that_came_before_it(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "def test_x():\n    pass\n\n\nwith open(__file__) as test_x:\n    pass\n\n\n"
+                "def test_y():\n    pass\n\n\nwith open(__file__) as (test_y, other):\n    pass\n"
+            ),
+        },
+    )
+    assert "not a function or class" in (_why(root, "test_a.py::test_x") or "")
+    assert "not a function or class" in (_why(root, "test_a.py::test_y") or "")

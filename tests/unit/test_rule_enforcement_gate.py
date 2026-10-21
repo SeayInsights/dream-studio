@@ -236,55 +236,143 @@ def test_the_known_dangling_reference_fails_the_real_register_when_it_comes_back
     assert broken[0]["reference"].endswith("test_no_lane_asks_more_than_its_enforcement_x")
 
 
-def test_the_resolver_agrees_with_pytest_collection_on_the_real_register():
-    """The oracle. Every node the register names is handed to pytest itself, which must
-    collect it (`--collect-only` exits 4 on a node it cannot find), and the ast resolver
-    must have said yes to exactly the same set. Two independent answers to "does this test
-    exist"; a disagreement means one of them is wrong about a rule that claims enforcement."""
-    import subprocess
-    import sys
+def test_the_resolver_agrees_with_a_directory_run_over_tests_unit_on_the_real_register():
+    """The oracle, run the way CI runs it. `pytest --collect-only tests/unit`, under the repo's
+    OWN addopts, collects a directory; every node the register names in it is looked up in what
+    that run collected, and the resolver must give the same answer in BOTH directions:
 
-    import yaml
+      * the run collects it and the resolver refuses  -> a false alarm that teaches people to
+        ignore the gate;
+      * the resolver accepts it and the run does not   -> a rule enforced by a test nothing
+        runs, the failure this gate exists for.
 
-    rules = yaml.safe_load((REPO_ROOT / "canonical" / "rules.yml").read_text(encoding="utf-8"))
-    nodes = sorted(
-        {
-            ref.strip().split("[", 1)[0]
-            for rule in rules["rules"]
-            for ref in rule.get("enforced_by") or []
-            if "::" in ref
-        }
-    )
+    The check this replaces handed pytest the node ids as arguments. An explicit argument
+    bypasses `--ignore`, `norecursedirs` and `collect_ignore`, so it could never see an
+    exclusion, and it only compared one direction.
+
+    It runs on every push, so it covers `tests/unit`, where all but one of the register's test
+    files live (about eleven seconds); `tests/integration` alone takes thirty-five to collect.
+    The bare run from the configured `testpaths` as a whole, which sees every referenced file
+    and also what `testpaths` itself leaves out, is
+    tests/unit/test_rule_enforcement_bare_run.py, which CI runs."""
+    from core.gates.pytest_node_resolver import NodeResolver
+    from tests.helpers.directory_run import directory_run_nodes, disagreements, register_nodes
+
+    nodes = [n for n in register_nodes(REPO_ROOT) if n.startswith("tests/unit/")]
     assert len(nodes) >= 100
 
-    result = subprocess.run(
-        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"]
-        + ["-o", "addopts="]
-        + nodes,
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=600,
+    collected = directory_run_nodes(REPO_ROOT, ["tests/unit"])
+    assert len(collected) > 3000, f"a directory run collected only {len(collected)} items"
+
+    false_alarms, missed, unrun = disagreements(NodeResolver(REPO_ROOT), nodes, collected)
+    assert (
+        false_alarms == {}
+    ), f"the resolver refuses nodes a directory run collects: {false_alarms}"
+    assert missed == [], f"the resolver accepts nodes a directory run does not collect: {missed}"
+    # the register is clean today, so the run must collect every reference too
+    assert unrun == []
+
+
+def test_a_reference_into_a_directory_the_run_skips_fails_the_gate_naming_the_exclusion(
+    fake_repo, monkeypatch, capsys
+):
+    from core.gates import rule_enforcement
+
+    (fake_repo / "build").mkdir()
+    (fake_repo / "build" / "test_in_build.py").write_text(_SAMPLE, encoding="utf-8")
+    (fake_repo / "build" / "helper.py").write_text("x = 1\n", encoding="utf-8")
+    path = _registry(
+        fake_repo,
+        """\
+        rules:
+          - id: a-rule-held-up-by-a-test-ci-never-runs
+            statement: Something ought to be true.
+            source: nowhere.py
+            enforced_by:
+              - test_t.py::test_plain
+              - build/test_in_build.py::test_plain
+              - build/test_in_build.py
+              - build/helper.py
+        """,
     )
-    assert result.returncode == 0, (result.stdout + result.stderr)[-3000:]
-    collected = {
-        line.split("[", 1)[0].strip()
-        for line in result.stdout.splitlines()
-        if "::" in line and not line.startswith((" ", "="))
-    }
-    uncollected = [
-        n
-        for n in nodes
-        if n not in collected and not any(c.startswith(n + "::") for c in collected)
+    report = audit(path)
+    assert [(b["rule"], b["reference"]) for b in report["broken"]] == [
+        ("a-rule-held-up-by-a-test-ci-never-runs", "build/test_in_build.py::test_plain"),
+        ("a-rule-held-up-by-a-test-ci-never-runs", "build/test_in_build.py"),
     ]
-    assert uncollected == [], f"pytest does not collect: {uncollected}"
+    assert all("norecursedirs" in b["why"] and "build" in b["why"] for b in report["broken"])
 
-    from core.gates.pytest_node_resolver import NodeResolver
+    monkeypatch.setattr(rule_enforcement, "REGISTRY", path)
+    assert rule_enforcement.main() == 1
+    out = capsys.readouterr().out
+    assert "build/test_in_build.py::test_plain" in out and "norecursedirs" in out
+    # a file that is not named like a test holds nothing to collect: not judged
+    assert "build/helper.py" not in out
 
-    resolver = NodeResolver(REPO_ROOT)
-    refused = {n: resolver.resolve(n) for n in nodes if resolver.resolve(n)}
-    assert refused == {}, f"the resolver refuses nodes pytest collects: {refused}"
+
+def test_a_dotted_module_that_is_an_excluded_test_file_fails_too(fake_repo):
+    (fake_repo / "build").mkdir()
+    (fake_repo / "build" / "test_dotted.py").write_text(_SAMPLE, encoding="utf-8")
+    why = _resolve("build.test_dotted") or ""
+    assert "norecursedirs" in why
+    (fake_repo / "pkg").mkdir()
+    (fake_repo / "pkg" / "test_fine.py").write_text(_SAMPLE, encoding="utf-8")
+    assert _resolve("pkg.test_fine") is None
+
+
+def test_a_gate_module_that_happens_to_be_named_like_a_test_is_not_judged_by_testpaths(fake_repo):
+    """`core/gates/test_isolation.py` is a gate, named test_*. Outside testpaths the name is
+    not evidence it is meant as a test, so naming it is not a claim a directory run collects
+    it. (The first version of this check judged it and failed the real register.)"""
+    (fake_repo / "pytest.ini").write_text("[pytest]\ntestpaths = tests\n", encoding="utf-8")
+    (fake_repo / "tests").mkdir()
+    (fake_repo / "tests" / "test_in.py").write_text(_SAMPLE, encoding="utf-8")
+    (fake_repo / "gates").mkdir()
+    (fake_repo / "gates" / "test_isolation.py").write_text("x = 1\n", encoding="utf-8")
+    assert _resolve("gates.test_isolation") is None
+    assert _resolve("gates/test_isolation.py") is None
+    # the same name under testpaths IS a test file, and is judged
+    assert _resolve("tests.test_in") is None
+    assert "outside testpaths" in (_resolve("gates/test_isolation.py::test_plain") or "")
+
+
+def test_an_unevaluable_conftest_fails_the_gate_rather_than_passing_it(fake_repo):
+    (fake_repo / "conftest.py").write_text("collect_ignore = make()\n", encoding="utf-8")
+    why = _resolve("test_t.py::test_plain") or ""
+    assert "cannot evaluate" in why and "collect_ignore" in why
+
+
+def test_a_collection_hook_in_a_conftest_fails_the_gate_for_files_under_it(fake_repo):
+    (fake_repo / "conftest.py").write_text(
+        "def pytest_collect_file(file_path, parent):\n    return None\n", encoding="utf-8"
+    )
+    why = _resolve("test_t.py::test_plain") or ""
+    assert "pytest_collect_file" in why and "cannot evaluate" in why
+    assert "pytest_collect_file" in (_resolve("test_t.py") or "")
+
+
+def test_an_addopts_the_gate_cannot_evaluate_fails_the_gate_in_one_line(
+    tmp_path, monkeypatch, capsys
+):
+    from core.gates import rule_enforcement
+
+    (tmp_path / "pytest.ini").write_text('[pytest]\naddopts = -m "not slow"\n', encoding="utf-8")
+    registry = _registry(
+        tmp_path,
+        """\
+        rules:
+          - id: a-rule
+            statement: Something ought to be true.
+            source: nowhere.py
+            enforced_by:
+              - canonical/rules.yml
+        """,
+    )
+    monkeypatch.setattr(rule_enforcement, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(rule_enforcement, "REGISTRY", registry)
+    assert rule_enforcement.main() == 1
+    out = capsys.readouterr().out
+    assert "addopts" in out and "-m" in out and "Traceback" not in out
 
 
 # --------------------------------------------------------------------------
