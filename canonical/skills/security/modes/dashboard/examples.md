@@ -211,6 +211,8 @@ TEMPLATE SPEC HANDED OFF: {client}
 | finding_count | int | Total findings |
 | critical_count | int | Critical severity count |
 | high_count | int | High severity count |
+| low_count | int | Low severity count |
+| coverage | string | Weakest `coverage` of this repo's findings (`complete` / `partial` / `unknown`) |
 
 ### trends.csv
 | Column | Type | Description |
@@ -250,14 +252,24 @@ TEMPLATE SPEC HANDED OFF: {client}
   },
   "org_score": 62.4,
   "frameworks": ["SOC2", "NIST-CSF", "OWASP-ASVS"],
-  "coverage": "partial"
+  "coverage": "partial",
+  "not_scanned_targets": [
+    {"target": "legacy-admin-web", "date": "2026-04-22-not-scanned", "reason": "target unreachable: curl returned 000"}
+  ]
 }
 ```
 
-`coverage` is the weakest coverage among the exported findings (`partial` beats `unknown` beats
-`complete`); it is `unknown` when there are no findings, because a scan with none leaves
-nothing to carry its coverage (read the parser's `coverage.json`). `org_score` is computed
-from the findings that exist: when `coverage` is not `complete`, show it next to the score.
+`coverage` is the weakest coverage among the exported findings AND the scan store's latest
+attempt per target (`partial` beats `unknown` beats `complete`): a `coverage.json` beside the
+newest scan of each target, and any target whose newest directory is a `{date}-not-scanned`
+record. `not_scanned_targets` lists those targets with their reason; `targets.csv` gets a
+row for each (finding_count 0, coverage `partial`), because a target nothing was scanned for
+has no finding to put it in the table. `export_dataset.py` reads `--scans-dir` (default
+`~/.dream-studio/security/scans/{client}/`, layout `{target}/{date}[-not-scanned]/`). With neither findings nor a
+sidecar it is `unknown`. `org_score` is computed from the findings that exist: when `coverage`
+is not `complete`, show it next to the score. `targets.csv` and `repos.csv` carry a `coverage`
+column (the weakest of their findings'). A `limitations` cell is cut to fit a spreadsheet cell (32,767
+characters) with a final "... N more limitation(s) omitted" entry.
 
 ---
 

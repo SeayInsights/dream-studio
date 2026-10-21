@@ -83,6 +83,61 @@ def compute_org_score(findings: list[dict], weights: dict) -> float:
     return round(score, 1)
 
 
+def weakest(values: list[str]) -> str:
+    """The weakest of some coverages (partial, then unknown, then complete); `unknown` for none."""
+    return scan_coverage.overall({"coverage": v} for v in values)
+
+
+def _sidecar_coverage(path: Path) -> str | None:
+    """The overall coverage a parser's coverage.json states; None when there is none, and
+    `unknown` when there is one that cannot be read or states a value outside the vocabulary."""
+    if not path.is_file():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8")).get("coverage")
+    except (OSError, ValueError, AttributeError):
+        return "unknown"
+    return value if value in (scan_coverage.COMPLETE, scan_coverage.PARTIAL) else "unknown"
+
+
+def scan_state(scans_dir: Path) -> tuple[list[str], list[dict]]:
+    """What the scan store says about the LATEST attempt on each target: (coverages,
+    not_scanned targets).
+
+    The layout is scans/{client}/{target}/{date}[-not-scanned]/. The newest directory of a
+    target decides (a `{date}-not-scanned` record sorts after a scan of the same day): a
+    not-scanned record is partial and is listed with its reason; otherwise the parser's
+    coverage.json beside the scan, if any, is read. Findings cannot show a target nothing
+    was scanned for, and a scan with no findings carries nothing; this is where both show.
+    """
+    coverages: list[str] = []
+    not_scanned: list[dict] = []
+    if not scans_dir.is_dir():
+        return coverages, not_scanned
+    for target in sorted(p for p in scans_dir.iterdir() if p.is_dir()):
+        dated = sorted(p for p in target.iterdir() if p.is_dir())
+        if not dated:
+            continue
+        newest = dated[-1]
+        meta = scan_coverage.load_meta(newest / scan_coverage.META_NAME)
+        if scan_coverage.is_not_scanned(meta):
+            reason = meta.get("reason")
+            not_scanned.append(
+                {
+                    "target": target.name,
+                    "date": newest.name,
+                    "reason": scan_coverage.short(reason) if isinstance(reason, str) else "",
+                    "url": meta.get("url") if isinstance(meta.get("url"), str) else "",
+                }
+            )
+            coverages.append(scan_coverage.PARTIAL)
+            continue
+        sidecar = _sidecar_coverage(newest / "coverage.json")
+        if sidecar is not None:
+            coverages.append(sidecar)
+    return coverages, not_scanned
+
+
 def safe_str(value) -> str:
     """Convert any value to a CSV-safe string."""
     if value is None:
@@ -106,6 +161,37 @@ def write_csv(filepath: Path, rows: list[dict], fieldnames: list[str]) -> None:
 
 
 # ── CSV generators ────────────────────────────────────────────────────────────
+
+
+#: A spreadsheet cell holds 32,767 characters, and Excel and Power BI cut a longer one: a scan
+#: with thousands of limitations reached ~600 KB. Leave room for the closing marker.
+CELL_LIMIT = 32_000
+
+
+def limitations_cell(limitations: list[str]) -> str:
+    """`limitations` as one JSON-string cell that fits a spreadsheet cell.
+
+    A list that fits is exported whole. A longer one keeps its first entries (the most
+    specific ones come first: skipped steps and refusals before notes) and ends with an
+    explicit marker saying how many were left out, so the cut is never silent and the cell
+    is still a valid JSON list.
+    """
+    whole = json.dumps(limitations, ensure_ascii=False)
+    if len(whole) <= CELL_LIMIT:
+        return whole
+    kept: list[str] = []
+    size = 2  # the brackets
+
+    def marker(omitted: int) -> str:
+        return f"... {omitted} more limitation(s) omitted: the cell limit of a spreadsheet"
+
+    for item in limitations:
+        piece = len(json.dumps(item, ensure_ascii=False)) + 2  # the comma and the space
+        if size + piece + len(json.dumps(marker(len(limitations)))) + 2 > CELL_LIMIT:
+            break
+        kept.append(item)
+        size += piece
+    return json.dumps([*kept, marker(len(limitations) - len(kept))], ensure_ascii=False)
 
 
 def build_findings_csv(findings: list[dict]) -> list[dict]:
@@ -138,7 +224,7 @@ def build_findings_csv(findings: list[dict]) -> list[dict]:
                 # How much of the scan this finding's result covers. Unknown stays unknown
                 # (see scan_coverage.finding_coverage); limitations is one JSON string cell.
                 "coverage": coverage,
-                "limitations": json.dumps(limitations, ensure_ascii=False),
+                "limitations": limitations_cell(limitations),
             }
         )
     return rows
@@ -276,6 +362,7 @@ COMPLIANCE_FIELDS = [
 def build_repos_csv(findings: list[dict], repo_scores: dict) -> list[dict]:
     """Aggregate per-repo statistics."""
     repos: dict[str, dict] = {}
+    coverages: dict[str, list[str]] = {}
     today = date.today().isoformat()
 
     for f in findings:
@@ -293,6 +380,7 @@ def build_repos_csv(findings: list[dict], repo_scores: dict) -> list[dict]:
                 "low_count": 0,
             }
         r = repos[repo]
+        coverages.setdefault(repo, []).append(scan_coverage.finding_coverage(f)[0])
         r["finding_count"] += 1
         sev = f.get("severity", "low")
         if sev == "critical":
@@ -312,6 +400,8 @@ def build_repos_csv(findings: list[dict], repo_scores: dict) -> list[dict]:
             else:
                 repos[repo]["risk_score"] = score_info
 
+    for repo, row in repos.items():
+        row["coverage"] = weakest(coverages.get(repo, []))
     return list(repos.values())
 
 
@@ -325,6 +415,7 @@ REPOS_FIELDS = [
     "high_count",
     "medium_count",
     "low_count",
+    "coverage",
 ]
 
 
@@ -336,11 +427,15 @@ TARGETS_FIELDS = [
     "last_scan",
     "risk_score",
     "finding_count",
+    "coverage",
 ]
 
 
-def build_targets_csv(findings: list[dict], repo_scores: dict) -> list[dict]:
+def build_targets_csv(
+    findings: list[dict], repo_scores: dict, not_scanned: list[dict] | None = None
+) -> list[dict]:
     targets: dict[str, dict] = {}
+    coverages: dict[str, list[str]] = {}
     today = date.today().isoformat()
 
     for f in findings:
@@ -357,6 +452,7 @@ def build_targets_csv(findings: list[dict], repo_scores: dict) -> list[dict]:
                 "finding_count": 0,
             }
         targets[target_name]["finding_count"] += 1
+        coverages.setdefault(target_name, []).append(scan_coverage.finding_coverage(f)[0])
 
     for target, score_info in (repo_scores or {}).items():
         if target in targets:
@@ -364,6 +460,26 @@ def build_targets_csv(findings: list[dict], repo_scores: dict) -> list[dict]:
                 targets[target]["risk_score"] = score_info.get("score", 0.0)
             else:
                 targets[target]["risk_score"] = score_info
+
+    for target, row in targets.items():
+        row["coverage"] = weakest(coverages.get(target, []))
+    # A target the run never scanned has no finding to carry it into this table; without a
+    # row it would be absent, which reads as "nothing to report".
+    for entry in not_scanned or []:
+        name = entry["target"]
+        if name in targets:
+            targets[name]["coverage"] = "partial"
+            continue
+        targets[name] = {
+            "name": name,
+            "target_type": "webapp",
+            "url": entry.get("url", ""),
+            "platform": "",
+            "last_scan": "",
+            "risk_score": 0.0,
+            "finding_count": 0,
+            "coverage": "partial",
+        }
 
     return list(targets.values())
 
@@ -429,6 +545,8 @@ def build_metadata(
     client_profile: dict,
     findings: list[dict],
     org_score: float,
+    scan_coverages: list[str] | None = None,
+    not_scanned: list[dict] | None = None,
 ) -> dict:
     client_info = client_profile.get("client", {})
     severity_counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
@@ -443,12 +561,16 @@ def build_metadata(
     frameworks = client_profile.get("compliance", {}).get("frameworks", [])
 
     return {
-        # The weakest coverage among the exported findings: partial beats unknown beats
-        # complete, and no findings is unknown (a scan with no findings leaves nothing to
-        # carry its coverage; read the parser's --coverage-output for that).
-        "coverage": scan_coverage.overall(
-            {"coverage": scan_coverage.finding_coverage(f)[0]} for f in findings
+        # The weakest coverage among the exported findings AND the scan store's latest
+        # attempt per target (coverage.json sidecars, not-scanned records): partial beats
+        # unknown beats complete. With neither findings nor a sidecar it is unknown.
+        "coverage": weakest(
+            [scan_coverage.finding_coverage(f)[0] for f in findings] + list(scan_coverages or [])
         ),
+        # Targets whose latest attempt scanned nothing: absent from every finding.
+        "not_scanned_targets": [
+            {k: v for k, v in entry.items() if k != "url"} for entry in (not_scanned or [])
+        ],
         "client_name": client_info.get("name", "Unknown"),
         "enterprise": client_info.get("enterprise", ""),
         "scan_date": date.today().isoformat(),
@@ -469,6 +591,11 @@ def main() -> None:
     )
     parser.add_argument("--client", required=True, help="Client name (e.g. acme-corp)")
     parser.add_argument("--input", help="Path to enriched findings JSON. Default: stdin")
+    parser.add_argument(
+        "--scans-dir",
+        help="Scan store to read the latest attempt per target from (coverage.json sidecars, "
+        "not-scanned records). Default: ~/.dream-studio/security/scans/{client}/",
+    )
     parser.add_argument(
         "--output-dir",
         help="Output directory. Default: ~/.dream-studio/security/datasets/{client}/",
@@ -534,6 +661,18 @@ def main() -> None:
     org_score = compute_org_score(findings, weights)
     print(f"[export_dataset] Org score: {org_score}", file=sys.stderr)
 
+    # ── What the scan store says about the latest attempt per target ─────────────────
+    scans_dir = (
+        Path(args.scans_dir) if args.scans_dir else home_dir() / "security" / "scans" / args.client
+    )
+    scan_coverages, not_scanned = scan_state(scans_dir)
+    for entry in not_scanned:
+        print(
+            f"[export_dataset] target {entry['target']} was not scanned "
+            f"({entry['date']}): {entry['reason']}",
+            file=sys.stderr,
+        )
+
     # ── Write findings.csv ────────────────────────────────────────────────────
     findings_rows = build_findings_csv(findings)
     write_csv(output_dir / "findings.csv", findings_rows, FINDINGS_FIELDS)
@@ -551,7 +690,7 @@ def main() -> None:
     write_csv(output_dir / "repos.csv", repos_rows, REPOS_FIELDS)
 
     # ── Write targets.csv (all target types) ─────────────────────────────
-    targets_rows = build_targets_csv(findings, repo_scores)
+    targets_rows = build_targets_csv(findings, repo_scores, not_scanned)
     write_csv(output_dir / "targets.csv", targets_rows, TARGETS_FIELDS)
 
     # ── Write trends.csv (append if exists) ───────────────────────────────────
@@ -560,7 +699,7 @@ def main() -> None:
     write_csv(trends_path, trends_rows, TRENDS_FIELDS)
 
     # ── Write metadata.json ───────────────────────────────────────────────────
-    metadata = build_metadata(client_profile, findings, org_score)
+    metadata = build_metadata(client_profile, findings, org_score, scan_coverages, not_scanned)
     metadata_path = output_dir / "metadata.json"
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     print(f"[export_dataset] Wrote metadata.json → {metadata_path}", file=sys.stderr)

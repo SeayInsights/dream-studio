@@ -373,6 +373,11 @@ def _word(value: object) -> str:
     return value.strip().lower() if isinstance(value, str) else ""
 
 
+def is_not_scanned(meta: dict | None) -> bool:
+    """Whether a scan-meta.json is a not-scanned record (`outcome: not_scanned`, in any case)."""
+    return meta is not None and _word(meta.get("outcome")) == "not_scanned"
+
+
 def _assess_run(meta: dict | None) -> tuple[bool, bool, list[str]]:
     """What scan-meta.json says about the run as a whole: (partial, unknown, limitations).
 

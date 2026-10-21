@@ -31,7 +31,7 @@
 
 **Note:** Findings.compliance_controls is a semicolon-delimited string. Use a calculated column to split it for M:N relationship with Compliance, or use `CONTAINSSTRING()` in measures.
 
-**Note:** Findings.coverage is `complete`, `partial` or `unknown` (how much of the scan the finding's result covers; never blank) and Findings.limitations is a JSON array of strings, one cell per finding. Metadata.coverage is the weakest of them. Both columns are appended after `binary_hash`, so existing column positions are unchanged. A visual that shows an org score or a finding count should show Metadata.coverage beside it: a count from a partial scan is a lower bound, not a clean result.
+**Note:** Findings.coverage is `complete`, `partial` or `unknown` (how much of the scan the finding's result covers; never blank) and Findings.limitations is a JSON array of strings, one cell per finding, cut to fit a spreadsheet cell with a final "... N more limitation(s) omitted" entry. Repos.coverage and Targets.coverage are the weakest of their findings' (a target the run never scanned has a Targets row with finding_count 0 and coverage `partial`). Metadata.coverage is the weakest of the findings AND of the scan store's latest attempt per target, and Metadata.not_scanned_targets lists the targets whose latest attempt scanned nothing, with the reason. Both columns are appended after `binary_hash`, so existing column positions are unchanged. A visual that shows an org score or a finding count should show Metadata.coverage beside it: a count from a partial scan is a lower bound, not a clean result.
 
 ### Date Table (calculated)
 
@@ -941,7 +941,18 @@ let
         [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]
     ),
     PromotedHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
-    TypedColumns = Table.TransformColumnTypes(PromotedHeaders, {
+    // A findings.csv written before coverage existed has neither column; TransformColumnTypes
+    // errors on a missing one. An older dataset reads "unknown", never blank and never complete.
+    WithCoverage =
+        if Table.HasColumns(PromotedHeaders, "coverage") then PromotedHeaders
+        else Table.AddColumn(PromotedHeaders, "coverage", each "unknown", type text),
+    WithLimitations =
+        if Table.HasColumns(WithCoverage, "limitations") then WithCoverage
+        else Table.AddColumn(
+            WithCoverage, "limitations",
+            each "[""scan coverage was not recorded for this dataset""]", type text
+        ),
+    TypedColumns = Table.TransformColumnTypes(WithLimitations, {
         {"id", type text},
         {"repo", type text},
         {"file", type text},
