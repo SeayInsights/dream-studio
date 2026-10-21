@@ -46,7 +46,7 @@ Update `.released_version` to the new max migration number as part of the same P
 echo "156" > core/event_store/migrations/.released_version
 ```
 
-This file is tracked by git and reviewed as part of the migration PR. After merge, `main` carries the updated sentinel and the guard gate advances. **The sentinel bump is not optional and not automatic:** shipping a migration `.sql` file without bumping `.released_version` in the same change set leaves every end-user install reading the old ceiling, so the new migration reports as *pending* even though its SQL is present. The current released sentinel is **156** (AI-event project attribution — `ai_canonical_events.project_id`).
+This file is tracked by git and reviewed as part of the migration PR. After merge, `main` carries the updated sentinel and the guard gate advances. **The sentinel bump is not optional and not automatic:** shipping a migration `.sql` file without bumping `.released_version` in the same change set leaves every end-user install reading the old ceiling, so the new migration reports as *pending* even though its SQL is present. The released sentinel is whatever `core/event_store/migrations/.released_version` holds; as of 2026-10-21 that is **158** (`business_work_orders.blocked_from_status`), so migrations 159 and later are unreleased.
 
 ### Activating on an operator machine
 
