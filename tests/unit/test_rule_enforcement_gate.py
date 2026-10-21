@@ -713,6 +713,27 @@ def test_the_gate_is_registered_in_the_pre_push_manifest():
     assert "fail_hint" in entry
 
 
+def test_the_resolver_tests_run_on_push_and_the_slow_bare_run_does_not():
+    """#913 left the agreement tests out of the pre-push pin list, so only the gate itself ran
+    on a push (0.3 s) and the resolver could drift from pytest unseen. They are named there
+    now. The bare run from `testpaths` (about 45 s) is deliberately not: it is CI's. If it is
+    ever pinned, measure what a push now costs and say so in the manifest."""
+    import yaml
+
+    gates = yaml.safe_load(
+        (REPO_ROOT / "canonical" / "workflows" / "pre-push.yaml").read_text(encoding="utf-8")
+    )["gates"]
+    pinned = {str(t) for g in gates for t in g.get("command") or []}
+    for name in (
+        "test_pytest_node_resolver.py",
+        "test_pytest_collection_rules.py",
+        "test_pytest_collection_agreement.py",
+        "test_rule_enforcement_gate.py",
+    ):
+        assert f"tests/unit/{name}" in pinned, f"{name} is in no pre-push gate command"
+    assert "tests/unit/test_rule_enforcement_bare_run.py" not in pinned
+
+
 def test_a_pytest_config_that_cannot_be_read_fails_the_gate_in_one_line(
     tmp_path, monkeypatch, capsys
 ):
