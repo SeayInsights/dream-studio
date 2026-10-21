@@ -437,6 +437,63 @@ def test_a_pathologically_deep_stored_limitations_cell_is_not_recorded():
     assert decode_limitations("[" * 100000 + "]" * 100000) is None
 
 
+@pytest.mark.parametrize("cell", [b"[]", bytearray(b"[]"), memoryview(b"[]").tobytes()])
+def test_a_blob_cell_holding_an_empty_array_reads_as_none_exist(cell):
+    """A BLOB cell is bytes, not str. It must decode, not fall through to "not recorded"."""
+    assert decode_limitations(cell) == ()
+
+
+def test_a_blob_cell_holding_strings_reads_them():
+    assert decode_limitations(b'["a", "b"]') == ("a", "b")
+    assert decode_limitations(bytearray(b'["a"]')) == ("a",)
+
+
+@pytest.mark.parametrize("cell", [b"junk", b"\xff\xfe", bytearray(b"{"), b"", b'"s"', b"{}"])
+def test_a_blob_cell_of_junk_is_not_recorded(cell):
+    assert decode_limitations(cell) is None
+
+
+def test_the_collector_reads_a_blob_limitations_cell(tmp_path):
+    path = tmp_path / "blob.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE security_events (event_id TEXT, event_kind TEXT, severity TEXT,"
+        " title TEXT, limitations BLOB)"
+    )
+    conn.execute(
+        "INSERT INTO security_events VALUES ('e','finding.recorded','high','t', ?)", (b"[]",)
+    )
+    conn.commit()
+    conn.close()
+    (f,) = from_security_events(path)
+    assert f.limitations == ()
+
+
+def test_a_lone_surrogate_in_a_limitation_does_not_lose_the_finding(db: Path):
+    """json.dumps(ensure_ascii=False) would hand SQLite a lone surrogate, which cannot be
+    encoded to UTF-8, so the INSERT raised and the finding was lost on both write paths."""
+    from core.telemetry.emitters import emit_security_finding
+
+    bad = "scanner output \ud800 truncated"
+    fid = record_finding(severity="high", title="t", limitations=[bad, "ok"], db_path=db)
+    with patch("spool.writer.write_event"):
+        result = emit_security_finding(
+            severity="high",
+            description="d",
+            rule_id="CWE-7",
+            limitations=[bad],
+            context={"project_id": "proj"},
+            db_path=db,
+        )
+    assert result.emitted, result.error
+    for finding_id in (fid, result.record_id):
+        row = _row(db, finding_id)
+        assert row is not None, "the finding was lost"
+        # Either it round-trips exactly or it degrades to NULL: never raises, never garbage.
+        stored = row["limitations"]
+        assert stored is None or bad in json.loads(stored)
+
+
 # ---------------------------------------------------------------------------
 # A hostile value never loses the finding
 # ---------------------------------------------------------------------------
