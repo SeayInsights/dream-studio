@@ -5,8 +5,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 CONTRACTS = {
@@ -153,9 +151,11 @@ def test_contract_docs_define_required_fields_and_authority_boundaries():
 
 def test_active_skill_ids_use_canonical_ds_slug_form():
     offenders: list[str] = []
-    skill_files = sorted((REPO_ROOT / ".claude" / "skills").rglob("SKILL.md"))
-    if not skill_files:
-        pytest.skip(".claude/skills/ is gitignored — no SKILL.md files present on CI")
+    # The tracked source of every skill. This used to read the checkout's gitignored
+    # ``.claude/skills`` projection and skip when there was none, so on CI -- and on any clone
+    # that was never projected -- it checked nothing and could not fail.
+    skill_files = sorted((REPO_ROOT / "canonical" / "skills").rglob("SKILL.md"))
+    assert skill_files, "canonical/skills holds no SKILL.md: the layout moved, or the path is wrong"
 
     for path in skill_files:
         frontmatter = _skill_frontmatter(path)

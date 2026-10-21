@@ -516,16 +516,22 @@ def test_the_gate_was_retired_and_the_module_survives_as_a_library():
     ), "the module lost its last importer, which makes it dead rather than a library"
 
 
+@pytest.mark.install_check
 def test_the_projected_manifest_matches_canonical():
     """`.claude/workflows/pre-push.yaml` is a generated copy. The runner reads
     canonical, but a stale projection is the two-copies-one-stale shape that has bitten
-    this repo repeatedly — so it is compared, not assumed."""
+    this repo repeatedly — so it is compared, not assumed.
+
+    An install check: ``.claude/`` is gitignored, so whether this checkout has a projection
+    at all is a fact about the machine. It used to skip when there was none (every CI runner,
+    every fresh clone) and failed on a stale one for a reason no commit caused. Run it on the
+    machine you mean to check: ``py -m pytest -m install_check tests``.
+    """
     from core.gates.reachability import REPO_ROOT
 
     canonical = REPO_ROOT / "canonical" / "workflows" / "pre-push.yaml"
     projected = REPO_ROOT / ".claude" / "workflows" / "pre-push.yaml"
-    if not projected.is_file():
-        pytest.skip(f"no projected manifest on this machine ({projected})")
+    assert projected.is_file(), f"no projected manifest on this machine ({projected})"
     assert projected.read_bytes().replace(b"\r\n", b"\n") == canonical.read_bytes().replace(
         b"\r\n", b"\n"
     ), "the projected pre-push manifest is stale"
