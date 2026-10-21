@@ -222,7 +222,8 @@ def _core_settings(config: bytes) -> bytes:
             end = line.find("]")
             header = line[1:end].strip().lower() if end > 0 else ""
             in_core = header == "core"
-            line = line[end + 1 :].strip() if end > 0 else ""
+            after = end + 1
+            line = line[after:].strip() if end > 0 else ""
             if not (in_core and line):
                 continue
         if not in_core:
