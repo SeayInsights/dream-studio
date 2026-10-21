@@ -5,8 +5,18 @@ Reads DAST scan results from ~/.dream-studio/security/scans/{client}/
 Supports: OWASP ZAP JSON reports, Nuclei JSONL output
 Outputs: normalized flat findings list as JSON (stdout or file)
 
+Every finding carries `coverage` (complete | partial | unknown) and `limitations`,
+(see scan_coverage.py). `complete` needs the run record in the scan's scan-meta.json
+to say both scanners ran AND this parser to have read a result for each
+(zap-report.json, nuclei-output.jsonl): a run that continued with ZAP only because
+Nuclei is not installed, or whose output is missing or malformed, is partial and names
+the scanner; a scan directory with no usable run record is unknown, never complete.
+A scan with zero findings carries nothing on a finding, so `--coverage-output`
+writes the same facts per scan directory, and writes them before any non-zero exit.
+
 Usage:
     py -3.12 parse_dast.py --client <name> [--scans-dir <path>] [--output <path>]
+                           [--coverage-output <path>]
     py -3.12 parse_dast.py --sample --client <name>
 """
 
@@ -23,7 +33,17 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+# scan_coverage.py is a sibling of this script (shared with the other parse_* scripts).
+_ETL_DIR = Path(__file__).resolve().parent
+if str(_ETL_DIR) not in sys.path:
+    sys.path.insert(0, str(_ETL_DIR))
+
+import scan_coverage  # noqa: E402
 from core.config.paths import home_dir  # noqa: E402
+
+#: Every scanner `dast run` executes when all its tooling is present (examples.md R3-R4).
+#: Coverage is complete only when each one is recorded as run.
+PLANNED_STEPS = ("zap", "nuclei")
 
 SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
@@ -240,74 +260,120 @@ def parse_zap_json(data: dict, target_name: str) -> list[dict]:
 # ── Parser: Nuclei JSONL ─────────────────────────────────────────────────────
 
 
-def parse_nuclei_jsonl(path: Path, target_name: str) -> list[dict]:
+def _nuclei_shape_problem(obj: object) -> str | None:
+    """Why a parsed JSONL line is not a Nuclei result; None when it is.
+
+    A Nuclei result has the keys parse_nuclei_jsonl reads: an `info` object and a
+    template id (`template-id`, or `templateID` in older versions). ZAP JSON or any
+    other object is not one, and must not count as Nuclei's output.
+    """
+    if not isinstance(obj, dict):
+        return "not a JSON object"
+    if not isinstance(obj.get("info"), dict):
+        return "no `info` object"
+    if not isinstance(obj.get("template-id", obj.get("templateID")), str):
+        return "no template id"
+    return None
+
+
+def nuclei_problems(text: str) -> list[str]:
+    """Every non-empty line of a Nuclei -jsonl file that is not a Nuclei result.
+
+    An empty file has none: Nuclei ran and found nothing, which is a real result.
+    """
+    problems = []
+    for line_num, line in enumerate(text.splitlines(), 1):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except (ValueError, RecursionError):
+            problems.append(f"line {line_num} is not valid JSON")
+            continue
+        reason = _nuclei_shape_problem(obj)
+        if reason:
+            problems.append(f"line {line_num} is {reason}")
+    return problems
+
+
+def parse_nuclei_jsonl(path: Path, target_name: str, text: str | None = None) -> list[dict]:
+    """Findings from the lines that are Nuclei results; other lines are skipped with a warning.
+
+    `text` is the decoded file (see scan_coverage.decode_text); read from `path` when omitted.
+    """
     findings = []
-    with open(path, encoding="utf-8") as fh:
-        for line_num, line in enumerate(fh, 1):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except json.JSONDecodeError:
-                print(
-                    f"  [warn] Skipping malformed line {line_num} in {path.name}", file=sys.stderr
-                )
-                continue
-
-            template_id = obj.get("template-id", obj.get("templateID", "unknown"))
-            info = obj.get("info", {})
-            raw_sev = info.get("severity", "low")
-            severity = NUCLEI_SEVERITY_MAP.get(raw_sev, "low")
-            name = info.get("name", template_id)
-            desc = info.get("description", "")
-            classification = info.get("classification", {})
-            cwe_list = classification.get("cwe-id", [])
-            cwe = cwe_list[0] if cwe_list else ""
-            if cwe and not cwe.startswith("CWE-"):
-                cwe = f"CWE-{cwe}"
-
-            matched_at = obj.get("matched-at", obj.get("matched_at", ""))
-            url = obj.get("host", matched_at)
-            method = obj.get("request", "").split(" ")[0] if obj.get("request") else ""
-            curl_cmd = obj.get("curl-command", "")
-
-            rule_id = f"DAST-nuc-{template_id}"
-            fp = _fingerprint(target_name, url, rule_id)
-
-            tags = info.get("tags", [])
-            owasp = ""
-            for tag in (tags if isinstance(tags, list) else tags.split(",")):
-                tag = tag.strip()
-                if tag.startswith("owasp-"):
-                    owasp = tag.replace("owasp-", "").upper()
-                    break
-
-            findings.append(
-                {
-                    "id": fp,
-                    "repo": target_name,
-                    "file": url,
-                    "line": None,
-                    "rule_id": rule_id,
-                    "severity": severity,
-                    "message": f"{name}: {desc[:200]}" if desc else name,
-                    "cwe": cwe,
-                    "owasp": owasp,
-                    "scanner": "nuclei",
-                    "raw_severity": raw_sev,
-                    "fingerprint": fp,
-                    "target_type": "webapp",
-                    "target_name": target_name,
-                    "url": url,
-                    "http_method": method,
-                    "binary_hash": "",
-                    "parameter": "",
-                    "response_code": "",
-                    "evidence": obj.get("response", "")[:500] if obj.get("response") else "",
-                    "attack_vector": curl_cmd[:500] if curl_cmd else "",
-                }
+    if text is None:
+        text = path.read_text(encoding="utf-8")
+    for line_num, line in enumerate(text.splitlines(), 1):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            print(f"  [warn] Skipping malformed line {line_num} in {path.name}", file=sys.stderr)
+            continue
+        if _nuclei_shape_problem(obj):
+            print(
+                f"  [warn] Skipping line {line_num} in {path.name}: not a nuclei result",
+                file=sys.stderr,
             )
+            continue
+
+        template_id = obj.get("template-id", obj.get("templateID", "unknown"))
+        info = obj.get("info", {})
+        raw_sev = info.get("severity", "low")
+        severity = NUCLEI_SEVERITY_MAP.get(raw_sev, "low")
+        name = info.get("name", template_id)
+        desc = info.get("description", "")
+        classification = info.get("classification", {})
+        cwe_list = classification.get("cwe-id", [])
+        cwe = cwe_list[0] if cwe_list else ""
+        if cwe and not cwe.startswith("CWE-"):
+            cwe = f"CWE-{cwe}"
+
+        matched_at = obj.get("matched-at", obj.get("matched_at", ""))
+        url = obj.get("host", matched_at)
+        method = obj.get("request", "").split(" ")[0] if obj.get("request") else ""
+        curl_cmd = obj.get("curl-command", "")
+
+        rule_id = f"DAST-nuc-{template_id}"
+        fp = _fingerprint(target_name, url, rule_id)
+
+        tags = info.get("tags", [])
+        owasp = ""
+        for tag in (tags if isinstance(tags, list) else tags.split(",")):
+            tag = tag.strip()
+            if tag.startswith("owasp-"):
+                owasp = tag.replace("owasp-", "").upper()
+                break
+
+        findings.append(
+            {
+                "id": fp,
+                "repo": target_name,
+                "file": url,
+                "line": None,
+                "rule_id": rule_id,
+                "severity": severity,
+                "message": f"{name}: {desc[:200]}" if desc else name,
+                "cwe": cwe,
+                "owasp": owasp,
+                "scanner": "nuclei",
+                "raw_severity": raw_sev,
+                "fingerprint": fp,
+                "target_type": "webapp",
+                "target_name": target_name,
+                "url": url,
+                "http_method": method,
+                "binary_hash": "",
+                "parameter": "",
+                "response_code": "",
+                "evidence": obj.get("response", "")[:500] if obj.get("response") else "",
+                "attack_vector": curl_cmd[:500] if curl_cmd else "",
+            }
+        )
     return findings
 
 
@@ -324,6 +390,46 @@ def detect_and_parse(data: object, filepath: Path, target_name: str) -> list[dic
 
     print(f"  [warn] Could not detect DAST format for {filepath.name}", file=sys.stderr)
     return []
+
+
+#: The result file each scanner leaves in the scan directory, by the exact name
+#: examples.md tells the agent to write (R3-R5), mapped to the step it is the output of.
+#: Only these names, only at the top level of the scan directory, are read: a stale
+#: `old/zap-report.json` or a `zap-config.json` holding ZAP-shaped JSON is not evidence
+#: that a scanner ran.
+RESULT_FILES = {"zap-report.json": "zap", "nuclei-output.jsonl": "nuclei"}
+
+
+#: Name fragments that make a file in a scan directory look like a result of this mode, so one
+#: that is not named exactly as documented is reported as ignored rather than silently skipped.
+RESULT_HINTS = ("zap", "nuclei")
+
+
+def read_result_file(path: Path, target_name: str) -> scan_coverage.Read:
+    """Parse one result file into a scan_coverage.Read.
+
+    A zap-report.json counts as ZAP's result only if it has the ZAP report shape, and a
+    nuclei-output.jsonl only if every non-empty line is a Nuclei result (an empty file is a
+    result: Nuclei found nothing). Raises on a file that cannot be read or parsed (the
+    caller names it and the step stays unread).
+    """
+    expected = RESULT_FILES[path.name]
+    decoded = scan_coverage.decode_text(path.read_bytes(), path.name)
+    notes = list(decoded.notes)
+    if expected == "nuclei":
+        findings = parse_nuclei_jsonl(path, target_name, decoded.text)
+        problems = nuclei_problems(decoded.text)
+        if not problems:
+            return scan_coverage.Read("nuclei", findings, list(decoded.degraded), notes)
+        more = f" (and {len(problems) - 1} more)" if len(problems) > 1 else ""
+        notes.append(f"{path.name} has lines that are not nuclei results: {problems[0]}{more}")
+        return scan_coverage.Read(None, findings, [], notes)
+    raw = json.loads(decoded.text)
+    findings = detect_and_parse(raw, path, target_name)
+    if isinstance(raw, dict) and "@version" in raw and "site" in raw:
+        return scan_coverage.Read("zap", findings, list(decoded.degraded), notes)
+    notes.append(f"{path.name} does not have the ZAP report shape")
+    return scan_coverage.Read(None, findings, [], notes)
 
 
 # ── Deduplication ────────────────────────────────────────────────────────────
@@ -475,56 +581,75 @@ def main() -> None:
     parser.add_argument("--client", required=True, help="Client name")
     parser.add_argument("--scans-dir", help="Directory containing DAST result files")
     parser.add_argument("--output", help="Output file path. Default: stdout")
+    parser.add_argument(
+        "--coverage-output",
+        help="Write per-scan coverage (complete|partial|unknown, skipped steps, limitations) "
+        "to this JSON file. Needed to see coverage on a scan that produced no findings.",
+    )
     parser.add_argument("--sample", action="store_true", help="Generate synthetic sample findings")
     args = parser.parse_args()
 
+    scan_reports: list[dict] = []
+
     if args.sample:
         findings = generate_sample()
+        sample = scan_coverage.unknown_report(None, "synthetic sample data; no scan was run")
+        scan_coverage.stamp(findings, sample)
+        scan_reports.append(sample)
         print(f"[parse_dast] Generated {len(findings)} sample DAST findings", file=sys.stderr)
+        scan_coverage.report("parse_dast", scan_reports, args.coverage_output)
     else:
         scans_dir = (
             Path(args.scans_dir)
             if args.scans_dir
             else home_dir() / "security" / "scans" / args.client
-        )
+        ).resolve()
         if not scans_dir.exists():
-            print(f"[parse_dast] ERROR: scans directory not found: {scans_dir}", file=sys.stderr)
-            sys.exit(1)
-
-        scan_files = sorted(
-            f
-            for f in scans_dir.rglob("*")
-            if f.suffix in (".json", ".jsonl")
-            and f.is_file()
-            and any(k in f.name.lower() for k in ("zap", "nuclei"))
-        )
-        if not scan_files:
-            print(f"[parse_dast] No ZAP/Nuclei result files found in {scans_dir}", file=sys.stderr)
-            sys.exit(1)
-
-        all_findings: list[dict] = []
-        for sf in scan_files:
-            target_name = (
-                sf.parent.parent.name if sf.parent.name.count("-") == 2 else sf.parent.name
+            scan_reports.append(
+                scan_coverage.unknown_report(
+                    str(scans_dir), f"scans directory not found: {scans_dir}"
+                )
             )
-            print(f"[parse_dast] Parsing {sf.name} → target={target_name}", file=sys.stderr)
-            try:
-                if sf.suffix == ".jsonl":
-                    parsed = parse_nuclei_jsonl(sf, target_name)
-                else:
-                    with open(sf, encoding="utf-8") as fh:
-                        raw = json.load(fh)
-                    parsed = detect_and_parse(raw, sf, target_name)
-                print(f"  → {len(parsed)} findings", file=sys.stderr)
-                all_findings.extend(parsed)
-            except Exception as exc:
-                print(f"  [error] Failed to parse {sf.name}: {exc}", file=sys.stderr)
+            print(f"[parse_dast] ERROR: scans directory not found: {scans_dir}", file=sys.stderr)
+            scan_coverage.report("parse_dast", scan_reports, args.coverage_output)
+            sys.exit(1)
+
+        try:
+            candidates = sorted(
+                f for f in scans_dir.rglob("*") if f.name in RESULT_FILES and f.is_file()
+            )
+            all_findings, reports, n_files = scan_coverage.collect(
+                "parse_dast",
+                scans_dir,
+                candidates,
+                PLANNED_STEPS,
+                read_result_file,
+                RESULT_FILES,
+                RESULT_HINTS,
+            )
+        except Exception as exc:  # noqa: BLE001 - never exit without the coverage sidecar
+            print(f"[parse_dast] ERROR: reading results failed: {exc}", file=sys.stderr)
+            scan_reports.append(
+                scan_coverage.unknown_report(
+                    str(scans_dir),
+                    f"unexpected failure while reading results: {scan_coverage.short(exc)}",
+                )
+            )
+            scan_coverage.report("parse_dast", scan_reports, args.coverage_output)
+            sys.exit(1)
+        scan_reports.extend(reports)
+
+        if not n_files:
+            print(f"[parse_dast] No ZAP/Nuclei result files found in {scans_dir}", file=sys.stderr)
+            scan_coverage.report("parse_dast", scan_reports, args.coverage_output)
+            sys.exit(1)
 
         findings = deduplicate(all_findings)
         print(
             f"[parse_dast] Total: {len(all_findings)} raw → {len(findings)} after dedup",
             file=sys.stderr,
         )
+        scan_coverage.report("parse_dast", scan_reports, args.coverage_output)
 
     output_json = json.dumps(findings, indent=2)
     if args.output:
