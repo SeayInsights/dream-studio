@@ -60,7 +60,7 @@ def test_after():
 """
 
 
-def _session(tmp_path: Path, test_source: str) -> str:
+def _session(tmp_path: Path, test_source: str, extra_env: dict | None = None) -> str:
     tests = tmp_path / "tests"
     tests.mkdir()
     shutil.copyfile(REPO_ROOT / "tests" / "conftest.py", tests / "conftest.py")
@@ -68,6 +68,7 @@ def _session(tmp_path: Path, test_source: str) -> str:
     (tests / "test_subject.py").write_text(test_source, encoding="utf-8")
     env = {k: v for k, v in os.environ.items() if not k.startswith(("DREAM_STUDIO_", "DS_"))}
     env["PYTHONPATH"] = str(REPO_ROOT)
+    env.update(extra_env or {})
     proc = subprocess.run(
         [sys.executable, "-m", "pytest", "-v", "-p", "no:cacheprovider", "tests"],
         cwd=str(tmp_path),
@@ -148,3 +149,31 @@ def test_a_fixture_that_leaks_is_caught_because_the_snapshot_precedes_the_fixtur
     out = _session(tmp_path, _FIXTURE_LEAK)
     assert "left the isolation environment changed" in out, out
     assert "test_after PASSED" in out, out
+
+
+_AMBIENT = """
+import os
+
+
+def test_sees_no_ambient_claude_identity():
+    for name in ("CLAUDE_CONFIG_DIR", "CLAUDE_PLUGIN_ROOT", "CLAUDE_PROJECTS_DIR"):
+        assert name not in os.environ, f"{name} reached the test from the shell"
+
+
+def test_can_still_set_one_for_itself(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
+    assert os.environ["CLAUDE_CONFIG_DIR"] == str(tmp_path)
+"""
+
+
+def test_the_shells_claude_code_identity_does_not_reach_a_test(tmp_path):
+    out = _session(
+        tmp_path,
+        _AMBIENT,
+        extra_env={
+            "CLAUDE_CONFIG_DIR": str(tmp_path / "another-identity"),
+            "CLAUDE_PLUGIN_ROOT": str(tmp_path / "a-plugin"),
+            "CLAUDE_PROJECTS_DIR": str(tmp_path / "projects"),
+        },
+    )
+    assert "2 passed" in out, out

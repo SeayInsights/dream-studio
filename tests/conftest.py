@@ -825,6 +825,15 @@ def guard_real_homedir(tmp_path, monkeypatch, request):
         guard_diag_dir.mkdir()
         monkeypatch.setenv("DS_DIAGNOSTICS_DIR", str(guard_diag_dir))
 
+    # AMBIENT CLAUDE CODE IDENTITY. These name where Claude Code keeps its config, plugins and
+    # transcripts, and a shell that runs a second identity (the reason CLAUDE_CONFIG_DIR exists)
+    # or a pytest started from inside a Claude Code session (CLAUDE_PLUGIN_ROOT) carries them into
+    # every test. Code that resolves the Claude config root then answers for THAT identity, not
+    # for the temporary home the test built: test_detector and test_lib_paths both failed on it.
+    # A test that means to exercise one sets it with monkeypatch.setenv, which still works.
+    for _ambient in ("CLAUDE_CONFIG_DIR", "CLAUDE_PLUGIN_ROOT", "CLAUDE_PROJECTS_DIR"):
+        monkeypatch.delenv(_ambient, raising=False)
+
     # Reset machine_id process-level cache so each test gets a fresh hermetic ID.
     try:
         import core.telemetry.machine_id as _mid_mod
