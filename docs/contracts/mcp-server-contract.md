@@ -244,6 +244,72 @@ exposes the server to the network and prints an explicit warning on start. Bindi
 localhost does not relax auth — every `/mcp` call still requires the bearer token
 regardless of bind address.
 
+## The server's home is the only home
+
+`ds mcp serve` is started against one Dream Studio home (its global `--home`, else
+`DREAM_STUDIO_HOME`, else the user's default), and `build_app(dream_studio_home=...)` binds that
+home once. Every tool call reads and writes that home, and no other. A capability scopes what a
+client may do; it never scopes, or lets a client choose, which authority it does it against.
+
+The binding is structural, not a filter. A handler is `handler(ctx, /, **arguments)`: `ctx` is a
+`CallContext` the server builds from its own home and the caller's authenticated identity, and
+the keyword parameters are exactly the properties of the tool's advertised `inputSchema`. There
+is no handler parameter a client's arguments could fill with a home, a root, a path to a
+database or an identity. Before 2026-10 handlers took `dream_studio_home` as a parameter and
+`tools/call` merged the client's arguments over the server's value, so any authenticated client,
+a read-only one included, could point a read tool at another home on the server's disk, and a
+client holding a mutating capability could write to one (#903).
+
+### Arguments are validated against the advertised schema
+
+`tools/call` validates `arguments` against the tool's `inputSchema` before the handler runs, and
+a call that does not conform is refused with JSON-RPC error `-32602` (invalid params) and no
+effect:
+
+- every object in the schema, nested ones included, is closed (`additionalProperties: false`):
+  an argument the schema does not name is refused, whatever it is called;
+- `required` properties must be present, and each value must have the declared `type` (`integer`
+  means a JSON integer: not a boolean, not `1.0`), `enum` and array `items`;
+- `arguments` must be an object when present (`null` and absent both mean none);
+- the capability check runs first, so a client without the capability gets `-32001` and learns
+  nothing from the shape of the argument errors;
+- the message names each problem (at most five) and echoes a client's own value only where a
+  type or enum mismatch does; it never carries data read from the authority.
+
+`params` keys other than `name` and `arguments` (`_meta`, or a stray `dream_studio_home`) are
+never read.
+
+A standing test (`tests/unit/integrations/test_mcp_tool_arguments_guard.py`) fails when a tool's
+schema names an authority-selecting argument (an explicit deny-list, plus any path-shaped name
+nobody has accepted as data), when a handler takes `**kwargs` or any parameter its schema does not
+advertise, or when an object in a schema is open. `tests/unit/integrations/
+test_mcp_home_is_the_servers.py` calls every tool with a client-supplied `dream_studio_home`, as a
+read-only client and as the root token, and checks that both homes' databases are unchanged.
+
+### Argument classes
+
+Every tool argument is one of three kinds. Only the third would redirect a call, and none is
+exposed.
+
+| Class | What it is | Examples |
+| --- | --- | --- |
+| identifier | names a row in the bound home's authority; an id that names nothing is an error from the database lookup | `project_id`, `milestone_id`, `work_order_id`, `task_id`, `reviewer` |
+| data | a value recorded or interpreted, never a place the server is pointed at | `name`, `title`, `description`, `status_filter`, `priority`, `to`, `note`, `text`, `category`, `tags`, `limit`, `pack_filter`, flags (`accept_no_brief`, `in_sequence`, `force_new_round`), `accept_structure`, `originating_symptom`, `acceptance_criteria`, `why`, `module_boundary`, `credential`, `command`, `answers`, `order_index`, `work_order_type` |
+| authority selector | picks which home, root, database, directory or caller a call acts on | `dream_studio_home`, `source_root`, `db_path`, `planning_root`, `identity`, `actor`, `run_checks`, `force`, `skip_verify` (none is a tool argument) |
+
+Two data arguments name a path or are read as one, and are accepted deliberately:
+
+- `ds_project_create.project_path` is a path on the server's machine that the project row records.
+  When given, the server also writes a `.dream-studio-project` marker in it (and runs `git config`
+  there), which is what the tool's description says. It does not select the authority.
+- `ds_work_order_add_task` hands `title`, `description` and `acceptance_criteria` to the round
+  table's admission, which keeps a path-shaped token in the text only when it names a file that
+  exists under the server's code root.
+
+Neither selects an authority, but both make the server touch a client-chosen path, which is the
+file-existence-oracle shape `ds_gate_check` avoids (see above). They are recorded here so that
+widening either is a reviewed change, not a drift.
+
 ## Invariants
 
 1. A tool with `required_capability=None` is read-only, reachable by any
@@ -263,3 +329,12 @@ regardless of bind address.
    different ways of answering the same question.
 6. A single client is never granted both `review:dispatch` and `review:record` —
    enforced in `auth.add_client`, not just documented.
+7. The server binds its Dream Studio home once, at start, and every tool call uses that home
+   and no other. No tool argument selects a home, a root, a database, a directory to read or an
+   identity: a handler takes `(ctx, /, **arguments)` with `ctx` built by the server, and its
+   keyword parameters are exactly its advertised schema's properties. Enforced by
+   `tests/unit/integrations/test_mcp_tool_arguments_guard.py` and
+   `tests/unit/integrations/test_mcp_home_is_the_servers.py`.
+8. An argument the advertised `inputSchema` does not name, at any depth, is refused with
+   `-32602` and has no effect; so is a wrong type, a missing required argument, and a value
+   outside an enum. Nothing a client sends reaches a handler except through the schema.
