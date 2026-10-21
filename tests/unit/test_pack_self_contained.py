@@ -1815,7 +1815,8 @@ EVASIONS = {
         "undeclared skill",
     ),
     "prose: /quality:harden": ({"mode_text": "Then run /quality:harden.\n"}, "undeclared skill"),
-    "prose: dream-" "studio:quality": (
+    "prose: dream-"
+    "studio:quality": (
         {"mode_text": "Invoke dream-" "studio:quality next.\n"},
         "undeclared skill",
     ),
