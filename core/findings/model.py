@@ -134,10 +134,12 @@ def decode_limitations(stored: Any) -> tuple[str, ...] | None:
     """Read a stored limitations value; anything that is not a JSON list is not recorded."""
     if stored is None:
         return None
-    try:
-        value = json.loads(stored) if isinstance(stored, (str, bytes, bytearray)) else None
-    except ValueError:
-        return None
+    value: Any = None
+    if isinstance(stored, (str, bytes, bytearray)):
+        try:
+            value = json.loads(stored)
+        except ValueError:
+            value = None  # a corrupt cell is "not recorded", which normalize reads as unknown
     return normalize_limitations(value) if isinstance(value, list) else None
 
 
