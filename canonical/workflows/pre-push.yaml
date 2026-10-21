@@ -157,7 +157,8 @@ gates:
       resolver said they ran on push, and only the gate itself (0.3 s) did, so the resolver
       could drift from pytest with nothing on a push noticing. Measured when they were added:
       about 17 s for the three unit files (11 s of it the real register against a directory
-      run of tests/unit) and 7 s for the agreement file, 24 s together. The bare run from
+      run of tests/unit) and 7 s for the agreement file, 24 s together on a quiet machine and
+      up to about 38 s on a loaded one. The bare run from
       `testpaths` as a whole (tests/unit/test_rule_enforcement_bare_run.py, about 45 s) is
       deliberately NOT here; CI runs it.
     command: [py, -m, pytest,
