@@ -365,31 +365,36 @@ def record_invocation(conn: sqlite3.Connection, invocation_type: str, **values: 
 def record_security_finding(conn: sqlite3.Connection, **values: Any) -> None:
     # findings table retired in migration 112 (WO-Y). Write to security_events spine.
     try:
-        from core.findings.mutations import _now
+        from core.findings.mutations import _now, honesty_columns
 
+        columns: dict[str, Any] = {
+            "event_id": values["finding_id"],
+            "event_kind": "finding.recorded",
+            "correlation_id": values.get("process_run_id"),
+            "project_id": values.get("project_id"),
+            "work_order_id": values.get("work_order_id") or values.get("task_id"),
+            "file_path": values.get("file_path"),
+            "line_number": values.get("start_line"),
+            "vuln_class": values.get("rule_id") or values.get("category"),
+            "severity": values["severity"],
+            "title": values.get("description", ""),
+            "body": values.get("recommendation"),
+            "created_at": _now(),
+        }
+        # confidence / coverage / limitations: stored only when given and valid, else
+        # the columns stay NULL, which reads as unknown.
+        columns.update(
+            honesty_columns(
+                conn,
+                values.get("confidence"),
+                values.get("coverage"),
+                values.get("limitations"),
+            )
+        )
         conn.execute(
-            """INSERT OR IGNORE INTO security_events
-               (event_id, parent_event_id, event_kind, correlation_id,
-                project_id, work_order_id, scanner_type,
-                cwe_id, file_path, line_number, vuln_class,
-                severity, title, body, created_at)
-               VALUES (?, NULL, 'finding.recorded', ?,
-                       ?, ?, NULL,
-                       NULL, ?, ?, ?,
-                       ?, ?, ?, ?)""",
-            (
-                values["finding_id"],
-                values.get("process_run_id"),
-                values.get("project_id"),
-                values.get("work_order_id") or values.get("task_id"),
-                values.get("file_path"),
-                values.get("start_line"),
-                values.get("rule_id") or values.get("category"),
-                values["severity"],
-                values.get("description", ""),
-                values.get("recommendation"),
-                _now(),
-            ),
+            f"INSERT OR IGNORE INTO security_events ({', '.join(columns)}) "
+            f"VALUES ({', '.join('?' * len(columns))})",
+            tuple(columns.values()),
         )
     except Exception:
         pass

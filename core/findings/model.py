@@ -14,14 +14,17 @@ dashboard renders only (1); the close gates consume only (2); nothing consumes
 (3). An operator has to know which of the three to look in before they can even
 start looking.
 
-This module defines the common shape. It is deliberately a READ-layer
-normalisation, not a schema migration: the right way to find out whether this
-shape is correct is to render every existing source through it first. Migrating
-storage before the shape is proven would just create a fourth format.
+This module defines the common shape. It started as a READ-layer
+normalisation: the way to find out whether this shape is correct was to render
+every existing source through it first, before migrating storage and creating a
+fourth format. The honesty fields (confidence, coverage, limitations) are now
+stored in security_events (migration 161); encode_honesty / decode_limitations
+below are the only translation between the shape and those columns.
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -105,6 +108,37 @@ def normalize_limitations(raw: Any) -> tuple[str, ...] | None:
     if not items and not asserted_none:
         return None
     return items
+
+
+def encode_honesty(
+    confidence: Any = None, coverage: Any = None, limitations: Any = None
+) -> dict[str, str | None]:
+    """Turn the three honesty fields into the values security_events stores.
+
+    NULL is "unknown": a value this vocabulary does not recognise, or that is "unknown"
+    itself, is stored as NULL rather than as a certain-looking one. limitations is a JSON
+    array; "[]" records "none exist", NULL records "not recorded". The same normalisers
+    the read model applies decide what is recognised, so the vocabulary lives only here.
+    """
+    conf = normalize_confidence(confidence)
+    cov = normalize_coverage(coverage)
+    lims = normalize_limitations(limitations)
+    return {
+        "confidence": None if conf == UNKNOWN else conf,
+        "coverage": None if cov == UNKNOWN else cov,
+        "limitations": None if lims is None else json.dumps(list(lims)),
+    }
+
+
+def decode_limitations(stored: Any) -> tuple[str, ...] | None:
+    """Read a stored limitations value; anything that is not a JSON list is not recorded."""
+    if stored is None:
+        return None
+    try:
+        value = json.loads(stored) if isinstance(stored, (str, bytes, bytearray)) else None
+    except ValueError:
+        return None
+    return normalize_limitations(value) if isinstance(value, list) else None
 
 
 def severity_rank(severity: str) -> int:

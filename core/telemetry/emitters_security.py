@@ -16,12 +16,14 @@ hoisting them to module level would break the patch target.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from core.findings.model import encode_honesty
 from core.telemetry.execution_spine import (
     record_execution_event,
     record_security_finding,
@@ -61,11 +63,18 @@ def emit_security_finding(
     source_refs: Sequence[str] | None = None,
     evidence_refs: Sequence[str] | None = None,
     metadata: Mapping[str, Any] | None = None,
+    confidence: str | None = None,
+    coverage: str | None = None,
+    limitations: Sequence[str] | None = None,
     db_path: Path | str | None = None,
     mode: str = MODE_BEST_EFFORT,
 ) -> TelemetryEmitResult:
-    """Dual-write security findings with deterministic idempotency."""
+    """Dual-write security findings with deterministic idempotency.
 
+    confidence / coverage / limitations are optional and stored on the security_events row
+    only when valid (see core.findings.model.encode_honesty); otherwise the columns stay
+    NULL and the finding reads as unknown. They do not enter the finding id.
+    """
     ctx = _context(context)
     normalized_severity = _severity(severity)
     normalized_status = _status(status)
@@ -138,26 +147,37 @@ def emit_security_finding(
             introduced_by_workflow_id=introduced_by_workflow_id,
             introduced_by_hook_id=introduced_by_hook_id,
             evidence_refs=merged_evidence_refs,
+            confidence=confidence,
+            coverage=coverage,
+            limitations=limitations,
         )
         try:
             from canonical.events.envelope import CanonicalEventEnvelope
             from canonical.events.redactor import redact_file_path as _redact
             from spool.writer import write_event as _write_event
 
+            _logged_payload = {
+                "finding_id": finding_id,
+                "project_id": ctx.project_id or "",
+                "severity": normalized_severity,
+                "status": normalized_status,
+                "scan_id": scan_id,
+                "rule_id": rule_id,
+                "category": category,
+                "file_path": _redact(file_path or ""),
+                "start_line": normalized_start_line,
+                "end_line": normalized_end_line,
+            }
+            # Observability copy of what the row stored; an absent key means unknown.
+            _stored = encode_honesty(confidence, coverage, limitations)
+            for _key in ("confidence", "coverage"):
+                if _stored[_key]:
+                    _logged_payload[_key] = _stored[_key]
+            if _stored["limitations"] is not None:
+                _logged_payload["limitations"] = json.loads(_stored["limitations"])
             _envelope = CanonicalEventEnvelope(
                 event_type="security.finding.logged",
-                payload={
-                    "finding_id": finding_id,
-                    "project_id": ctx.project_id or "",
-                    "severity": normalized_severity,
-                    "status": normalized_status,
-                    "scan_id": scan_id,
-                    "rule_id": rule_id,
-                    "category": category,
-                    "file_path": _redact(file_path or ""),
-                    "start_line": normalized_start_line,
-                    "end_line": normalized_end_line,
-                },
+                payload=_logged_payload,
                 project_id=ctx.project_id,
                 session_id=None,
                 confidence="high",

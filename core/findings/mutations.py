@@ -13,9 +13,47 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
+import warnings
 from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
+
+from .model import encode_honesty
+
+_HONESTY_COLUMNS = ("confidence", "coverage", "limitations")
+
+
+def honesty_columns(
+    conn: sqlite3.Connection,
+    confidence: Any = None,
+    coverage: Any = None,
+    limitations: Any = None,
+) -> dict[str, str]:
+    """The honesty columns to add to a finding.recorded INSERT; empty when nothing is stored.
+
+    A value that is unknown (not given, or not in the vocabulary) is left out so the
+    column stays NULL, which every reader treats as unknown. When values are given but
+    this database predates migration 161 (the migration is unreleased, so a live
+    authority may not have applied it), they cannot be stored: the finding is still
+    recorded, without them, and a warning says so. It then reads unknown, which is the
+    truth, not a certain value.
+    """
+    stored = {k: v for k, v in encode_honesty(confidence, coverage, limitations).items() if v}
+    if not stored:
+        return {}
+    try:
+        have = {r[1] for r in conn.execute("PRAGMA table_info(security_events)")}
+    except sqlite3.Error:
+        have = set()
+    if not set(_HONESTY_COLUMNS) <= have:
+        warnings.warn(
+            "security_events has no confidence/coverage/limitations columns (migration 161 "
+            "not applied); the finding is recorded without them and reads as unknown",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return {}
+    return stored
 
 
 def _now() -> str:
@@ -55,6 +93,9 @@ def record_finding(
     vuln_class: str | None = None,
     exploitability: str | None = None,
     correlation_id: str | None = None,
+    confidence: str | None = None,
+    coverage: str | None = None,
+    limitations: list[str] | tuple[str, ...] | None = None,
     db_path: Path | None = None,
 ) -> str:
     """Insert a finding.recorded event into security_events.
@@ -63,6 +104,12 @@ def record_finding(
     time from security_events (see core/findings/current_status.py) — there is
     no separate projection to update.
 
+    confidence (high|medium|low), coverage (complete|partial) and limitations (what the
+    check cannot establish; an empty list records "none") say how much of the check was
+    real. All three are optional and validated by the read model's own normalisers: one
+    that is missing or outside the vocabulary is stored as NULL, which reads as unknown,
+    never as high or complete.
+
     Also emits a finding.recorded canonical event (fail-open, for observability).
     """
     finding_id = str(uuid.uuid4())
@@ -70,35 +117,31 @@ def record_finding(
 
     conn, owned = _get_conn(db_path)
     try:
+        columns: dict[str, Any] = {
+            "event_id": finding_id,
+            "parent_event_id": None,
+            "event_kind": "finding.recorded",
+            "correlation_id": correlation_id,
+            "project_id": project_id,
+            "work_order_id": work_order_id,
+            "scanner_type": scanner_type,
+            "cwe_id": cwe_id,
+            "owasp_category": owasp_category,
+            "cve_id": cve_id,
+            "file_path": file_path,
+            "line_number": line_number,
+            "vuln_class": vuln_class,
+            "exploitability": exploitability,
+            "severity": severity,
+            "title": title,
+            "body": body,
+            "created_at": now,
+        }
+        columns.update(honesty_columns(conn, confidence, coverage, limitations))
         conn.execute(
-            """
-            INSERT INTO security_events (
-                event_id, parent_event_id, event_kind, correlation_id,
-                project_id, work_order_id, scanner_type,
-                cwe_id, owasp_category, cve_id,
-                file_path, line_number, vuln_class, exploitability,
-                severity, title, body, created_at
-            ) VALUES (?, ?, 'finding.recorded', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                finding_id,
-                None,
-                correlation_id,
-                project_id,
-                work_order_id,
-                scanner_type,
-                cwe_id,
-                owasp_category,
-                cve_id,
-                file_path,
-                line_number,
-                vuln_class,
-                exploitability,
-                severity,
-                title,
-                body,
-                now,
-            ),
+            f"INSERT INTO security_events ({', '.join(columns)}) "
+            f"VALUES ({', '.join('?' * len(columns))})",
+            tuple(columns.values()),
         )
         if owned:
             conn.commit()
