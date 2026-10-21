@@ -93,22 +93,33 @@ class Read(NamedTuple):
     this parser reads. `degraded` are reasons the step was read only partly (records
     dropped by a cap, values ignored): they make the step, and so the scan, partial.
     `notes` are limitations that hold without lowering coverage (undecodable bytes
-    replaced, a check name the doc does not list).
+    replaced, a check name the doc does not list). `refusals` say why a file was found and
+    not accepted as the step's result (it is not that step's output, it has the wrong
+    shape): they are never cut by the note cap, because the unread-step limitation points
+    at them.
     """
 
     step: str | None
     findings: list
     degraded: list
     notes: list
+    refusals: list | tuple = ()
 
 
 class ScanRead:
-    """Everything the parser learned about one scan directory, for assess_all()."""
+    """Everything the parser learned about one scan directory, for assess_all().
+
+    `refusals` (a file found and not read: it could not be read, is not the step's output,
+    could not be placed) are kept in full. `notes` are bounded, and `ignored` (a file not
+    named like a result, or left in a subdirectory) is what the bound cuts first.
+    """
 
     def __init__(self) -> None:
         self.steps: set[str] = set()
         self.degraded: dict[str, list[str]] = {}
         self.notes: list[str] = []
+        self.refusals: list[str] = []
+        self.ignored: list[str] = []
 
     def add(self, result: Read) -> None:
         if result.step is not None:
@@ -116,6 +127,7 @@ class ScanRead:
             if result.degraded:
                 self.degraded.setdefault(result.step, []).extend(result.degraded)
         self.notes.extend(result.notes)
+        self.refusals.extend(result.refusals)
 
 
 def _real(path: Path) -> Path:
@@ -158,11 +170,14 @@ def find_meta(start: Path, stop: Path, resolve: Resolver = _real) -> Path | None
 # decode_text() recognises what a BOM or an unmistakable NUL pattern says, decodes it, and
 # says so; content that is not text in a supported encoding raises instead of being guessed.
 
-_BAD_BYTES: list[int] = []
+#: Bytes the decoder could not decode in the current decode_text() call: a count, not a list.
+#: (A list with one entry per decoder error cost 20 million entries for a 20 MB file of
+#: nothing but bad bytes.) A one-cell list because the error handler is a plain function.
+_BAD_BYTES = [0]
 
 
 def _count_bad(exc: UnicodeError) -> tuple[str, int]:
-    _BAD_BYTES.append(exc.end - exc.start)
+    _BAD_BYTES[0] += exc.end - exc.start
     return "�", exc.end
 
 
@@ -214,9 +229,9 @@ def decode_text(data: bytes, name: str) -> Decoded:
         guessed = _guess_utf16(data)
         if guessed:
             encoding, label = guessed
-    del _BAD_BYTES[:]
+    _BAD_BYTES[0] = 0
     text = data.decode(encoding, errors="scan_coverage_count")
-    bad = sum(_BAD_BYTES)
+    bad = _BAD_BYTES[0]
 
     if "\x00" in text:
         raise ValueError(
@@ -433,6 +448,25 @@ _NOTE_LIMIT = 20
 Planned = tuple[str, ...] | Callable[[dict | None], tuple[str, ...]]
 
 
+def _bounded_notes(state: ScanRead) -> list[str]:
+    """What a scan's files had to say, bounded, in the order that matters.
+
+    Refusals (a file found and not read, and why) come first and are never cut: the unread
+    limitation points at them ("named in another limitation"), and there are as many as
+    there are result files, which is few. Then the other notes, then the "ignored" notes,
+    sharing the `_NOTE_LIMIT` that bounds a pile of stray files. When the bound cuts, the
+    ignored notes go first and the cut is counted, so 25 misnamed files never hide the
+    reason a result could not be read.
+    """
+    refusals = [short(r) for r in state.refusals]
+    others = [short(n) for n in state.notes]
+    ignored = [short(n) for n in state.ignored]
+    kept = others[:_NOTE_LIMIT]
+    kept += ignored[: max(0, _NOTE_LIMIT - len(kept))]
+    cut = len(others) + len(ignored) - len(kept)
+    return refusals + kept + ([f"... and {cut} more notes"] if cut else [])
+
+
 def planned_for(planned: Planned, meta: dict | None) -> tuple[str, ...]:
     """The planned steps of one scan directory."""
     return planned(meta) if callable(planned) else planned
@@ -455,10 +489,7 @@ def assess_all(
         planned_steps = planned_for(planned, meta)
         read = state.steps & set(planned_steps)
         report = assess(meta, planned_steps, read, state.degraded)
-        notes = [short(n) for n in state.notes]
-        if len(notes) > _NOTE_LIMIT:
-            notes = notes[:_NOTE_LIMIT] + [f"... and {len(notes) - _NOTE_LIMIT} more notes"]
-        report["limitations"] = report["limitations"] + notes
+        report["limitations"] = report["limitations"] + _bounded_notes(state)
         out[key] = {
             "scan_dir": key,
             **report,
@@ -468,7 +499,10 @@ def assess_all(
 
 
 def split_by_scan_dir(
-    scans_dir: Path, candidates: Iterable[Path], resolve: Resolver = _real
+    scans_dir: Path,
+    candidates: Iterable[Path],
+    resolve: Resolver = _real,
+    unplaceable: dict[Path, str] | None = None,
 ) -> tuple[list[Path], dict[str, list[Path]]]:
     """Keep only result files at the top level of their scan directory.
 
@@ -481,7 +515,10 @@ def split_by_scan_dir(
     Both sides of the comparison are resolved the same way (`resolve`), so a relative
     `scans_dir`, `.`, `..` segments, a trailing separator, a link or a differently-cased
     path decide exactly as the absolute path does. This never raises: a candidate it
-    cannot place is ignored and named, not a crash.
+    cannot place is not read and is not a crash either. It is NOT filed under `ignored`,
+    which says "this file is not named or placed like a result": an internal failure there
+    would read as a misnamed file. It goes into `unplaceable` (path -> the error), which the
+    caller reports as a failure.
     """
     kept: list[Path] = []
     ignored: dict[str, list[Path]] = {}
@@ -489,7 +526,10 @@ def split_by_scan_dir(
         try:
             key, _ = scan_key(path, scans_dir, resolve)
             top_level = _norm(key) == _norm(resolve(path.parent))
-        except Exception:  # noqa: BLE001 - discovery must degrade, never crash
+        except Exception as exc:  # noqa: BLE001 - discovery must degrade, never crash
+            if unplaceable is not None:
+                unplaceable[path] = f"{type(exc).__name__}: {short(exc)}"
+                continue
             key, top_level = str(resolve(scans_dir)), False
         if top_level:
             kept.append(path)
@@ -511,7 +551,7 @@ def note_ignored(state_by_key: dict[str, ScanRead], ignored: dict[str, list[Path
     for key, paths in ignored.items():
         state = state_by_key.setdefault(key, ScanRead())
         for path in paths:
-            state.notes.append(
+            state.ignored.append(
                 f"{_display(path, key)} was ignored: results are read only from {key} itself"
             )
 
@@ -553,7 +593,7 @@ def note_misnamed(
                 or not any(h in low for h in hints)
             ):
                 continue
-            state_by_key.setdefault(key, ScanRead()).notes.append(
+            state_by_key.setdefault(key, ScanRead()).ignored.append(
                 f"{entry.name} was ignored: results are read only from {listing}"
             )
 
@@ -574,11 +614,21 @@ def collect(
     parser. Both parse_*.py scripts run through here, so discovery, notes and coverage
     are one implementation.
     """
-    scan_files, ignored = split_by_scan_dir(scans_dir, candidates)
+    unplaceable: dict[Path, str] = {}
+    scan_files, ignored = split_by_scan_dir(scans_dir, candidates, unplaceable=unplaceable)
     dirs = scan_dirs(scans_dir, scan_files)
     state_by_key: dict[str, ScanRead] = {}
     note_ignored(state_by_key, ignored)
     note_misnamed(state_by_key, dirs, exact, hints)
+    for path, why in unplaceable.items():
+        # An internal failure, not a misnamed file: name the file and the error, in the scan
+        # directory the caller asked about (the one place a file with no scan has).
+        key = str(_real(scans_dir))
+        dirs.setdefault(key, None)
+        print(f"  [error] Could not place {path.name}: {why}", file=sys.stderr)
+        state_by_key.setdefault(key, ScanRead()).refusals.append(
+            f"{path.name} could not be placed in a scan directory, so it was not read: {why}"
+        )
 
     findings_by_key: dict[str, list[dict]] = {}
     for sf in scan_files:
@@ -590,7 +640,7 @@ def collect(
             result = read_file(sf, target_name)
         except Exception as exc:  # noqa: BLE001 - an unreadable file leaves its step unread
             print(f"  [error] Failed to parse {sf.name}: {exc}", file=sys.stderr)
-            state.notes.append(f"{sf.name} could not be read: {short(exc)}")
+            state.refusals.append(f"{sf.name} could not be read: {short(exc)}")
             continue
         state.add(result)
         findings_by_key.setdefault(key, []).extend(result.findings)

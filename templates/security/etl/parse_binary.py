@@ -657,8 +657,8 @@ def read_result_file(path: Path, target_name: str, binary_hash: str) -> scan_cov
         step = detect_step(raw, path.name)
         findings = detect_and_parse(raw, path.name, target_name, binary_hash, degraded, notes)
     if step != expected:
-        notes.append(f"{path.name} is not a {expected} result (content reads as {step or 'none'})")
-        return scan_coverage.Read(None, findings, [], notes)
+        refusal = f"{path.name} is not a {expected} result (content reads as {step or 'none'})"
+        return scan_coverage.Read(None, findings, [], notes, [refusal])
     return scan_coverage.Read(step, findings, degraded, notes)
 
 

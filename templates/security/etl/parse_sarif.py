@@ -484,8 +484,8 @@ def read_result_file(path: Path, target_name: str) -> scan_coverage.Read:
     step = detect_step(raw)
     notes = list(decoded.notes)
     if step is None:
-        notes.append(f"{path.name} is not the output of a scanner this parser reads")
-        return scan_coverage.Read(None, [], [], notes)
+        refusal = f"{path.name} is not the output of a scanner this parser reads"
+        return scan_coverage.Read(None, [], [], notes, [refusal])
     return scan_coverage.Read(
         step,
         detect_and_parse(raw, path.name, repo_for(path, target_name)),

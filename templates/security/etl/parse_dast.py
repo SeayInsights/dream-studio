@@ -422,14 +422,15 @@ def read_result_file(path: Path, target_name: str) -> scan_coverage.Read:
         if not problems:
             return scan_coverage.Read("nuclei", findings, list(decoded.degraded), notes)
         more = f" (and {len(problems) - 1} more)" if len(problems) > 1 else ""
-        notes.append(f"{path.name} has lines that are not nuclei results: {problems[0]}{more}")
-        return scan_coverage.Read(None, findings, [], notes)
+        refusal = f"{path.name} has lines that are not nuclei results: {problems[0]}{more}"
+        return scan_coverage.Read(None, findings, [], notes, [refusal])
     raw = json.loads(decoded.text)
     findings = detect_and_parse(raw, path, target_name)
     if isinstance(raw, dict) and "@version" in raw and "site" in raw:
         return scan_coverage.Read("zap", findings, list(decoded.degraded), notes)
-    notes.append(f"{path.name} does not have the ZAP report shape")
-    return scan_coverage.Read(None, findings, [], notes)
+    return scan_coverage.Read(
+        None, findings, [], notes, [f"{path.name} does not have the ZAP report shape"]
+    )
 
 
 # ── Deduplication ────────────────────────────────────────────────────────────
