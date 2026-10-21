@@ -647,6 +647,7 @@ rules:
     enforced_by:
       - core/gates/review_lane_registry.py
       - tests/unit/test_round_table.py::test_no_lane_asks_more_than_its_enforcement_answers
+      - tests/unit/test_round_table.py::test_a_detector_lane_must_declare_what_it_defers_and_an_empty_list_is_a_claim
       - tests/unit/test_round_table.py::test_the_deferred_half_is_printed_beside_the_clean_mark
     note: >
       A detector is a narrow predicate standing in for a prose question and the two are
