@@ -1452,7 +1452,9 @@ def test_a_sibling_binary_with_only_unlisted_marker_keys_is_counted_as_unread(tm
     assert "2 binaries" in text and "b.exe" in text
 
 
-@pytest.mark.parametrize("spelling", ["NX", "high_entropy_va", "Fortify", "code_sign", "N_X", "can-ary"])
+@pytest.mark.parametrize(
+    "spelling", ["NX", "high_entropy_va", "Fortify", "code_sign", "N_X", "can-ary"]
+)
 def test_a_listed_check_counts_in_any_spelling_when_looking_for_unread_binaries(
     tmp_path: Path, spelling: str
 ):
