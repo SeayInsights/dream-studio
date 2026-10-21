@@ -291,36 +291,58 @@ def parse_bandit(data: dict, repo: str) -> list[dict]:
 # ── Parser: TruffleHog JSON ───────────────────────────────────────────────────
 
 
+def _trufflehog_location(result: dict) -> tuple[str, int | None]:
+    """(file, line) from a trufflehog result's SourceMetadata, whatever the source type
+    (Git, Filesystem, Github, ...): the first source object that names a file."""
+    meta = result.get("SourceMetadata")
+    data = meta.get("Data") if isinstance(meta, dict) else None
+    if not isinstance(data, dict):
+        return "", None
+    for source in data.values():
+        if isinstance(source, dict) and isinstance(source.get("file"), str):
+            line = source.get("line")
+            return source["file"], (
+                line if isinstance(line, int) and not isinstance(line, bool) else None
+            )
+    return "", None
+
+
 def parse_trufflehog(data_list: list, repo: str) -> list[dict]:
+    """Findings from trufflehog results. A secret is high severity.
+
+    A finding carries the detector name, the file, the line and whether trufflehog verified the
+    secret live, and NOTHING of the secret: `Raw`, `RawV2` and the partly masked `Redacted`
+    are never read, and neither is the commit author. The old finding put `Raw[:80]` in its
+    message, which reached the findings JSON, the CSV and the dashboard.
+    """
     findings = []
     if isinstance(data_list, dict):
         data_list = data_list.get("results", [data_list])
-    for r in data_list:
-        detector = r.get("DetectorName", "secret")
-        raw = r.get("Raw", "")[:80]  # truncate sensitive raw value
-        meta = r.get("SourceMetadata", {}).get("Data", {})
-        # TruffleHog metadata varies by source type; try common keys
-        filename = (
-            meta.get("Filesystem", {}).get("file")
-            or meta.get("Git", {}).get("file")
-            or meta.get("file", "")
+    for r in data_list if isinstance(data_list, list) else []:
+        if not isinstance(r, dict):
+            continue
+        detector = r.get("DetectorName")
+        detector = (
+            scan_coverage.short(detector) if isinstance(detector, str) and detector else "secret"
         )
-        line = meta.get("Filesystem", {}).get("line") or meta.get("Git", {}).get("line")
+        filename, line = _trufflehog_location(r)
+        verified = r.get("Verified") is True
         rule_id = f"TH-{detector}"
-        fp = _fingerprint(repo, filename or "", line, rule_id)
+        fp = _fingerprint(repo, filename, line, rule_id)
+        state = "verified by trufflehog" if verified else "unverified"
         findings.append(
             {
                 "id": fp,
                 "repo": repo,
-                "file": filename or "",
+                "file": scan_coverage.short(filename),
                 "line": line,
                 "rule_id": rule_id,
-                "severity": "critical",
-                "message": f"Secret detected by {detector}: {raw!r}",
+                "severity": "high",
+                "message": f"Secret detected by {detector} ({state}; value redacted)",
                 "cwe": "CWE-312",
                 "owasp": "A02:2021",
                 "scanner": "trufflehog",
-                "raw_severity": "CRITICAL",
+                "raw_severity": "HIGH",
                 "fingerprint": fp,
                 "target_type": "repo",
                 "target_name": "",
@@ -330,6 +352,48 @@ def parse_trufflehog(data_list: list, repo: str) -> list[dict]:
             }
         )
     return findings
+
+
+#: How many failing lines a limitation numbers; the rest are counted.
+_NAMED_LINES = 5
+
+
+def read_trufflehog_lines(text: str, name: str) -> tuple[list[dict], list[str], list[str]]:
+    """(findings, degraded, notes) from trufflehog JSON Lines (`--json`: one result per line).
+
+    The file may also hold trufflehog's own log lines (the old workflow merged stderr into it);
+    those are set aside with a note. A line that is neither a result nor a log line is skipped
+    and numbered in `degraded`, never quoted: it may be the secret.
+    """
+    results: list[dict] = []
+    logs = 0
+    bad: list[int] = []
+    for number, line in enumerate(text.splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            obj = json.loads(line)
+        except (ValueError, RecursionError):
+            bad.append(number)
+            continue
+        if isinstance(obj, dict) and ("DetectorName" in obj or "SourceMetadata" in obj):
+            results.append(obj)
+        elif isinstance(obj, dict) and "level" in obj and "msg" in obj:
+            logs += 1
+        else:
+            bad.append(number)
+    degraded: list[str] = []
+    notes: list[str] = []
+    if bad:
+        shown = ", ".join(str(n) for n in bad[:_NAMED_LINES])
+        more = ", ..." if len(bad) > _NAMED_LINES else ""
+        degraded.append(
+            f"{len(bad)} line(s) of {name} could not be read as trufflehog results and were "
+            f"skipped (lines {shown}{more})"
+        )
+    if logs:
+        notes.append(f"{logs} trufflehog log line(s) in {name} were ignored: they are not results")
+    return parse_trufflehog(results, ""), degraded, notes
 
 
 # ── Parser: pip-audit JSON ────────────────────────────────────────────────────
@@ -446,8 +510,13 @@ NOT_RESULTS = frozenset({scan_coverage.META_NAME, "coverage.json", "hash.json"})
 
 
 def is_result_file(path: Path) -> bool:
-    """Candidate result files: .json / .sarif files, never scan-meta.json and its siblings."""
-    return path.suffix in (".json", ".sarif") and path.is_file() and path.name not in NOT_RESULTS
+    """Candidate result files: .json / .sarif / .jsonl files, never scan-meta.json and its
+    siblings. (.jsonl: trufflehog's JSON Lines results.)"""
+    return (
+        path.suffix in (".json", ".sarif", ".jsonl")
+        and path.is_file()
+        and path.name not in NOT_RESULTS
+    )
 
 
 def planned_steps(meta: dict | None) -> tuple[str, ...]:
@@ -501,6 +570,44 @@ def sarif_degradation(raw: object) -> str | None:
     return None
 
 
+def _unreadable(path: Path, exc: Exception) -> scan_coverage.Read:
+    """A file that cannot be read: named, and when its name says which scanner it belongs to
+    that scanner is degraded (partial). A name that says nothing re-raises, so the caller
+    records the refusal."""
+    step = scanner_from_name(path.name)
+    if step is None:
+        raise exc
+    reason = f"{path.name} could not be read ({scan_coverage.short(exc)})"
+    return scan_coverage.Read(
+        None,
+        [],
+        [],
+        [],
+        [f"{path.name} could not be read: {scan_coverage.short(exc)}"],
+        ((step, f"{reason}, so {step}'s output may be incomplete"),),
+    )
+
+
+def _read_trufflehog_file(path, decoded, hinted, repo) -> scan_coverage.Read:
+    findings, degraded, notes = read_trufflehog_lines(decoded.text, path.name)
+    for finding in findings:  # the lines were parsed without a repo; stamp it now
+        finding["repo"] = repo
+        finding["fingerprint"] = finding["id"] = _fingerprint(
+            repo, finding["file"], finding["line"], finding["rule_id"]
+        )
+    nonblank = any(line.strip() for line in decoded.text.splitlines())
+    is_trufflehog = (
+        bool(findings)
+        or any("log line(s)" in n for n in notes)
+        or (hinted == "trufflehog" and (not nonblank or degraded))
+    )
+    all_notes = list(decoded.notes) + notes
+    if not is_trufflehog:
+        refusal = f"{path.name} is not the output of a scanner this parser reads"
+        return scan_coverage.Read(None, [], [], all_notes, [refusal])
+    return scan_coverage.Read("trufflehog", findings, list(decoded.degraded) + degraded, all_notes)
+
+
 def read_result_file(path: Path, target_name: str) -> scan_coverage.Read:
     """Parse one scanner result into a scan_coverage.Read.
 
@@ -511,20 +618,22 @@ def read_result_file(path: Path, target_name: str) -> scan_coverage.Read:
     """
     try:
         decoded = scan_coverage.decode_text(path.read_bytes(), path.name)
-        raw = json.loads(decoded.text)
     except (OSError, ValueError, RecursionError) as exc:
-        step = scanner_from_name(path.name)
-        if step is None:
-            raise
-        reason = f"{path.name} could not be read ({scan_coverage.short(exc)})"
-        return scan_coverage.Read(
-            None,
-            [],
-            [],
-            [],
-            [f"{path.name} could not be read: {scan_coverage.short(exc)}"],
-            ((step, f"{reason}, so {step}'s output may be incomplete"),),
-        )
+        return _unreadable(path, exc)
+    hinted = scanner_from_name(path.name)
+    raw: object = None
+    is_document = False
+    if path.suffix.lower() != ".jsonl":
+        try:
+            raw = json.loads(decoded.text)
+            is_document = True
+        except (ValueError, RecursionError) as exc:
+            if hinted != "trufflehog":
+                return _unreadable(path, exc)
+    if not is_document:
+        # JSON Lines: trufflehog's `--json` output, or the merged stream the old workflow wrote
+        # into trufflehog-results.json (not a document, so read by its name).
+        return _read_trufflehog_file(path, decoded, hinted, repo_for(path, target_name))
     step = detect_step(raw)
     notes = list(decoded.notes)
     if step is None:
@@ -802,7 +911,12 @@ def main() -> None:
         scan_reports.extend(reports)
 
         if not n_files:
-            print(f"[parse_sarif] No .json/.sarif files found in {scans_dir}", file=sys.stderr)
+            print(
+                f"[parse_sarif] No .json/.sarif/.jsonl files found in {scans_dir}. parse_sarif "
+                "reads the result files directly in --scans-dir and does not walk the client "
+                "tree: pass --scans-dir the scan directory (scans/{client}/{repo}/{date}).",
+                file=sys.stderr,
+            )
             scan_coverage.report("parse_sarif", scan_reports, args.coverage_output)
             sys.exit(1)
 

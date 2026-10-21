@@ -11,9 +11,9 @@ Extracted from SKILL.md to reduce context injection size.
 
 2. **Run parse_sarif.py**
    ```
-   py -3.12 <skill-dir>/templates/security/etl/parse_sarif.py --client {client}
+   py -3.12 <skill-dir>/templates/security/etl/parse_sarif.py --client {client} --scans-dir {scan_dir}
    ```
-   Reads all SARIF/JSON files from `scans/{client}/`. Normalizes across scanner outputs (Semgrep SARIF, Bandit JSON, TruffleHog JSON, pip-audit JSON). Deduplicates. Outputs normalized findings JSON to stdout.
+   Reads the result files directly in `--scans-dir` (SARIF, Bandit JSON, TruffleHog JSON Lines, pip-audit JSON) and normalizes across them. It reads one scan directory per run (`scans/{client}/{repo}/{date}`) and does not walk the client tree: pass `--scans-dir` the scan directory you want in the dataset. Which dated directory is current for each repo is a choice this step does not make, so a client with several repos is run once per scan directory. Deduplicates. Outputs normalized findings JSON to stdout.
 
 3. **Run score_findings.py**
    ```

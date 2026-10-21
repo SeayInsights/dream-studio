@@ -168,7 +168,7 @@ which turns a credential scan into a file of NUL-separated characters. Use the b
 above (Git Bash or WSL), or in PowerShell pipe through `| Out-File -Encoding utf8
 strings-findings.txt` (PowerShell 7 writes UTF-8 by default), or set `PYTHONUTF8=1` for
 Python steps. Ingest also accepts a UTF-8 BOM and UTF-16/UTF-32 with a BOM (or UTF-16
-without one), decodes them, and names the encoding as a limitation; bytes it cannot decode
+without one), decodes them, and names the encoding as a limitation. UTF-16 without a BOM is recognised only when most of the text is ASCII (a NUL in most of the high bytes): non-Latin text with no BOM and no NULs to give it away is not recognised, and otherwise the file is unread and the step `partial`, so write it as UTF-8 or with a BOM; bytes it cannot decode
 make the step `partial`, and a file that is mostly undecodable or holds NUL characters is
 not read at all.
 
