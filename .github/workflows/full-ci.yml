@@ -37,6 +37,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
 
+      # The four real-container tests of the review lane sandbox are install_check tests, so the
+      # parity gate's pytest run does not collect them; they ran here when they were plain
+      # tests. See the same step in ci.yml for the measurement. ubuntu-latest has Docker.
+      - name: Review lane sandbox (real Docker engine)
+        run: python -m pytest -m install_check tests/unit/test_lane_sandbox.py -q --tb=short
+
       - name: Run local parity release gate
         run: python interfaces/cli/ci_gate.py
 

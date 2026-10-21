@@ -6,6 +6,8 @@ enforceable rather than hoped for, so its rule is tested here without an engine,
 container's own properties -- exit codes propagate, no network, nothing persists -- are
 install checks against a real engine (``py -m pytest -m install_check tests``): they are
 never collected by default and fail, rather than skip, when no engine is running.
+CI runs them on purpose: a Linux step in ci.yml (pr-smoke) and one in full-ci.yml, where
+GitHub's runners have Docker.
 """
 
 from __future__ import annotations
