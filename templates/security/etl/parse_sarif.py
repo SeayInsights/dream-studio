@@ -505,18 +505,9 @@ def repo_for(path: Path, target_name: str) -> str:
 
 
 def deduplicate(findings: list[dict]) -> list[dict]:
-    """Keep one finding per fingerprint; prefer highest severity."""
-    best: dict[str, dict] = {}
-    for f in findings:
-        fp = f["fingerprint"]
-        if fp not in best:
-            best[fp] = f
-        else:
-            existing_rank = SEVERITY_RANK.get(best[fp]["severity"], 0)
-            new_rank = SEVERITY_RANK.get(f["severity"], 0)
-            if new_rank > existing_rank:
-                best[fp] = f
-    return list(best.values())
+    """Keep one finding per fingerprint; prefer highest severity. Scans that disagree about
+    coverage leave the weaker one on the merged finding (see scan_coverage.deduplicate)."""
+    return scan_coverage.deduplicate(findings, SEVERITY_RANK)
 
 
 # ── Sample data generator ─────────────────────────────────────────────────────

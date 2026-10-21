@@ -620,6 +620,168 @@ def test_doc_describes_unread_exactly_as_the_code_behaves():
     assert "an empty file is a result" in text
 
 
+# -- one odd Nuclei line must not drop the file (issue #908) -------------------------------------
+
+
+def _nuclei_file(tmp_path: Path, lines: list[object]) -> Path:
+    d = _scan(
+        tmp_path / "scans",
+        "web",
+        {"schema_version": 1, "steps": _steps()},
+        zap="clean",
+        nuclei="empty",
+    )
+    text = "".join((ln if isinstance(ln, str) else json.dumps(ln)) + "\n" for ln in lines)
+    (d / "nuclei-output.jsonl").write_text(text, encoding="utf-8")
+    return d
+
+
+def _nuclei(name: str, **info: object) -> dict:
+    return {
+        "template-id": name,
+        "info": {"name": name, "severity": "medium", **info},
+        "host": "https://app.example.test",
+    }
+
+
+@pytest.mark.parametrize(
+    "info",
+    [
+        {"classification": None},
+        {"tags": None},
+        {"classification": None, "tags": None},
+        {"classification": "CWE-79"},
+        {"classification": {"cwe-id": None}},
+        {"classification": {"cwe-id": "CWE-79"}},
+        {"tags": 7},
+        {"tags": ["owasp-a01", 3, None]},
+    ],
+    ids=[
+        "null-classification",
+        "null-tags",
+        "both-null",
+        "classification-string",
+        "null-cwe-list",
+        "cwe-string",
+        "numeric-tags",
+        "mixed-tags",
+    ],
+)
+def test_an_odd_classification_or_tags_value_does_not_cost_the_finding(tmp_path: Path, info: dict):
+    d = _nuclei_file(tmp_path, [_nuclei("good-one"), _nuclei("odd-one", **info)])
+    findings, coverage, stderr = _run(d, tmp_path)
+    assert {f["rule_id"] for f in findings} == {"DAST-nuc-good-one", "DAST-nuc-odd-one"}
+    assert "Traceback" not in stderr
+    assert coverage["scans"][0]["coverage"] == "complete", coverage
+
+
+def test_a_line_that_still_raises_is_named_and_the_rest_of_the_file_is_kept(tmp_path: Path):
+    bad = _nuclei("bad-one")
+    bad["response"] = 5  # not text: slicing it raises
+    d = _nuclei_file(tmp_path, [_nuclei("first"), bad, _nuclei("last")])
+    findings, coverage, _ = _run(d, tmp_path)
+    assert {f["rule_id"] for f in findings} == {"DAST-nuc-first", "DAST-nuc-last"}
+    scan = coverage["scans"][0]
+    assert scan["coverage"] == "partial" and scan["degraded_steps"] == ["nuclei"]
+    text = " ".join(scan["limitations"])
+    assert "lines 2;" in text and "nuclei-output.jsonl" in text and "first error TypeError" in text
+
+
+def test_many_failing_lines_are_counted_not_listed_without_bound(tmp_path: Path):
+    lines = []
+    for i in range(40):
+        bad = _nuclei(f"bad-{i}")
+        bad["response"] = 5
+        lines.append(bad)
+    d = _nuclei_file(tmp_path, [_nuclei("good")] + lines)
+    findings, coverage, _ = _run(d, tmp_path)
+    assert [f["rule_id"] for f in findings] == ["DAST-nuc-good"]
+    text = " ".join(coverage["scans"][0]["limitations"])
+    assert "40 line(s)" in text and "lines 2, 3, 4, 5, 6, ...;" in text and len(text) < 600
+
+
+def test_undecodable_bytes_in_a_nuclei_file_make_the_scan_partial(tmp_path: Path):
+    """The decode degradation reaches coverage through the Nuclei reader too."""
+    d = _scan(
+        tmp_path / "scans",
+        "web",
+        {"schema_version": 1, "steps": _steps()},
+        zap="clean",
+        nuclei="empty",
+    )
+    good = json.dumps(_nuclei("first")).encode("utf-8")
+    broken = (
+        json.dumps(_nuclei("second", description="caf"))
+        .encode("utf-8")
+        .replace(b'"caf"', b'"caf\xff"')
+    )
+    (d / "nuclei-output.jsonl").write_bytes(good + b"\n" + broken + b"\n")
+    findings, coverage, _ = _run(d, tmp_path)
+    assert {f["rule_id"] for f in findings} == {"DAST-nuc-first", "DAST-nuc-second"}
+    scan = coverage["scans"][0]
+    assert scan["coverage"] == "partial" and scan["degraded_steps"] == ["nuclei"]
+    assert any("1 undecodable byte(s) in nuclei-output.jsonl" in x for x in scan["limitations"])
+
+
+# -- the same finding from two scans keeps the weaker coverage (issue #908) ----------------------
+
+
+def test_a_finding_reported_by_two_scans_takes_the_weaker_coverage_and_says_so(tmp_path: Path):
+    scans = tmp_path / "scans"
+    complete = _scan(scans, "web", {"schema_version": 1, "steps": _steps()})
+    partial = scans / "web" / "2026-10-20"
+    partial.mkdir()
+    (partial / "scan-meta.json").write_text(
+        json.dumps({"schema_version": 1, "steps": _steps(nuclei="skipped")}), encoding="utf-8"
+    )
+    (partial / "zap-report.json").write_text(json.dumps(ZAP_REPORT), encoding="utf-8")
+    assert complete.is_dir()
+
+    findings, coverage, _ = _run(scans / "web", tmp_path)
+
+    zap = [f for f in findings if f["rule_id"] == "DAST-zap-10010"]
+    assert len(zap) == 1
+    assert zap[0]["coverage"] == "partial"
+    text = " ".join(zap[0]["limitations"])
+    assert "skipped: nuclei is not installed" in text
+    assert "also reported by another scan" in text
+    # the finding only the complete scan has keeps that scan's coverage
+    nuc = [f for f in findings if f["rule_id"] == "DAST-nuc-exposed-panel"]
+    assert [f["coverage"] for f in nuc] == ["complete"]
+    assert {Path(s["scan_dir"]).name: s["coverage"] for s in coverage["scans"]} == {
+        "2026-10-19": "complete",
+        "2026-10-20": "partial",
+    }
+
+
+def test_merging_is_order_independent_and_identical_stamps_are_left_alone():
+    sys.path.insert(0, str(ETL))
+    sys.path.insert(0, str(REPO_ROOT))
+    import parse_dast
+
+    def f(sev: str, cov: str, *limits: str) -> dict:
+        return {
+            "fingerprint": "fp",
+            "severity": sev,
+            "coverage": cov,
+            "limitations": list(limits),
+        }
+
+    for first, second in (
+        (f("high", "complete"), f("low", "partial", "zap skipped: x")),
+        (f("low", "partial", "zap skipped: x"), f("high", "complete")),
+    ):
+        (merged,) = parse_dast.deduplicate([first, second])
+        assert merged["severity"] == "high" and merged["coverage"] == "partial"
+        assert any("zap skipped: x" in x for x in merged["limitations"])
+    same_a, same_b = f("high", "complete"), f("high", "complete")
+    (kept,) = parse_dast.deduplicate([same_a, same_b])
+    assert kept["limitations"] == []
+    unstamped = {"fingerprint": "u", "severity": "low"}
+    (only,) = parse_dast.deduplicate([unstamped, dict(unstamped)])
+    assert "coverage" not in only
+
+
 # -- a target that was not scanned leaves a record (issue #895 item 6) ----------------------------
 #
 # `dast run` skips a target whose URL does not answer ("warn and skip"), and stops the whole

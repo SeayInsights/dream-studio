@@ -691,6 +691,53 @@ def finding_coverage(finding: dict) -> tuple[str, list[str]]:
     return coverage, out
 
 
+#: Weakest last: what one finding says when two scans disagree (see merge_duplicate).
+_WEAKNESS = {COMPLETE: 0, UNKNOWN: 1, PARTIAL: 2}
+
+
+def merge_duplicate(kept: dict, other: dict) -> None:
+    """`kept` absorbs `other`, the same finding (same fingerprint) from another scan.
+
+    A finding merged from scans with different coverage must not keep one scan's claim:
+    it takes the weaker coverage (partial, then unknown, then complete), the union of both
+    limitations, and says that another scan reported it. Two identically stamped findings,
+    or two with no coverage at all, are left exactly as they were.
+    """
+    kept_cov, kept_lim = finding_coverage(kept)
+    other_cov, other_lim = finding_coverage(other)
+    extra = [x for x in other_lim if x not in kept_lim]
+    if kept_cov == other_cov and not extra:
+        return
+    weaker = kept_cov if _WEAKNESS[kept_cov] >= _WEAKNESS[other_cov] else other_cov
+    merged = kept_lim + extra
+    merged.append(
+        f"also reported by another scan with coverage {other_cov}; "
+        f"the weaker coverage ({weaker}) is kept"
+    )
+    kept["coverage"] = weaker
+    kept["limitations"] = merged
+
+
+def deduplicate(findings: list[dict], severity_rank: dict[str, int]) -> list[dict]:
+    """One finding per fingerprint: the highest severity wins, and the winner carries the
+    weaker coverage of the scans that reported it (merge_duplicate). The three parse_*
+    scripts share this; each passes its own severity ranking."""
+    best: dict[str, dict] = {}
+    for f in findings:
+        fp = f["fingerprint"]
+        if fp not in best:
+            best[fp] = f
+            continue
+        current = best[fp]
+        if severity_rank.get(f["severity"], 0) > severity_rank.get(current["severity"], 0):
+            winner, loser = f, current
+        else:
+            winner, loser = current, f
+        merge_duplicate(winner, loser)
+        best[fp] = winner
+    return list(best.values())
+
+
 def unknown_report(scan_dir: str | None, limitation: str) -> dict:
     """A report for something that was never assessed against a run record."""
     return {
