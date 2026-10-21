@@ -71,10 +71,26 @@ def _enqueue_native(payload: str, event: str = "PostToolUse") -> None:
     )
 
 
-native = pytest.mark.skipif(
-    not ENQUEUE_EXE.is_file(),
-    reason="native enqueuer not built (cargo build --release in runtime/hooks/enqueue-native)",
-)
+@pytest.fixture(scope="module")
+def native_binary():
+    """The cargo-built enqueuer, or a FAILURE saying how to build it.
+
+    ``target/`` is gitignored, so whether the binary exists is a fact about one machine. These
+    tests used to skip when it was absent -- every CI runner and every fresh clone -- and so
+    could not fail there; they compare the Python writer with the native one byte for byte,
+    which is only worth anything where both exist. They are install checks: never collected by
+    default, run with ``py -m pytest -m install_check tests/unit/test_hook_queue.py`` after
+    ``cargo build --release`` in runtime/hooks/enqueue-native.
+    """
+    assert ENQUEUE_EXE.is_file(), (
+        f"native enqueuer not built at {ENQUEUE_EXE} "
+        "(cargo build --release in runtime/hooks/enqueue-native)"
+    )
+
+
+def native(fn):
+    """Mark a test as one that needs the built native enqueuer (an install check)."""
+    return pytest.mark.install_check(pytest.mark.usefixtures("native_binary")(fn))
 
 
 # --- the contract that keeps the two writers interchangeable ----------------
