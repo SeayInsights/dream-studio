@@ -300,6 +300,94 @@ class TestMixed(TestBase, unittest.TestCase):
         pass
 """
 
+# A second module for the behaviours a mutation pass showed nothing pinned: base-class order,
+# a `__new__` constructor, a class inside a unittest class, names rebound by tuple/list/starred
+# targets, and a value assigned in an `except` handler that may never run.
+_CASES_MORE = """\
+import unittest
+
+
+class TestOrderA:
+    def test_x(self):
+        pass
+
+
+class TestOrderB:
+    test_x = None
+
+
+class TestFirstA(TestOrderA, TestOrderB):
+    pass
+
+
+class TestFirstB(TestOrderB, TestOrderA):
+    pass
+
+
+class TestWithNew:
+    def __new__(cls):
+        return object.__new__(cls)
+
+    def test_never(self):
+        pass
+
+
+class TestInheritsNew(TestWithNew):
+    pass
+
+
+class TestUnitWithNested(unittest.TestCase):
+    def test_u(self):
+        pass
+
+    class TestInner:
+        def test_i(self):
+            pass
+
+
+def test_tuple_shadowed():
+    pass
+
+
+def test_list_shadowed():
+    pass
+
+
+def test_star_shadowed():
+    pass
+
+
+test_tuple_shadowed, _unused_a = 1, 2
+[test_list_shadowed, _unused_b] = 1, 2
+*test_star_shadowed, _unused_c = 1, 2
+
+
+def test_kept_by_a_handler():
+    pass
+
+
+try:
+    pass
+except Exception:
+    test_kept_by_a_handler = None
+"""
+
+_MORE_CANDIDATES = [
+    "TestFirstA::test_x",
+    "TestFirstB::test_x",
+    "TestWithNew::test_never",
+    "TestInheritsNew::test_never",
+    "TestUnitWithNested::test_u",
+    "TestUnitWithNested::TestInner::test_i",
+    "test_tuple_shadowed",
+    "test_list_shadowed",
+    "test_star_shadowed",
+    "test_kept_by_a_handler",
+]
+
+# a file the default `python_files` reaches only through its `*_test.py` half
+_SUFFIX_FILE = "def test_in_a_suffix_named_file():\n    pass\n"
+
 # Node ids to ask both pytest and the resolver about. Every one names something, or
 # looks like it could.
 _CANDIDATES = [
@@ -405,6 +493,8 @@ def test_the_resolver_agrees_with_pytest_collection_on_every_candidate(tmp_path)
             "pytest.ini": "[pytest]\n",
             "tests/helper.py": _HELPER,
             "tests/test_cases.py": _CASES,
+            "tests/test_more.py": _CASES_MORE,
+            "tests/other_test.py": _SUFFIX_FILE,
             "tests/test_bom.py": b"\xef\xbb\xbfdef test_with_a_bom():\n    pass\n",
             "tests/test_latin.py": (
                 b"# -*- coding: latin-1 -*-\n"
@@ -416,22 +506,31 @@ def test_the_resolver_agrees_with_pytest_collection_on_every_candidate(tmp_path)
     resolver = NodeResolver(root)
 
     disagreements = []
-    for candidate in _CANDIDATES:
-        expected = _would_pytest_collect(collected, "tests/test_cases.py", candidate)
-        why = resolver.resolve(f"tests/test_cases.py::{candidate}")
-        if (why is None) != expected:
-            disagreements.append(
-                f"{candidate}: pytest {'collects' if expected else 'does not collect'} it,"
-                f" resolver says {why!r}"
-            )
-    for file, name in (("test_bom.py", "test_with_a_bom"), ("test_latin.py", "test_latin_one")):
+    verdicts = []
+    for file, candidates in (
+        ("tests/test_cases.py", _CANDIDATES),
+        ("tests/test_more.py", _MORE_CANDIDATES),
+    ):
+        for candidate in candidates:
+            expected = _would_pytest_collect(collected, file, candidate)
+            verdicts.append(expected)
+            why = resolver.resolve(f"{file}::{candidate}")
+            if (why is None) != expected:
+                disagreements.append(
+                    f"{file}::{candidate}: pytest {'collects' if expected else 'does not collect'}"
+                    f" it, resolver says {why!r}"
+                )
+    for file, name in (
+        ("test_bom.py", "test_with_a_bom"),
+        ("test_latin.py", "test_latin_one"),
+        ("other_test.py", "test_in_a_suffix_named_file"),
+    ):
         why = resolver.resolve(f"tests/{file}::{name}")
         if why is not None:
             disagreements.append(f"{file}::{name}: pytest collects it, resolver says {why!r}")
     assert not disagreements, "\n".join(disagreements)
 
     # the check is only as strong as its spread: both outcomes must be well represented
-    verdicts = [_would_pytest_collect(collected, "tests/test_cases.py", c) for c in _CANDIDATES]
     assert verdicts.count(True) >= 20 and verdicts.count(False) >= 20
 
 
@@ -670,13 +769,105 @@ def test_a_computed_base_is_named_as_unreadable(tmp_path):
 
 
 def test_a_base_cycle_terminates(tmp_path):
+    """Two files importing each other's class as a base. The refusal must come from the
+    cycle being cut, not from the interpreter's recursion limit being hit and caught: that
+    would pass on "something went wrong" with the guard deleted."""
     root = _tree(
         tmp_path,
         {
-            "test_a.py": "class TestA(TestB):\n    pass\nclass TestB(TestA):\n    pass\n",
+            "a.py": "from b import TestB\n\n\nclass TestA(TestB):\n    pass\n",
+            "b.py": "from a import TestA\n\n\nclass TestB(TestA):\n    pass\n",
+            "test_c.py": "from a import TestA\n\n\nclass TestX(TestA):\n    pass\n",
         },
     )
-    assert _why(root, "test_a.py::TestA::test_x") is not None
+    why = _why(root, "test_c.py::TestX::test_y")
+    assert why is not None and "no `test_y` defined in TestX" in why
+    assert "too deeply nested" not in why
+
+
+def test_a_base_that_is_not_a_class_is_named_as_unreadable(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": "Base = make()\n\n\nclass TestThing(Base):\n    def test_own(self):\n        pass\n"
+        },
+    )
+    why = _why(root, "test_a.py::TestThing::test_missing") or ""
+    assert "bases not searched" in why and "Base (not a class)" in why
+
+
+def test_a_base_that_is_defined_nowhere_is_named_as_unreadable(tmp_path):
+    root = _tree(
+        tmp_path,
+        {"test_a.py": "class TestThing(Missing):\n    def test_own(self):\n        pass\n"},
+    )
+    why = _why(root, "test_a.py::TestThing::test_missing") or ""
+    assert "bases not searched" in why and "Missing (not defined in the file)" in why
+
+
+@pytest.mark.parametrize("base", ["object", "Exception", "dict"])
+def test_a_builtin_base_defines_no_tests_so_it_is_not_reported_as_unreadable(tmp_path, base):
+    root = _tree(
+        tmp_path,
+        {"test_a.py": f"class TestThing({base}):\n    def test_own(self):\n        pass\n"},
+    )
+    why = _why(root, "test_a.py::TestThing::test_missing") or ""
+    assert "no `test_missing` defined in TestThing" in why and "bases not searched" not in why
+
+
+def test_a_value_assigned_in_an_except_handler_does_not_erase_a_def(tmp_path):
+    """The handler may never run; the def is what pytest sees when the body succeeds."""
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": """\
+                def test_x():
+                    pass
+
+
+                try:
+                    import sys
+                except ImportError:
+                    test_x = None
+                """,
+        },
+    )
+    assert _why(root, "test_a.py::test_x") is None
+
+
+@pytest.mark.parametrize("name", ["test_a.py", "a_test.py"])
+def test_the_default_python_files_include_both_naming_conventions(tmp_path, name):
+    root = _tree(tmp_path, {name: "def test_x():\n    pass\n"})
+    assert _why(root, f"{name}::test_x") is None
+
+
+@pytest.mark.parametrize(
+    "candidate,fragment",
+    [
+        ("TestWithNew::test_never", "defines __init__ or __new__"),
+        ("TestInheritsNew::test_never", "defines __init__ or __new__"),
+        ("TestUnitWithNested::TestInner::test_i", "nested in a unittest class"),
+        ("TestFirstB::test_x", "is not a function or class"),
+        ("test_tuple_shadowed", "is not a function or class"),
+        ("test_list_shadowed", "is not a function or class"),
+        ("test_star_shadowed", "is not a function or class"),
+    ],
+)
+def test_more_nodes_pytest_does_not_collect_are_refused_with_the_reason(
+    tmp_path, candidate, fragment
+):
+    root = _tree(tmp_path, {"tests/test_more.py": _CASES_MORE})
+    why = _why(root, f"tests/test_more.py::{candidate}")
+    assert why is not None and fragment in why, why
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    ["TestFirstA::test_x", "TestUnitWithNested::test_u", "test_kept_by_a_handler"],
+)
+def test_more_nodes_pytest_collects_resolve(tmp_path, candidate):
+    root = _tree(tmp_path, {"tests/test_more.py": _CASES_MORE})
+    assert _why(root, f"tests/test_more.py::{candidate}") is None
 
 
 def test_an_import_chain_is_followed_across_files_and_packages(tmp_path):
