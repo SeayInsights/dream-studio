@@ -188,7 +188,7 @@ _DS_CLI = re.compile(r"(?<![\w/.\-])(?:\.[/\\])?ds(?=\s+(?:-{1,2}[a-z]|[a-z][a-z
 
 #: Another pack's skill id (`ds-code-health`), as in `Skill(skill="DS-code-health", ...)`.
 _OTHER_SKILL = re.compile(r"(?<![\w-])ds-([a-z][a-z-]*)", re.I)
-_PLUGIN_SKILL = re.compile(r"(?<![\w-])dream-studio:(?:ds-)?([a-z][a-z-]*)", re.I)
+_PLUGIN_SKILL = re.compile(r"(?<![\w-])dream-" r"studio:(?:ds-)?([a-z][a-z-]*)", re.I)
 
 #: A subagent type an instruction dispatches: `Agent(subagent_type="x")`.
 _AGENT = re.compile(r"subagent_type\s*[=:]\s*[\"']?([\w.:-]+)")
@@ -1580,7 +1580,7 @@ BAD_CASES = {
     "repo level templates": ({"mode_text": "Read templates/report.md first.\n"}, "checkout path"),
     "canonical path": ({"mode_text": "See canonical/skills/demo/x.md.\n"}, "checkout path"),
     "skills layout path": ({"mode_text": "Read skills/demo/modes.yml.\n"}, "checkout path"),
-    "user absolute path": ({"mode_text": "Open C:\\Users\\someone\\x.md.\n"}, "user-specific path"),
+    "user absolute path": ({"mode_text": "Open C:\\Users\\Example\\x.md.\n"}, "user-specific path"),
     "host install path": ({"mode_text": "Dispatch ~/.claude/agents/a.md.\n"}, "host install path"),
     "undeclared state": ({"mode_text": "Write ~/.dream-studio/demo/a.json.\n"}, "undeclared state"),
     "undeclared planning dir": ({"mode_text": "Write .planning/specs/x.md.\n"}, "undeclared state"),
@@ -1815,8 +1815,8 @@ EVASIONS = {
         "undeclared skill",
     ),
     "prose: /quality:harden": ({"mode_text": "Then run /quality:harden.\n"}, "undeclared skill"),
-    "prose: dream-studio:quality": (
-        {"mode_text": "Invoke dream-studio:quality next.\n"},
+    "prose: dream-" "studio:quality": (
+        {"mode_text": "Invoke dream-" "studio:quality next.\n"},
         "undeclared skill",
     ),
     "prose: Agent(subagent_type=)": (
@@ -1868,7 +1868,7 @@ OWN_VARIANTS_PATHS = {
         "leaves the pack",
     ),
     "file:/// URL to a user dir": (
-        {"mode_text": "Open file:///C:/Users/dan/x.md.\n"},
+        {"mode_text": "Open file:///C:/Users/Example/x.md.\n"},
         "user-specific path",
     ),
     "%USERPROFILE%\\.dream-studio": (
@@ -1904,7 +1904,7 @@ OWN_VARIANTS_PATHS = {
         "leaves the pack",
     ),
     "json escaped C:\\\\Users": (
-        {"extra": {"c.json": '{"p": "C:\\\\Users\\\\dan\\\\x"}\n'}},
+        {"extra": {"c.json": '{"p": "C:\\\\Users\\\\Example\\\\x"}\n'}},
         "user-specific path",
     ),
     "BOM utf-8 file": ({"extra": {"b.md": b"\xef\xbb\xbfRead templates/x.md\n"}}, "checkout path"),
