@@ -151,8 +151,8 @@ _KIND_MESSAGE = {
 def _dotted(node: ast.AST) -> str:
     try:
         return ast.unparse(node)
-    except Exception:  # noqa: BLE001 - an unparsable node is simply not a match
-        return ""
+    except Exception:  # noqa: BLE001 - fall back to the structure, never to an empty match
+        return ast.dump(node)
 
 
 def _is_pytest_mark(node: ast.AST, name: str) -> bool:
@@ -348,18 +348,39 @@ def _function_depth(rel: Path) -> int:
     return len(rel.parts) - 1
 
 
+def _parse(path: Path) -> tuple[ast.Module | None, str | None]:
+    """The module's tree, or ``(None, why)``: the caller decides what an unreadable file means."""
+    try:
+        return ast.parse(path.read_text(encoding="utf-8")), None
+    except (OSError, SyntaxError, ValueError) as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+
+
 def scan_file(path: Path, repo_root: Path) -> list[dict]:
     """Machine reads in one test file that no scope redirects, before the allow-list."""
-    try:
-        source = path.read_text(encoding="utf-8")
-        tree = ast.parse(source)
-    except (OSError, SyntaxError, ValueError):
-        return []
     try:
         rel = path.relative_to(repo_root)
     except ValueError:
         rel = Path(path.name)
     rel_posix = rel.as_posix()
+    tree, problem = _parse(path)
+    if tree is None:
+        # A test module this gate cannot read is a test module it did not check. Reporting
+        # nothing would make "cannot parse" indistinguishable from "clean"; a helper or a fixture
+        # file that is not collected by pytest is not this gate's business.
+        if rel.name.startswith("test_") or rel.name == "conftest.py":
+            return [
+                {
+                    "path": rel_posix,
+                    "function": "<module>",
+                    "line": 0,
+                    "kind": "unreadable-test-file",
+                    "target": problem or "",
+                    "message": f"{rel_posix} could not be read or parsed ({problem}), so it was NOT "
+                    "checked for reads of the machine. Fix the file; do not let it pass unexamined.",
+                }
+            ]
+        return []
     if rel.parts[:2] == ("tests", "install_checks") or _module_is_install_check(tree):
         return []
     depth = _function_depth(rel)

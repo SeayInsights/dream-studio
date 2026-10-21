@@ -269,6 +269,20 @@ def test_the_install_checks_directory_is_exempt_as_a_whole(tmp_path):
     assert result["status"] == "pass"
 
 
+def test_a_test_file_the_gate_cannot_parse_is_a_finding_not_a_pass(tmp_path):
+    """Unparseable must not read as clean: the file was not examined."""
+    result = _run(tmp_path, "def test_x(:\n    pass\n", rel="tests/unit/test_broken.py")
+    assert result["status"] == "fail"
+    assert _kinds(result) == ["unreadable-test-file"]
+    assert "NOT checked" in result["offenders"][0]["message"]
+
+
+def test_a_file_pytest_does_not_collect_may_be_unparseable(tmp_path):
+    """A fixture that is deliberately not valid Python is not a test module."""
+    result = _run(tmp_path, "def (:\n", rel="tests/fixtures/guard/not_python.py")
+    assert result["status"] == "pass", result["offenders"]
+
+
 # --- the allow-list may only shrink ------------------------------------------------------
 
 
