@@ -1410,6 +1410,74 @@ def test_a_single_binary_next_to_plain_metadata_is_not_degraded(tmp_path: Path):
     )
     assert _checksec_findings(findings) == {("app.exe", "nx")}
     assert scan["coverage"] == "complete"
+    # benign envelope metadata is not a downgrade, but it is not dropped silently either
+    assert any("not an object" in x and "version" in x for x in scan["limitations"])
+
+
+def test_in_the_path_keyed_shape_a_non_object_sibling_is_named_not_dropped(tmp_path: Path):
+    findings, scan = _checksec_scan(
+        tmp_path, {"app.exe": {"nx": "no"}, "note": "from CI", "n": 3, "l": [1], "z": None}
+    )
+    assert _checksec_findings(findings) == {("app.exe", "nx")}
+    assert scan["coverage"] == "complete"
+    text = " ".join(scan["limitations"])
+    for name in ("note", "n", "l", "z"):
+        assert name in text
+    assert "not an object" in text
+
+
+def test_in_the_path_keyed_shape_an_object_with_no_check_key_makes_the_step_partial(
+    tmp_path: Path,
+):
+    """An object next to the binary could have been another binary's checks, under names this
+    parser does not know: dropping it silently is the claim `complete` must not rest on."""
+    findings, scan = _checksec_scan(
+        tmp_path, {"app.exe": {"nx": "no"}, "other.exe": {"mystery": "no"}, "empty.exe": {}}
+    )
+    assert _checksec_findings(findings) == {("app.exe", "nx")}  # findings unchanged
+    assert scan["coverage"] == "partial" and scan["degraded_steps"] == ["checksec"]
+    text = " ".join(scan["limitations"])
+    assert "no recognised check" in text and "other.exe" in text and "empty.exe" in text
+
+
+def test_a_sibling_binary_with_only_unlisted_marker_keys_is_counted_as_unread(tmp_path: Path):
+    """`cfg` is a listed check but not one of the keys that pick a binary out: a second
+    binary carrying only listed checks used to vanish without a trace."""
+    findings, scan = _checksec_scan(
+        tmp_path, {"a.exe": {"nx": "no"}, "b.exe": {"cfg": "no", "safeseh": "no"}}
+    )
+    assert _checksec_findings(findings) == {("a.exe", "nx")}  # unchanged: first binary only
+    assert scan["coverage"] == "partial"
+    text = " ".join(scan["limitations"])
+    assert "2 binaries" in text and "b.exe" in text
+
+
+@pytest.mark.parametrize("spelling", ["NX", "high_entropy_va", "Fortify", "code_sign", "N_X", "can-ary"])
+def test_a_listed_check_counts_in_any_spelling_when_looking_for_unread_binaries(
+    tmp_path: Path, spelling: str
+):
+    findings, scan = _checksec_scan(tmp_path, {"a.exe": {"nx": "no"}, "b.exe": {spelling: "no"}})
+    assert _checksec_findings(findings) == {("a.exe", "nx")}
+    text = " ".join(scan["limitations"])
+    assert "2 binaries" in text and "no recognised check" not in text
+
+
+def test_in_the_file_envelope_a_non_object_sibling_is_named_and_objects_are_read(tmp_path: Path):
+    findings, scan = _checksec_scan(
+        tmp_path, {"file": {"nx": "no"}, "other": {"mystery": "no"}, "version": "2.1"}
+    )
+    assert _checksec_findings(findings) == {("file", "nx"), ("other", "mystery")}
+    text = " ".join(scan["limitations"])
+    assert "not an object" in text and "version" in text
+    assert scan["coverage"] == "complete"
+
+
+def test_in_the_unmarked_shape_non_objects_are_named_and_objects_are_read(tmp_path: Path):
+    findings, scan = _checksec_scan(tmp_path, {"a.exe": {"cfg": "no"}, "version": "1", "k": 2})
+    assert _checksec_findings(findings) == {("a.exe", "cfg")}
+    text = " ".join(scan["limitations"])
+    assert "not an object" in text and "version" in text and "k" in text
+    assert scan["coverage"] == "complete"
 
 
 # -- short control-character names (issue #908) -----------------------------------------------------

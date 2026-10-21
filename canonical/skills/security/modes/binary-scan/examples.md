@@ -280,7 +280,7 @@ read from the `steps` run record in `scan-meta.json` and from what the parser ac
 read: `complete` only when all four steps are recorded `ran` AND a result was read for
 each, `partial` naming each skipped, failed, ran-but-unread (missing or unparseable
 result file, or one that is not that step's output) or only partly read step (strings
-over the 50-entry cap, ignored header values), `unknown` when `scan-meta.json` has no usable run record (an
+over the 50-entry cap, ignored header values, a checksec.json holding more than one binary or an entry with no recognised check key), `unknown` when `scan-meta.json` has no usable run record (an
 older scan directory, a malformed entry, a step recorded twice). `coverage.json` holds
 the same per scan directory, with the limitations. It is the only place coverage shows
 when a scan produced no findings, and it is written even when ingest then exits 1

@@ -173,6 +173,18 @@ def _named(items: list[str]) -> str:
     )
 
 
+def _has_listed_check(entry: dict) -> bool:
+    """Whether an object carries at least one check name this parser lists, spelled any way
+    (`NX`, `high_entropy_va`, `high-entropy-va`)."""
+    return any(
+        k in CHECKSEC_MARKERS
+        or k.lower() in CHECKSEC_CHECK_META
+        or k.lower().replace("_", "").replace("-", "") in CHECKSEC_CHECK_META
+        for k in entry
+        if isinstance(k, str)
+    )
+
+
 def parse_checksec_json(
     data: dict,
     target_name: str,
@@ -205,11 +217,34 @@ def parse_checksec_json(
         if binaries:
             first = next(iter(binaries))
             file_results = {first: binaries[first]}
-            if len(binaries) > 1 and degraded is not None:
+            # What sits beside the binary that was read. A sibling object carrying a listed
+            # check (cfg, safeseh, ...) is another binary that was not read; one carrying no
+            # listed check could have been a binary's checks under names this parser does not
+            # know. Both make the step partial. A sibling that is not an object is envelope
+            # metadata (a version, a note): named, not a downgrade.
+            other_binaries = [
+                key
+                for key, val in data.items()
+                if key != first and isinstance(val, dict) and _has_listed_check(val)
+            ]
+            unrecognised = [
+                key
+                for key, val in data.items()
+                if isinstance(val, dict) and key not in binaries and not _has_listed_check(val)
+            ]
+            skipped_entries.extend(
+                _clean_name(k) for k, v in data.items() if not isinstance(v, dict)
+            )
+            if other_binaries and degraded is not None:
+                names = [_clean_name(first)] + [_clean_name(k) for k in other_binaries]
                 degraded.append(
-                    f"checksec.json holds {len(binaries)} binaries "
-                    f"({_named([_clean_name(b) for b in binaries])}); only "
+                    f"checksec.json holds {len(names)} binaries ({_named(names)}); only "
                     f"{_clean_name(first)} was read, the others were not"
+                )
+            if unrecognised and degraded is not None:
+                degraded.append(
+                    "checksec.json entries with no recognised check key were not read as "
+                    f"binaries: {_named([_clean_name(k) for k in unrecognised])}"
                 )
 
     if file_results is None:
