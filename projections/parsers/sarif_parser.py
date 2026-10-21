@@ -156,9 +156,11 @@ def _honesty_from_sarif(result: dict, run: dict) -> dict:
     for source in (result, _rule_for(result, run)):
         props = source.get("properties")
         precision = props.get("precision") if isinstance(props, dict) else None
-        confidence = _PRECISION_TO_CONFIDENCE.get(precision.strip().lower()) if isinstance(
-            precision, str
-        ) else None
+        confidence = (
+            _PRECISION_TO_CONFIDENCE.get(precision.strip().lower())
+            if isinstance(precision, str)
+            else None
+        )
         if confidence:
             honesty["confidence"] = confidence
             break

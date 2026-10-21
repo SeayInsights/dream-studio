@@ -58,7 +58,9 @@ def test_rank_and_level_are_not_confidence():
 
 
 def test_a_failed_invocation_makes_the_run_partial_and_says_why():
-    honesty = _honesty_from_sarif({"ruleId": "r"}, _run(invocations=[{"executionSuccessful": False}]))
+    honesty = _honesty_from_sarif(
+        {"ruleId": "r"}, _run(invocations=[{"executionSuccessful": False}])
+    )
     assert honesty["coverage"] == "partial"
     assert honesty["limitations"] and "executionSuccessful=false" in honesty["limitations"][0]
 
