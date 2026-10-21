@@ -271,6 +271,17 @@ is not `complete`, show it next to the score. `targets.csv` and `repos.csv` carr
 column (the weakest of their findings'). A `limitations` cell is cut to fit a spreadsheet cell (32,767
 characters) with a final "... N more limitation(s) omitted" entry.
 
+How the scan store is read: only directories named `{date}` or `{date}-not-scanned` are
+attempts (a directory named `latest` or `backup` is reported as `unrecognised scan directory
+<target>/<name>` in `limitations` and decides nothing). A target's latest attempt that cannot
+say what it did reads `unknown`, never `complete` and never ignored: a `scan-meta.json` that
+cannot be read, a directory with neither `scan-meta.json` nor `coverage.json`, a
+`scan-meta.json` with no `coverage.json`, a target with no recognised directory. An explicit
+`--scans-dir` that does not exist or is not a directory is an error (exit 1, nothing written);
+an absent or empty default store is `coverage: unknown` with the reason in `limitations`, so
+a typo cannot hide an unscanned target. `repos.csv` and `targets.csv` derive a name's
+`coverage` from its findings and its latest attempt, so they agree.
+
 ---
 
 ## Org Score Formula

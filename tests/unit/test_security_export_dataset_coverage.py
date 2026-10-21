@@ -235,9 +235,12 @@ def test_a_junk_sidecar_is_unknown_not_a_crash_and_not_complete(
     assert meta["coverage"] == "unknown"
 
 
-def test_a_missing_scans_directory_changes_nothing(tmp_path: Path) -> None:
+def test_a_missing_default_scans_directory_reads_unknown_with_the_reason(tmp_path: Path) -> None:
+    """It used to change nothing, so a store that was never written (or a wrong client name)
+    hid every unscanned target behind complete findings."""
     _, meta = _export(tmp_path, [_finding(coverage="complete")])
-    assert meta["coverage"] == "complete" and meta["not_scanned_targets"] == []
+    assert meta["coverage"] == "unknown" and meta["not_scanned_targets"] == []
+    assert any("scan store not found" in x for x in meta["limitations"])
 
 
 def test_scans_dir_can_be_given(tmp_path: Path) -> None:
