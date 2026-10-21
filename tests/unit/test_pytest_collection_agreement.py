@@ -15,11 +15,12 @@ Each test builds a tree, runs `pytest --collect-only` in it, and requires the re
 on every candidate, in both directions. The candidates are in `tests/helpers/resolver_cases.py`;
 a case added there that the two disagree on fails here.
 
-These start a pytest process per tree (about fifteen seconds in all), so CI runs them and the
-pre-push pin list does not. The pinned tests (`test_pytest_node_resolver.py`,
-`test_pytest_collection_rules.py`, `test_rule_enforcement_gate.py`) assert the same behaviours on
-the same trees by message, without a subprocess, and `test_rule_enforcement_gate.py` also runs
-the real register against a directory run of `tests/unit` on every push.
+These start a pytest process per tree (about fifteen seconds in all) and are in the pre-push
+pin-tests gate with the three files that assert the same behaviours by message without a
+subprocess (`test_pytest_node_resolver.py`, `test_pytest_collection_rules.py`,
+`test_rule_enforcement_gate.py`, which also compares the real register with a directory run of
+`tests/unit`). The slow comparison with a bare run from `testpaths` is
+`test_rule_enforcement_bare_run.py`, which is not on push; see its docstring for when it runs.
 """
 
 from __future__ import annotations

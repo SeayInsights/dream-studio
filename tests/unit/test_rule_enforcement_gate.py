@@ -254,7 +254,10 @@ def test_the_resolver_agrees_with_a_directory_run_over_tests_unit_on_the_real_re
     files live (about eleven seconds); `tests/integration` alone takes thirty-five to collect.
     The bare run from the configured `testpaths` as a whole, which sees every referenced file
     and also what `testpaths` itself leaves out, is
-    tests/unit/test_rule_enforcement_bare_run.py, which CI runs."""
+    tests/unit/test_rule_enforcement_bare_run.py: GitHub CI never runs the pre-push gates, so
+    interfaces/cli/impact_tests_gate.py selects it into the pr-smoke job when the register, a
+    pytest config file, a conftest, a register-named test or the resolver changes, and Full CI
+    runs it after every merge."""
     from core.gates.pytest_node_resolver import NodeResolver
     from tests.helpers.directory_run import directory_run_nodes, disagreements, register_nodes
 
@@ -716,7 +719,8 @@ def test_the_gate_is_registered_in_the_pre_push_manifest():
 def test_the_resolver_tests_run_on_push_and_the_slow_bare_run_does_not():
     """#913 left the agreement tests out of the pre-push pin list, so only the gate itself ran
     on a push (0.3 s) and the resolver could drift from pytest unseen. They are named there
-    now. The bare run from `testpaths` (about 45 s) is deliberately not: it is CI's. If it is
+    now. The bare run from `testpaths` (about 45 s) is deliberately not: it is selected into
+    pr-smoke by the impact gate and run by Full CI after a merge. If it is
     ever pinned, measure what a push now costs and say so in the manifest."""
     import yaml
 

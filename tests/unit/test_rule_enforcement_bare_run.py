@@ -6,7 +6,11 @@ comparison made from the configured `testpaths` as a whole, so it sees every fil
 names (one lives in `tests/integration`) and also what `testpaths`, a top-level `--ignore` or a
 root `collect_ignore` leave out of a plain `pytest`. It collects about ten thousand items
 (roughly forty-five seconds on the reference machine), which is too slow to ask of every push,
-so CI runs it and pre-push does not.
+so the pre-push pin list does not carry it. GitHub CI never runs the pre-push gates, so where it
+runs matters: `interfaces/cli/impact_tests_gate.py` selects it into the pr-smoke job whenever a
+change touches `canonical/rules.yml`, a pytest config file, a `conftest.py`, a test file the
+register names, or the resolver and its helpers (`rule_enforcement_tests`), and Full CI runs it
+after every merge to main.
 """
 
 from __future__ import annotations

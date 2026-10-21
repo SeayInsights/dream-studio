@@ -17,9 +17,8 @@ the repo's own configuration and conftest files without importing anything:
 
 Every one is judged by pytest itself in `test_pytest_collection_agreement.py`: each scenario
 builds a tree, asks `pytest --collect-only` what a bare run collects, and requires the resolver
-to agree on every file in both directions. That file starts a pytest process per scenario, so
-CI runs it and the pre-push pin list does not; this one is pure source analysis and does run
-on every push.
+to agree on every file in both directions. That file starts a pytest process per scenario; this
+one is pure source analysis. Both are in the pre-push pin-tests gate.
 
 What it cannot evaluate it refuses, naming the cause, rather than accepting on doubt: a
 `collect_ignore` that is not a literal list of strings, and any conftest that defines a hook
