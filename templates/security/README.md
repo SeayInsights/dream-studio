@@ -26,6 +26,7 @@ templates/security/
 │   ├── parse_binary.py
 │   ├── parse_dast.py
 │   ├── parse_sarif.py
+│   ├── scan_coverage.py     # shared: reads a scan's run record, marks findings complete|partial|unknown
 │   └── score_findings.py
 ├── github-actions/          # CI/CD workflow templates
 │   ├── binary-scan.yml.j2

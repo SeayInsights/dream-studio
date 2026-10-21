@@ -444,7 +444,7 @@ BAD_CASES = {
     "repo level templates": ({"mode_text": "Read templates/report.md first.\n"}, "checkout path"),
     "canonical path": ({"mode_text": "See canonical/skills/demo/x.md.\n"}, "checkout path"),
     "skills layout path": ({"mode_text": "Read skills/demo/modes.yml.\n"}, "checkout path"),
-    "user absolute path": ({"mode_text": "Open C:\\Users\\someone\\x.md.\n"}, "user-specific path"),
+    "user absolute path": ({"mode_text": "Open C:\\Users\\Example\\x.md.\n"}, "user-specific path"),
     "host install path": ({"mode_text": "Dispatch ~/.claude/agents/a.md.\n"}, "host install path"),
     "undeclared state": ({"mode_text": "Write ~/.dream-studio/demo/a.json.\n"}, "undeclared state"),
     "undeclared planning dir": ({"mode_text": "Write .planning/specs/x.md.\n"}, "undeclared state"),
