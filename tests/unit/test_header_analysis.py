@@ -447,35 +447,28 @@ def test_the_documented_exit_codes_hold_from_a_fresh_interpreter(tmp_path: Path)
 # -- etl_home near the root of the filesystem ---------------------------------------------------------
 
 
-def _checkout_root_for(location: Path):
-    """etl_home's `_checkout_root` as if the file lived at `location` (a path that need not
-    exist), run from a copy of the module source with its __file__ replaced."""
-    source = (ETL / "etl_home.py").read_text(encoding="utf-8")
-    namespace = {"__file__": str(location), "__name__": "etl_home_probe"}
-    exec(compile(source, str(ETL / "etl_home.py"), "exec"), namespace)  # noqa: S102
-    return namespace["_checkout_root"]()
-
-
 @pytest.mark.parametrize(
     "parts",
     [("etl",), ("app", "etl"), ("tools", "etl"), ("a", "b", "etl")],
     ids=["root/etl", "root/app/etl", "root/tools/etl", "root/a/b/etl"],
 )
 def test_an_etl_directory_near_the_filesystem_root_is_installed_not_a_checkout(parts):
+    import etl_home
+
     anchor = Path(Path.cwd().anchor)
     location = anchor.joinpath(*parts, "etl_home.py")
-    assert _checkout_root_for(location) is None  # no IndexError
+    assert etl_home._checkout_root(location) is None  # no IndexError
 
 
 def test_a_shallow_install_falls_back_to_the_environment(monkeypatch, tmp_path):
+    import etl_home
+
     anchor = Path(Path.cwd().anchor)
-    source = (ETL / "etl_home.py").read_text(encoding="utf-8")
-    namespace = {"__file__": str(anchor / "etl" / "etl_home.py"), "__name__": "etl_home_probe"}
-    exec(compile(source, str(ETL / "etl_home.py"), "exec"), namespace)  # noqa: S102
+    location = anchor / "etl" / "etl_home.py"
     monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "h"))
-    assert namespace["home_dir"]() == tmp_path / "h"
+    assert etl_home.home_dir(location) == tmp_path / "h"
     monkeypatch.delenv("DREAM_STUDIO_HOME")
-    assert namespace["home_dir"]() == Path.home() / ".dream-studio"
+    assert etl_home.home_dir(location) == Path.home() / ".dream-studio"
 
 
 def test_the_real_location_is_still_recognised_as_a_checkout():
