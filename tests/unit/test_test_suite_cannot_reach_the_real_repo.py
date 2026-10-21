@@ -572,3 +572,166 @@ def test_a_test_reading_another_repository_is_not_blamed_for_an_external_commit(
     assert (
         "modified the real git repository" not in output
     ), f"the guard still accused the test\n{output[-2000:]}"
+
+
+# ---------------------------------------------------------------------------------------
+# The shared .git/config is not the guard's to freeze.
+#
+# GitHub issue #911: tests/unit/test_audit_dispatcher.py aborted a batch run with "modified the
+# real git repository" and passed alone. The config is shared by every worktree and every
+# session on the machine; another session's `git checkout -b x origin/main` (branch.x.remote,
+# branch.x.merge), `git worktree add`, `git remote add` or `git config` rewrote it mid-run, the
+# guard compared whole-file bytes, and the audit -- which asks the checkout for its tags -- was
+# named. Two things changed: only the settings the escape actually flipped are compared, and a
+# git call that cannot move HEAD, the tip or core.bare is not evidence against the test.
+# ---------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "config,expected",
+    [
+        (b"[core]\n\tbare = true\n", b"bare=true;worktree="),
+        (b"[core]\n\tbare = false\n", b"bare=false;worktree="),
+        (b"[CORE]\n  BARE=True\n", b"bare=true;worktree="),
+        (b"[core]\nbare\n", b"bare=true;worktree="),
+        (b"[core] bare = true\n", b"bare=true;worktree="),
+        (b'[core]\n\tbare = "false"\n', b"bare=false;worktree="),
+        (b"[core]\n\tworktree = ../elsewhere\n", b"bare=;worktree=../elsewhere"),
+        (b"[core]\n\t# bare = true\n\t; bare = true\n", b"bare=;worktree="),
+        (b'[core "sub"]\n\tbare = true\n', b"bare=;worktree="),
+        (b"[remote]\n\tbare = true\n[core]\n\tfilemode = false\n", b"bare=;worktree="),
+        (b"[core]\n\tbare = true\n[user]\n\tname = x\n", b"bare=true;worktree="),
+        (b"", b"bare=;worktree="),
+    ],
+)
+def test_only_the_guarded_core_settings_are_read_from_the_config(config, expected):
+    assert _conftest()._core_settings(config) == expected
+
+
+def test_a_rewrite_of_the_shared_config_that_leaves_core_alone_is_not_damage(
+    tmp_path, monkeypatch
+):
+    """Everything another session does to the shared config in an ordinary day, none of which
+    touches ``[core] bare`` -- and, in the same test, the change that IS damage still shows."""
+    conftest = _conftest()
+    victim = _victim(tmp_path)
+    monkeypatch.setattr(conftest, "_PLUGIN_ROOT", victim)
+    clean = conftest._real_repo_fingerprint()
+    assert clean is not None
+
+    for args in (
+        ("config", "user.name", "Someone Else"),
+        ("config", "branch.feature.remote", "origin"),
+        ("config", "branch.feature.merge", "refs/heads/feature"),
+        ("remote", "add", "origin", str(tmp_path / "nowhere")),
+        ("config", "core.autocrlf", "false"),
+    ):
+        assert _run(victim, *args).returncode == 0, args
+        assert (
+            conftest._real_repo_fingerprint() == clean
+        ), f"`git {' '.join(args)}` rewrote the shared config and was read as damage"
+    linked = tmp_path / "linked"
+    assert _run(victim, "worktree", "add", "-q", str(linked), "-b", "side").returncode == 0
+    assert conftest._real_repo_fingerprint() == clean, "`git worktree add` was read as damage"
+
+    _run(victim, "config", "core.bare", "true")
+    assert conftest._real_repo_fingerprint() != clean, "the real damage must still be noticed"
+
+
+@pytest.mark.parametrize(
+    "argv,moves",
+    [
+        (["git", "-C", "/x", "log", "--oneline"], False),
+        (["git", "--no-pager", "diff", "--name-only"], False),
+        (["git", "tag", "--sort=-version:refname"], False),
+        (["git", "-c", "core.quotepath=off", "ls-files"], False),
+        (["git", "rev-parse", "HEAD"], False),
+        (["git", "fetch", "origin"], False),
+        (["git", "commit", "-m", "x"], True),
+        (["git", "checkout", "-b", "x"], True),
+        (["git", "config", "core.bare", "true"], True),
+        (["git", "init"], True),
+        (["git", "branch", "-m", "renamed"], True),
+        (["git", "reset", "--hard"], True),
+        (["git", "symbolic-ref", "HEAD", "refs/heads/x"], True),
+        (["git", "a-verb-git-adds-next-year"], True),
+        (["git"], True),
+    ],
+)
+def test_only_a_git_verb_that_could_move_the_guarded_state_counts_against_a_test(argv, moves):
+    """A POSITIVE list of read-only verbs, so an unknown or new one still counts."""
+    assert _conftest()._could_move_the_guarded_state(argv) is moves
+
+
+def test_a_read_only_git_call_and_a_config_rewrite_elsewhere_do_not_abort_a_clean_run(tmp_path):
+    """The abort #911 describes, reproduced end to end and fixed.
+
+    The inner test asks the guarded checkout for its tags -- what the audit does -- and waits.
+    While it waits THIS process does what another session does: commits into the checkout and
+    rewrites its shared config. The run must finish and say so without blaming the test.
+    """
+    import threading
+    import time
+
+    victim = _victim(tmp_path)
+    tests_dir = victim / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "conftest.py").write_bytes((REPO_ROOT / "tests" / "conftest.py").read_bytes())
+    (tests_dir / "test_reads_tags.py").write_text(
+        "import subprocess, time\n"
+        "from pathlib import Path\n"
+        "VICTIM = Path(__file__).resolve().parent.parent\n"
+        "def test_a_test_that_only_lists_the_tags_of_its_checkout():\n"
+        "    subprocess.run(['git', '-C', str(VICTIM), 'tag', '--sort=-version:refname'],\n"
+        "                   capture_output=True, check=False)\n"
+        "    (VICTIM / 'tests' / 'running').write_text('yes', encoding='utf-8')\n"
+        "    time.sleep(6)\n",
+        encoding="utf-8",
+    )
+
+    done: dict[str, subprocess.CompletedProcess] = {}
+    worker = threading.Thread(target=lambda: done.update(result=_run_pytest_in(tests_dir)))
+    worker.start()
+
+    marker = tests_dir / "running"
+    for _ in range(200):
+        if marker.exists():
+            break
+        time.sleep(0.1)
+    assert marker.exists(), "the inner test never started"
+    assert _run(victim, "config", "branch.feature.remote", "origin").returncode == 0
+    assert _run(victim, "config", "user.name", "Another Session").returncode == 0
+    (victim / "outside.txt").write_text("an operator commit", encoding="utf-8")
+    assert _run(victim, "add", "outside.txt").returncode == 0
+    assert _run(victim, "commit", "-q", "-m", "a commit made outside the suite").returncode == 0
+
+    worker.join(timeout=600)
+    output = done["result"].stdout + done["result"].stderr
+
+    assert (
+        done["result"].returncode == 0
+    ), f"a test that only read tags was blamed for another session's work\n{output[-3000:]}"
+    assert "modified the real git repository" not in output, output[-2000:]
+    assert "[repo-guard]" in output, f"the external change went unreported\n{output[-2000:]}"
+
+
+def test_a_bare_flip_is_still_named_with_the_setting_that_changed(tmp_path):
+    """The other direction: damage to the guarded settings aborts, and says which."""
+    victim = _victim(tmp_path)
+    tests_dir = victim / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "conftest.py").write_bytes((REPO_ROOT / "tests" / "conftest.py").read_bytes())
+    (tests_dir / "test_flips_bare.py").write_text(
+        "from pathlib import Path\n"
+        "VICTIM = Path(__file__).resolve().parent.parent\n"
+        "def test_a_test_that_turns_the_repository_bare():\n"
+        "    cfg = VICTIM / '.git' / 'config'\n"
+        "    text = cfg.read_text(encoding='utf-8')\n"
+        "    cfg.write_text(text.replace('bare = false', 'bare = true'), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    result = _run_pytest_in(tests_dir)
+    output = result.stdout + result.stderr
+    assert result.returncode != 0, f"a bare flip did not abort\n{output[-3000:]}"
+    assert "test_a_test_that_turns_the_repository_bare" in output, output[-3000:]
+    assert "bare=false;worktree= -> bare=true;worktree=" in output, output[-3000:]

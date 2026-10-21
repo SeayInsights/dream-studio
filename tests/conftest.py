@@ -191,11 +191,58 @@ def _repo_git_dir() -> Path | None:
     return None
 
 
+#: The settings in ``[core]`` that the escape this guard exists for changes. ``bare`` is the one
+#: it flipped; ``worktree`` is the one that would point the checkout somewhere else.
+_GUARDED_CORE_SETTINGS = ("bare", "worktree")
+
+
+def _core_settings(config: bytes) -> bytes:
+    """The guarded ``[core]`` settings of a git config, normalised, and nothing else.
+
+    THE FIRST VERSION FINGERPRINTED THE WHOLE CONFIG FILE, and the file is shared by every
+    worktree and every session on the machine. Anything that touches it -- `git checkout -b x
+    origin/main` (writes branch.x.remote and branch.x.merge), `git worktree add`, `git remote
+    add`, `git config user.name` -- changed the fingerprint, and the guard then aborted a clean
+    run naming whichever test was executing: measured on tests/unit/test_audit_dispatcher.py,
+    which passes alone. The escape this watches turned ``core.bare`` on, so that, and
+    ``core.worktree``, are what is compared.
+
+    A hand-rolled reader rather than ``git config``: this runs before and after every test and
+    a subprocess per test would cost minutes. Section and key names are case-insensitive, a key
+    with no ``=`` means true, and both ``[core]`` followed by lines and ``[core] bare = true`` on
+    one line are read. Anything else in the file is ignored.
+    """
+    found: dict[str, str] = {}
+    in_core = False
+    for raw in config.decode("utf-8", "replace").splitlines():
+        line = raw.strip()
+        if not line or line[0] in "#;":
+            continue
+        if line.startswith("["):
+            end = line.find("]")
+            header = line[1:end].strip().lower() if end > 0 else ""
+            in_core = header == "core"
+            line = line[end + 1 :].strip() if end > 0 else ""
+            if not (in_core and line):
+                continue
+        if not in_core:
+            continue
+        key, eq, value = line.partition("=")
+        key = key.strip().lower()
+        if key in _GUARDED_CORE_SETTINGS:
+            found[key] = value.strip().strip('"').lower() if eq else "true"
+    return ";".join(f"{k}={found.get(k, '')}" for k in _GUARDED_CORE_SETTINGS).encode()
+
+
 def _real_repo_fingerprint() -> tuple[bytes, ...] | None:
     """What the escape changed: `core.bare` in the config, HEAD, and the branch tip.
 
     File reads only, no subprocess -- this runs before and after EVERY test, and a `git`
     invocation per test would cost minutes across the suite.
+
+    Only the guarded ``[core]`` settings of the config are compared (see ``_core_settings``):
+    the config is shared with every other session on the machine, and a rewrite that does not
+    touch them is not damage.
 
     Returns None when anything is unreadable, which disables the check rather than failing
     the run: a guard that aborts a session because it could not read a file is worse than
@@ -217,6 +264,7 @@ def _real_repo_fingerprint() -> tuple[bytes, ...] | None:
             parts.append(candidate.read_bytes())
         except OSError:
             return None
+    parts[0] = _core_settings(parts[0])
     head = parts[-1].decode("utf-8", "replace").strip()
     if head.startswith("ref:"):
         ref = head.split(":", 1)[1].strip()
@@ -326,6 +374,74 @@ def _targets_guarded_repo(argv: list, cwd: object) -> bool:
     return False
 
 
+#: Git subcommands that cannot move HEAD, the branch tip, or ``core.bare`` -- the three things this
+#: guard compares. A POSITIVE list, deliberately: a subcommand not named here (`commit`, `checkout`,
+#: `reset`, `config`, `init`, `branch`, `symbolic-ref`, a verb git adds next year) still counts as
+#: able to have done it, so the list rotting makes the guard blame too much, never too little.
+#: `tag`, `remote` and `fetch` are absent from that effect: they write refs and config the
+#: fingerprint does not look at.
+_READ_ONLY_GIT_VERBS = frozenset(
+    {
+        "blame",
+        "cat-file",
+        "check-attr",
+        "check-ignore",
+        "count-objects",
+        "describe",
+        "diff",
+        "diff-index",
+        "diff-tree",
+        "fetch",
+        "for-each-ref",
+        "grep",
+        "log",
+        "ls-files",
+        "ls-tree",
+        "merge-base",
+        "name-rev",
+        "remote",
+        "rev-list",
+        "rev-parse",
+        "shortlog",
+        "show",
+        "show-ref",
+        "status",
+        "tag",
+        "var",
+        "version",
+    }
+)
+
+
+def _git_verb(argv: list) -> str:
+    """The subcommand of a git argv, skipping global options (``-C <dir>``, ``-c k=v``,
+    ``--git-dir=...``, ``--no-pager``). Empty when there is none."""
+    tokens = [str(x) for x in argv][1:]
+    skip = False
+    for token in tokens:
+        if skip:
+            skip = False
+        elif token in {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}:
+            skip = True
+        elif token.startswith("-"):
+            continue
+        else:
+            return token
+    return ""
+
+
+def _could_move_the_guarded_state(argv: list) -> bool:
+    """Might this git invocation have changed HEAD, the branch tip or ``core.bare``?
+
+    False only for a subcommand named in ``_READ_ONLY_GIT_VERBS``; everything else, including a
+    verb this file has never heard of, is assumed able to. `git tag v1` and `git -C <repo> log`
+    cannot alter the fingerprint, so a test that ran only those must not be named as the culprit
+    when an operator's commit lands in another window -- which it was, on every run of
+    tests/unit/test_audit_dispatcher.py, because the audit asks the checkout for its tags.
+    """
+    return _git_verb(argv) not in _READ_ONLY_GIT_VERBS
+
+
 class _GitCallRecorder:
     """Whether THIS test ran a git command that could have moved the real repo.
 
@@ -355,7 +471,9 @@ class _GitCallRecorder:
                     argv = args if isinstance(args, (list, tuple)) else [args]
                     program = str(argv[0]) if argv else ""
                     if "git" in _os.path.basename(program).lower():
-                        if _targets_guarded_repo(argv, kw.get("cwd")):
+                        if _targets_guarded_repo(argv, kw.get("cwd")) and (
+                            _could_move_the_guarded_state(argv)
+                        ):
                             recorder.calls.append(" ".join(str(x) for x in argv)[:200])
                 except Exception:
                     pass
@@ -788,7 +906,13 @@ def guard_real_homedir(tmp_path, monkeypatch, request):
             if _git_calls.calls:
                 _by = f" It ran: {_git_calls.calls[0]}"
             elif _config_changed:
-                _by = " Its config changed, which is damage rather than an ordinary commit."
+                _now = _after_repo[0].decode() if _after_repo else "unreadable"
+                _by = (
+                    f" The repository's guarded config settings changed"
+                    f" ({_before_repo[0].decode()} -> {_now}), which is damage rather than an"
+                    " ordinary commit. Only [core] bare/worktree are compared: a rewrite of any"
+                    " other part of the shared .git/config by another session does not trip this."
+                )
             else:
                 _by = (
                     " Nothing was written to the reflog, so the refs were changed without"
