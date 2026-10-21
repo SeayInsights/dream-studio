@@ -110,7 +110,7 @@ Extract from user input:
 For each target:
 1. Confirm URL is reachable: `curl -s -o /dev/null -w "%{http_code}" {target.url}`. If not reachable: **warn** and skip.
 2. Confirm ZAP is installed: `which zap.sh || which zap-cli || docker images owasp/zap2docker-stable`. If missing: show install instructions and **stop**.
-3. Confirm Nuclei is installed: `which nuclei`. If missing: show install instructions and continue with ZAP only.
+3. Confirm Nuclei is installed: `which nuclei`. If missing: show install instructions and continue with ZAP only. Remember that `nuclei` was skipped (reason: "nuclei is not installed"): Step R5 records it, and it is what makes the ingested result `partial`.
 
 ### Step R3: Execute ZAP Scan
 
@@ -123,7 +123,9 @@ For each target:
    docker run --rm -v ~/.dream-studio/security/dast/{client}/{target}:/zap/config \
      owasp/zap2docker-stable zap.sh -cmd -autorun /zap/config/zap-config.yaml
    ```
-2. Collect `zap-report.json` from the output directory.
+2. Collect `zap-report.json` from the output directory. If ZAP is installed but errors, or
+   leaves no `zap-report.json`, record `zap` as `failed` with the reason (do not record
+   `ran`) and still write the run record in Step R5.
 
 ### Step R4: Execute Nuclei Scan
 
@@ -135,11 +137,17 @@ For each target:
      -rate-limit 10
    ```
 2. Rate limit is intentionally conservative — active scanning should not overwhelm targets.
+3. If Nuclei ran but wrote no `nuclei-output.jsonl` because it found nothing, create the
+   file empty: an empty file is a result, a missing one is not. If Nuclei errored, record
+   `nuclei` as `failed` with the reason (do not record `ran`).
 
 ### Step R5: Store Results
 
 1. Create directory: `~/.dream-studio/security/scans/{client}/{target}/{date}/`
-2. Move `zap-report.json` and `nuclei-output.jsonl` into the directory.
+2. Move `zap-report.json` and `nuclei-output.jsonl` into the directory. Write them as
+   UTF-8 (Windows PowerShell 5.1's `>` writes UTF-16: use `| Out-File -Encoding utf8` or a
+   shell that writes UTF-8). Ingest also accepts a UTF-8 BOM and UTF-16/UTF-32, decodes
+   them, and names the encoding as a limitation; text it cannot decode reads `partial`.
 3. Write `scan-meta.json`:
    ```json
    {
@@ -149,12 +157,24 @@ For each target:
      "target_type": "webapp",
      "date": "{YYYY-MM-DD}",
      "source": "local-run",
-     "scanners": ["zap", "nuclei"],
+     "scanners": ["{scanners whose status is ran}"],
+     "steps": [
+       {"step": "zap", "status": "{ran|skipped|failed}", "tool": "zap"},
+       {"step": "nuclei", "status": "{ran|skipped|failed}", "tool": "nuclei"}
+     ],
      "url": "{target.url}",
      "scan_profile": "{target.scan_profile}",
      "ingested_at": "{ISO-8601}"
    }
    ```
+   `steps` is the run record: exactly one entry for each of `zap` and `nuclei` (a step
+   recorded twice reads `unknown`), with `status` `ran`, `skipped` or `failed`, the `tool`
+   used (required for `ran`), and a `reason` when the status is not `ran` (for example
+   `{"step": "nuclei", "status": "skipped", "tool": "nuclei", "reason": "nuclei is not
+   installed"}`). Write `ran` only for a scanner that completed; one that is installed but
+   errored or produced no report is `failed`. `scanners` lists only the scanners that
+   actually ran. A scan directory written before `steps` existed stays readable: ingest
+   reports its coverage as `unknown`.
 
 ### Step R6: Present Summary
 
@@ -181,9 +201,20 @@ Extract from user input:
 
 1. Run parse_dast.py:
    ```bash
-   py -3.12 templates/security/etl/parse_dast.py --client {client} --scans-dir {scan_dir}
+   py -3.12 templates/security/etl/parse_dast.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json
    ```
 2. This normalizes ZAP + Nuclei outputs to unified findings with `target_type: webapp`.
+   Each finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`,
+   read from the `steps` run record in `scan-meta.json`: `complete` only when both scanners
+   ran and a result was read for each (`zap-report.json`, `nuclei-output.jsonl`: exactly
+   these names, directly in the scan directory; a stale `old/zap-report.json` or a
+   `zap-config.json` is ignored and named), `partial` naming each skipped, failed, or
+   ran-but-unread scanner (output missing or malformed, or `zap-report.json` without the
+   ZAP report shape). An empty `nuclei-output.jsonl` is a read result (Nuclei found
+   nothing). `unknown` when there is no usable run record (an older scan
+   directory, a malformed or duplicated entry). `coverage.json` holds the same per scan
+   directory, the only place coverage shows when a scan produced no findings; it is
+   written even when ingest exits 1 because there was nothing to parse.
 
 ### Step I3: Store Parsed Findings
 
@@ -192,7 +223,7 @@ Extract from user input:
 
 ### Step I4: Present Summary
 
-Show: finding counts by severity, OWASP category breakdown, storage path, "Run `security-dashboard refresh --client {client}` to update the dashboard."
+Show: the coverage (when it is not `complete`, say so first and name the skipped scanners: "no findings" from a partial scan is not a clean result), finding counts by severity, OWASP category breakdown, storage path, "Run `security-dashboard refresh --client {client}` to update the dashboard."
 
 ---
 
