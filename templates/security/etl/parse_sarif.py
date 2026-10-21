@@ -5,8 +5,19 @@ Reads scan results from ~/.dream-studio/security/scans/{client}/
 Supports: Semgrep SARIF, Bandit JSON, TruffleHog JSON, pip-audit JSON
 Outputs: normalized flat findings list as JSON (stdout or file)
 
+Every finding carries `coverage` (complete | partial | unknown) and `limitations` (see
+scan_coverage.py). `complete` needs the run record in the scan directory's scan-meta.json
+(`steps`: one entry per planned scanner, and `run.conclusion`) to say every planned scanner
+ran and the workflow run concluded `success`, AND this parser to have read a result for
+each scanner. A run that did not succeed, a scanner that failed or was skipped, a result
+that is missing or unreadable (or one this parser has no reader for) makes the scan
+partial and is named; a scan directory with no usable run record (a local-file ingest) is
+unknown, never complete. `--coverage-output` writes the same facts per scan directory,
+and writes them before any non-zero exit.
+
 Usage:
     py -3.12 parse_sarif.py --client <name> [--scans-dir <path>] [--output <path>]
+                            [--coverage-output <path>]
     py -3.12 parse_sarif.py --sample --client <name>
 """
 
@@ -24,6 +35,21 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from core.config.paths import home_dir  # noqa: E402
+
+# scan_coverage.py is a sibling of this script (shared with the other parse_* scripts).
+_ETL_DIR = Path(__file__).resolve().parent
+if str(_ETL_DIR) not in sys.path:
+    sys.path.insert(0, str(_ETL_DIR))
+
+import scan_coverage  # noqa: E402
+
+#: The scanners the security-scan workflow can run, as the step names of the run record
+#: `scan ingest` writes into scan-meta.json (one per job: semgrep always, the rest from the
+#: client profile's `scan.extra_scanners`). The steps a scan plans are the ones its own
+#: scan-meta.json lists (`planned_steps`, plus any step it records), with semgrep as the
+#: floor. A scanner whose output this parser has no reader for (npm-audit) is recorded as
+#: ran and read as unread: its findings never reach the dataset, and that is said.
+DEFAULT_STEPS = ("semgrep",)
 
 # ── Severity ranking for deduplication (higher index = higher severity) ───────
 SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
@@ -361,37 +387,118 @@ def parse_pip_audit(data_list: list, repo: str) -> list[dict]:
 # ── Auto-detect scanner from file content ─────────────────────────────────────
 
 
-def detect_and_parse(data: object, filename: str, repo: str) -> list[dict]:
-    # SARIF: has $schema or runs[].results[]
+def detect_step(data: object) -> str | None:
+    """Which scanner a parsed result file is the output of; None if it is none we read.
+
+    Decided by content, not file name (the workflow's artifacts keep the scanner's own
+    names: semgrep-results.sarif, bandit-results.json, ...).
+    """
     if isinstance(data, dict):
         schema = data.get("$schema", "")
-        if "sarif" in schema.lower() or ("runs" in data and "results" in data.get("runs", [{}])[0]):
-            return parse_semgrep_sarif(data, repo)
+        runs = data.get("runs")
+        first_run = runs[0] if isinstance(runs, list) and runs else None
+        if (isinstance(schema, str) and "sarif" in schema.lower()) or (
+            isinstance(first_run, dict) and "results" in first_run
+        ):
+            return "semgrep"
 
-        # Bandit: has 'results' list with 'test_id' or 'issue_severity'
-        if "results" in data and isinstance(data["results"], list):
-            sample = data["results"][0] if data["results"] else {}
+        results = data.get("results")
+        if isinstance(results, list):
+            sample = results[0] if results and isinstance(results[0], dict) else {}
+            # Bandit: results with 'test_id' or 'issue_severity'. A run that found nothing
+            # has no result to look at, but still carries bandit's own envelope.
             if "test_id" in sample or "issue_severity" in sample:
-                return parse_bandit(data, repo)
+                return "bandit"
+            if not results and "metrics" in data and "generated_at" in data:
+                return "bandit"
             # TruffleHog dict wrapper
             if "DetectorName" in sample or "SourceMetadata" in sample:
-                return parse_trufflehog(data["results"], repo)
+                return "trufflehog"
 
         # pip-audit dict wrapper
-        if "dependencies" in data:
-            return parse_pip_audit(data["dependencies"], repo)
+        if isinstance(data.get("dependencies"), list):
+            return "pip-audit"
 
-    # pip-audit: top-level list of {name, version, vulns}
     if isinstance(data, list):
-        sample = data[0] if data else {}
+        sample = data[0] if data and isinstance(data[0], dict) else {}
+        # pip-audit: top-level list of {name, version, vulns}
         if "vulns" in sample:
-            return parse_pip_audit(data, repo)
+            return "pip-audit"
         # TruffleHog top-level list
         if "DetectorName" in sample or "SourceMetadata" in sample:
-            return parse_trufflehog(data, repo)
+            return "trufflehog"
+    return None
 
+
+def detect_and_parse(data: object, filename: str, repo: str) -> list[dict]:
+    step = detect_step(data)
+    if step == "semgrep":
+        return parse_semgrep_sarif(data, repo)
+    if step == "bandit":
+        return parse_bandit(data, repo)
+    if step == "trufflehog":
+        return parse_trufflehog(data["results"] if isinstance(data, dict) else data, repo)
+    if step == "pip-audit":
+        return parse_pip_audit(data["dependencies"] if isinstance(data, dict) else data, repo)
     print(f"  [warn] Could not detect scanner format for {filename}", file=sys.stderr)
     return []
+
+
+# ── Reading a scan directory, with coverage ──────────────────────────────────
+
+
+#: Files a scan directory holds that are never a scanner's result.
+NOT_RESULTS = frozenset({scan_coverage.META_NAME, "coverage.json", "hash.json"})
+
+
+def is_result_file(path: Path) -> bool:
+    """Candidate result files: .json / .sarif files, never scan-meta.json and its siblings."""
+    return path.suffix in (".json", ".sarif") and path.is_file() and path.name not in NOT_RESULTS
+
+
+def planned_steps(meta: dict | None) -> tuple[str, ...]:
+    """The scanners one scan planned, from its scan-meta.json (see DEFAULT_STEPS)."""
+    names: list[str] = list(DEFAULT_STEPS)
+    if meta is not None:
+        listed = meta.get("planned_steps")
+        recorded = meta.get("steps")
+        for source in (listed, recorded):
+            if not isinstance(source, list):
+                continue
+            for item in source:
+                name = item.get("step") if isinstance(item, dict) else item
+                if isinstance(name, str) and name and name not in names:
+                    names.append(name)
+    return tuple(names)
+
+
+def read_result_file(path: Path, target_name: str) -> scan_coverage.Read:
+    """Parse one scanner result into a scan_coverage.Read.
+
+    The scanner (the planned step the file is the output of) is decided by content. A file
+    that is JSON but no scanner's output reads as no step and is named; one that is not JSON
+    raises (the caller names it and the step stays unread).
+    """
+    decoded = scan_coverage.decode_text(path.read_bytes(), path.name)
+    raw = json.loads(decoded.text)
+    step = detect_step(raw)
+    notes = list(decoded.notes)
+    if step is None:
+        notes.append(f"{path.name} is not the output of a scanner this parser reads")
+        return scan_coverage.Read(None, [], [], notes)
+    return scan_coverage.Read(
+        step,
+        detect_and_parse(raw, path.name, repo_for(path, target_name)),
+        list(decoded.degraded),
+        notes,
+    )
+
+
+def repo_for(path: Path, target_name: str) -> str:
+    """The repo a result belongs to: the file name's scanner-suffix prefix when it has one
+    (`vendor-portal-semgrep.sarif`), else the scan directory's repo (`{repo}/{date}/`)."""
+    named = _repo_from_path(path.stem)
+    return named if named != path.stem else target_name
 
 
 # ── Deduplication ─────────────────────────────────────────────────────────────
@@ -597,50 +704,77 @@ def main() -> None:
     )
     parser.add_argument("--output", help="Output file path. Default: stdout")
     parser.add_argument(
+        "--coverage-output",
+        help="Write per-scan coverage (complete|partial|unknown, failed steps, the workflow "
+        "run's conclusion, limitations) to this JSON file. Needed to see coverage on a scan "
+        "that produced no findings.",
+    )
+    parser.add_argument(
         "--sample",
         action="store_true",
         help="Generate synthetic sample findings for pipeline testing",
     )
     args = parser.parse_args()
 
+    scan_reports: list[dict] = []
+
     if args.sample:
         findings = generate_sample()
+        sample = scan_coverage.unknown_report(None, "synthetic sample data; no scan was run")
+        scan_coverage.stamp(findings, sample)
+        scan_reports.append(sample)
         print(f"[parse_sarif] Generated {len(findings)} sample findings", file=sys.stderr)
+        scan_coverage.report("parse_sarif", scan_reports, args.coverage_output)
     else:
         scans_dir = (
             Path(args.scans_dir)
             if args.scans_dir
             else home_dir() / "security" / "scans" / args.client
-        )
+        ).resolve()
         if not scans_dir.exists():
+            scan_reports.append(
+                scan_coverage.unknown_report(
+                    str(scans_dir), f"scans directory not found: {scans_dir}"
+                )
+            )
             print(f"[parse_sarif] ERROR: scans directory not found: {scans_dir}", file=sys.stderr)
+            scan_coverage.report("parse_sarif", scan_reports, args.coverage_output)
             sys.exit(1)
 
-        scan_files = sorted(
-            f for f in scans_dir.iterdir() if f.suffix in (".json", ".sarif") and f.is_file()
-        )
-        if not scan_files:
+        try:
+            candidates = sorted(f for f in scans_dir.iterdir() if is_result_file(f))
+            all_findings, reports, n_files = scan_coverage.collect(
+                "parse_sarif",
+                scans_dir,
+                candidates,
+                planned_steps,
+                read_result_file,
+                (),
+                (),
+            )
+        except Exception as exc:  # noqa: BLE001 - never exit without the coverage sidecar
+            print(f"[parse_sarif] ERROR: reading results failed: {exc}", file=sys.stderr)
+            scan_reports.append(
+                scan_coverage.unknown_report(
+                    str(scans_dir),
+                    f"unexpected failure while reading results: {scan_coverage.short(exc)}",
+                )
+            )
+            scan_coverage.report("parse_sarif", scan_reports, args.coverage_output)
+            sys.exit(1)
+        scan_reports.extend(reports)
+
+        if not n_files:
             print(f"[parse_sarif] No .json/.sarif files found in {scans_dir}", file=sys.stderr)
+            scan_coverage.report("parse_sarif", scan_reports, args.coverage_output)
             sys.exit(1)
-
-        all_findings: list[dict] = []
-        for sf in scan_files:
-            repo = _repo_from_path(sf.stem)
-            print(f"[parse_sarif] Parsing {sf.name} → repo={repo}", file=sys.stderr)
-            try:
-                with open(sf, encoding="utf-8") as fh:
-                    raw = json.load(fh)
-                parsed = detect_and_parse(raw, sf.name, repo)
-                print(f"  → {len(parsed)} findings", file=sys.stderr)
-                all_findings.extend(parsed)
-            except Exception as exc:
-                print(f"  [error] Failed to parse {sf.name}: {exc}", file=sys.stderr)
 
         findings = deduplicate(all_findings)
         print(
             f"[parse_sarif] Total: {len(all_findings)} raw → {len(findings)} after dedup",
             file=sys.stderr,
         )
+        scan_coverage.report("parse_sarif", scan_reports, args.coverage_output)
 
     output_json = json.dumps(findings, indent=2)
     if args.output:

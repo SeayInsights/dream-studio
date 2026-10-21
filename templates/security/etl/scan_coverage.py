@@ -268,6 +268,7 @@ def assess(
     were ignored). A step recorded ran and read but degraded is partial.
     """
     degraded = degraded or {}
+    run_partial, run_unknown, run_limitations = _assess_run(meta)
     steps = meta.get("steps") if meta is not None else None
     if not isinstance(steps, list):
         why = (
@@ -276,11 +277,12 @@ def assess(
             else "scan-meta.json has no run record (`steps`)"
         )
         return {
-            "coverage": UNKNOWN,
+            # A CI run that did not succeed is a known fact, and the more specific one.
+            "coverage": PARTIAL if run_partial else UNKNOWN,
             "skipped_steps": [],
             "unread_steps": [],
             "degraded_steps": [],
-            "limitations": [f"{why}; which steps ran is not known"],
+            "limitations": [f"{why}; which steps ran is not known", *run_limitations],
         }
 
     entries: dict[str, list[dict]] = {}
@@ -329,10 +331,11 @@ def assess(
 
     for name, why in unusable:
         limitations.append(f"{name}: {why}")
+    limitations.extend(run_limitations)
 
-    if skipped or unread or partly:
+    if skipped or unread or partly or run_partial:
         coverage = PARTIAL
-    elif unusable:
+    elif unusable or run_unknown:
         coverage = UNKNOWN
     else:
         coverage = COMPLETE
@@ -343,6 +346,36 @@ def assess(
         "degraded_steps": partly,
         "limitations": limitations,
     }
+
+
+def _assess_run(meta: dict | None) -> tuple[bool, bool, list[str]]:
+    """What the `run` object of scan-meta.json says: (partial, unknown, limitations).
+
+    Modes whose scan is one CI workflow run record it (`scan ingest`):
+
+        "run": {"run_id": "123", "status": "completed", "conclusion": "failure"}
+
+    A run that did not conclude `success` (failure, cancelled, timed_out, neutral, skipped,
+    ...) may have produced only some of its results, whatever the per-scanner steps say, so
+    the scan is partial and the conclusion is named. A `run` whose conclusion cannot be read
+    leaves the scan `unknown`: the record claims a run it does not describe. A scan-meta.json
+    with no `run` (binary-scan and dast run locally) is judged by its steps alone.
+    """
+    if meta is None or "run" not in meta:
+        return False, False, []
+    run = meta["run"]
+    conclusion = run.get("conclusion") if isinstance(run, dict) else None
+    if not (isinstance(conclusion, str) and conclusion.strip()):
+        return False, True, ["the workflow run's conclusion is not recorded (`run.conclusion`)"]
+    if conclusion != "success":
+        run_id = run.get("run_id")
+        which = f" (run {_text(run_id)})" if isinstance(run_id, (str, int)) and run_id else ""
+        return (
+            True,
+            False,
+            [f"the workflow run{which} concluded {_text(conclusion)}: findings may be partial"],
+        )
+    return False, False, []
 
 
 def scan_key(
@@ -383,9 +416,20 @@ def scan_dirs(
 _NOTE_LIMIT = 20
 
 
+#: The steps a mode plans: one tuple for every scan, or a function of the scan's own
+#: scan-meta.json for a mode whose scanners differ per scan (`scan ingest`: the workflow
+#: runs semgrep plus whatever `scan.extra_scanners` the client profile lists).
+Planned = tuple[str, ...] | Callable[[dict | None], tuple[str, ...]]
+
+
+def planned_for(planned: Planned, meta: dict | None) -> tuple[str, ...]:
+    """The planned steps of one scan directory."""
+    return planned(meta) if callable(planned) else planned
+
+
 def assess_all(
     dirs: dict[str, Path | None],
-    planned: tuple[str, ...],
+    planned: Planned,
     state_by_key: dict[str, ScanRead],
 ) -> dict[str, dict]:
     """Assess every scan directory: key -> {"scan_dir", "coverage", ..., "steps_read"}.
@@ -396,13 +440,19 @@ def assess_all(
     out: dict[str, dict] = {}
     for key, meta_path in dirs.items():
         state = state_by_key.get(key) or ScanRead()
-        read = state.steps & set(planned)
-        report = assess(load_meta(meta_path), planned, read, state.degraded)
+        meta = load_meta(meta_path)
+        planned_steps = planned_for(planned, meta)
+        read = state.steps & set(planned_steps)
+        report = assess(meta, planned_steps, read, state.degraded)
         notes = [short(n) for n in state.notes]
         if len(notes) > _NOTE_LIMIT:
             notes = notes[:_NOTE_LIMIT] + [f"... and {len(notes) - _NOTE_LIMIT} more notes"]
         report["limitations"] = report["limitations"] + notes
-        out[key] = {"scan_dir": key, **report, "steps_read": [s for s in planned if s in read]}
+        out[key] = {
+            "scan_dir": key,
+            **report,
+            "steps_read": [s for s in planned_steps if s in read],
+        }
     return out
 
 
@@ -501,7 +551,7 @@ def collect(
     tag: str,
     scans_dir: Path,
     candidates: list[Path],
-    planned: tuple[str, ...],
+    planned: Planned,
     read_file: Callable[[Path, str], Read],
     exact: Iterable[str],
     hints: tuple[str, ...],

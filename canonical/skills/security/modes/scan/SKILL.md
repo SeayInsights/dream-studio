@@ -84,9 +84,10 @@ Extract from user input:
 **If `--file` is absent (GitHub Actions source):**
 1. Use `gh run list --repo {github_org}/{repo} --workflow security-scan.yml --limit 1 --json databaseId,status,conclusion` to find the latest run.
 2. If no run found: **stop** with — "No completed `security-scan.yml` run found for `{github_org}/{repo}`. Commit the workflow first using `scan setup`, then trigger a run."
-3. If latest run `conclusion` is not `success`: warn — "Latest run concluded `{conclusion}`. Ingesting anyway — findings may be partial."
-4. Download artifacts: `gh run download {run_id} --repo {github_org}/{repo} --dir /tmp/scan-{client}-{repo}/`
-5. Find SARIF/JSON files in the download directory.
+3. Keep the run's `databaseId` and `conclusion` for the run record (Step I3). If `conclusion` is not `success`, say so in chat and ingest anyway; the scan is recorded as partial, and the record, not the chat message, is what the dashboards and `scan status` read.
+4. Get each scanner's own result: `gh run view {run_id} --repo {github_org}/{repo} --json jobs` lists the workflow's jobs with a `conclusion` each (`Semgrep SAST` = `semgrep`, `Bandit Python SAST` = `bandit`, `TruffleHog Secrets Scan` = `trufflehog`, `pip-audit Dependency CVEs` = `pip-audit`, `npm audit Dependency CVEs` = `npm-audit`). The CycloneDX job produces an SBOM, not findings: leave it out of the record.
+5. Download artifacts: `gh run download {run_id} --repo {github_org}/{repo} --dir /tmp/scan-{client}-{repo}/`
+6. Find SARIF/JSON files in the download directory.
 
 #### Step I3: Parse and Store Results
 
@@ -101,9 +102,16 @@ Extract from user input:
   "client": "{client}",
   "repo": "{repo}",
   "date": "{YYYY-MM-DD}",
-  "source": "github-actions | local-file",
-  "run_id": "{run_id | null}",
-  "files": ["semgrep.sarif", "trivy.json"],
+  "source": "github-actions",
+  "run_id": "{run_id}",
+  "run": {"run_id": "{run_id}", "status": "completed", "conclusion": "{conclusion}"},
+  "planned_steps": ["semgrep", "bandit"],
+  "steps": [
+    {"step": "semgrep", "status": "{ran|skipped|failed}", "tool": "semgrep"},
+    {"step": "bandit", "status": "{ran|skipped|failed}", "tool": "bandit",
+     "reason": "{why, when the status is not ran}"}
+  ],
+  "files": ["semgrep-results.sarif", "bandit-results.json"],
   "finding_counts": {
     "critical": N,
     "high": N,
@@ -115,14 +123,28 @@ Extract from user input:
 }
 ```
 
+   `planned_steps` lists every scanner the workflow runs for this client: `semgrep`, plus
+   each of `scan.extra_scanners` from the profile (`bandit`, `trufflehog`, `pip-audit`,
+   `npm-audit`). `steps` is the run record, one entry per planned scanner: `ran` for a job
+   that concluded `success`, `failed` for `failure` or `timed_out`, `skipped` for
+   `cancelled` or `skipped`, with the `tool` and, when it did not run, the `reason` (for
+   example "job concluded failure"). `run.conclusion` is the whole run's conclusion as
+   `gh` reported it; a run that did not conclude `success` makes the scan `partial`
+   whatever the steps say, and `parse_sarif.py` names it. A scan directory with no `steps`
+   or `run` (an ingest from `--file`: nothing says which scanners ran or whether the run
+   finished) reads `unknown`, never `complete`. Write `source` as `local-file` for it and
+   omit `run`, `planned_steps` and `steps`.
+
 5. Parse SARIF to extract finding counts: iterate `runs[].results[]`, group by `level` (error=critical/high, warning=medium, note=low).
+6. Run `py -3.12 templates/security/etl/parse_sarif.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json`. Every finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`; `coverage.json` holds the same per scan directory and is the only place coverage shows when a scan produced no findings. It reads the scanner outputs directly in `{scan_dir}` (SARIF, Bandit, TruffleHog and pip-audit JSON); an output it has no reader for (npm audit) leaves that scanner `ran` but unread, so the scan is `partial` and the file is named.
 
 #### Step I4: Present Summary
 
 Show:
 1. Storage path where results were saved.
-2. Finding counts table: Critical / High / Medium / Low / Note.
-3. "Run `scan status --client {client}` to see full coverage, or `secure: pr-review` to triage findings."
+2. The coverage, first when it is not `complete`: the run's conclusion and every failed, skipped or unread scanner, from `coverage.json`. "No findings" from a partial scan is not a clean result.
+3. Finding counts table: Critical / High / Medium / Low / Note.
+4. "Run `scan status --client {client}` to see full coverage, or `secure: pr-review` to triage findings."
 
 ---
 
@@ -143,8 +165,9 @@ Extract from user input:
 1. List all directories under `~/.dream-studio/security/scans/{client}/`.
 2. For each repo directory found:
    - Find the most recent `{date}/` subdirectory.
-   - Read `scan-meta.json` if present.
+   - Read `scan-meta.json` if present, and `coverage.json` beside it.
    - Determine staleness: if most recent scan date is >7 days ago, mark **STALE**.
+   - Coverage: when `coverage.json` (or the `run` / `steps` of `scan-meta.json`) says `partial` (the run did not conclude `success`, or a scanner failed, was skipped or was not read) or `unknown` (no run record), say so in the Status column next to CURRENT or STALE, for example `CURRENT (partial: run concluded failure)`. A partial scan is not a clean one.
 3. For repos in `priority_repos` with no directory under `scans/{client}/`: mark **NO RESULTS**.
 
 #### Step T3: Check Workflow Presence
