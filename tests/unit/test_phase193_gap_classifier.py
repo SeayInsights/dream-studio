@@ -481,7 +481,9 @@ class TestTier2LLM:
             finally:
                 conn.close()
 
-        assert results, "Tier 2 returned no results (all deferred) -- the live check measured nothing"
+        assert (
+            results
+        ), "Tier 2 returned no results (all deferred) -- the live check measured nothing"
         variance = max(results) - min(results)
         assert variance < 0.1, (
             f"Tier 2 variance {variance:.3f} exceeds 0.1 target across {len(results)} runs. "

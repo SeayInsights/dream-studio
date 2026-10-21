@@ -22,7 +22,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-_LEAKER = '''
+_LEAKER = """
 import os
 
 
@@ -32,9 +32,9 @@ def test_leaves_the_home_unset():
 
 def test_runs_after_and_must_still_see_the_session_home():
     assert os.environ.get("DREAM_STUDIO_HOME"), "the leak reached the next test"
-'''
+"""
 
-_CLEAN = '''
+_CLEAN = """
 import os
 
 
@@ -45,9 +45,9 @@ def test_restores_through_monkeypatch(monkeypatch, tmp_path):
 
 def test_still_sees_the_session_home():
     assert os.environ.get("DREAM_STUDIO_HOME")
-'''
+"""
 
-_ASSIGNS = '''
+_ASSIGNS = """
 import os
 
 
@@ -57,7 +57,7 @@ def test_replaces_the_home():
 
 def test_after():
     assert os.environ["DREAM_STUDIO_HOME"] != "C:/somewhere/else"
-'''
+"""
 
 
 def _session(tmp_path: Path, test_source: str) -> str:

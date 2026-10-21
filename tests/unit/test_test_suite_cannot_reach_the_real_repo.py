@@ -608,9 +608,7 @@ def test_only_the_guarded_core_settings_are_read_from_the_config(config, expecte
     assert _conftest()._core_settings(config) == expected
 
 
-def test_a_rewrite_of_the_shared_config_that_leaves_core_alone_is_not_damage(
-    tmp_path, monkeypatch
-):
+def test_a_rewrite_of_the_shared_config_that_leaves_core_alone_is_not_damage(tmp_path, monkeypatch):
     """Everything another session does to the shared config in an ordinary day, none of which
     touches ``[core] bare`` -- and, in the same test, the change that IS damage still shows."""
     conftest = _conftest()

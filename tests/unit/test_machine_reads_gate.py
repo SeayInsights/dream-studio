@@ -90,8 +90,7 @@ _READS = {
         "sibling-read",
     ),
     "parents past the repository": (
-        "from pathlib import Path\n"
-        "def test_x():\n    Path(__file__).resolve().parents[3]\n",
+        "from pathlib import Path\n" "def test_x():\n    Path(__file__).resolve().parents[3]\n",
         "sibling-read",
     ),
     "git against the checkout, no cwd": (
@@ -147,8 +146,7 @@ def test_the_message_says_what_to_do_instead(tmp_path):
 
 _REDIRECTED = {
     "isolated_home fixture": (
-        "from pathlib import Path\n"
-        "def test_x(isolated_home):\n    Path.home()\n"
+        "from pathlib import Path\n" "def test_x(isolated_home):\n    Path.home()\n"
     ),
     "monkeypatch.setattr(Path, 'home')": (
         "from pathlib import Path\n"
@@ -221,8 +219,7 @@ _REDIRECTED = {
         "def test_x():\n    subprocess.run(['git', 'ls-files'], cwd=REPO_ROOT)\n"
     ),
     "git with kwargs spread may carry a cwd": (
-        "import subprocess\n"
-        "def test_x(run):\n    subprocess.run(['git', 'tag'], **run)\n"
+        "import subprocess\n" "def test_x(run):\n    subprocess.run(['git', 'tag'], **run)\n"
     ),
     "parents inside the repository": (
         "from pathlib import Path\n"
@@ -326,11 +323,15 @@ def test_reverting_the_detector_fixture_fails_the_gate(tmp_path):
     """tests/unit/integrations/test_detector.py compared against the machine's ~/.claude."""
     rel = "tests/unit/integrations/test_detector.py"
     source = _real(rel)
-    assert "monkeypatch.setattr(Path, \"home\"" in source, "the fixture is gone"
-    reverted = source.replace('monkeypatch.setattr(Path, "home"', 'monkeypatch.setattr(Path, "xhome"')
+    assert 'monkeypatch.setattr(Path, "home"' in source, "the fixture is gone"
+    reverted = source.replace(
+        'monkeypatch.setattr(Path, "home"', 'monkeypatch.setattr(Path, "xhome"'
+    )
     reverted = reverted.replace('monkeypatch.setenv("HOME"', 'monkeypatch.setenv("XHOME"')
     reverted = reverted.replace('monkeypatch.setenv("USERPROFILE"', 'monkeypatch.setenv("XPROFILE"')
-    reverted = reverted.replace('monkeypatch.delenv("CLAUDE_CONFIG_DIR"', 'monkeypatch.delenv("X_CFG"')
+    reverted = reverted.replace(
+        'monkeypatch.delenv("CLAUDE_CONFIG_DIR"', 'monkeypatch.delenv("X_CFG"'
+    )
     reverted += "\n\ndef test_reintroduced():\n    assert Path.home() / '.claude'\n"
     result = _gate_on_one_real_file(tmp_path, rel, reverted)
     assert result["status"] == "fail"
@@ -356,7 +357,7 @@ def test_reintroducing_the_sibling_repository_read_fails_the_gate(tmp_path):
     rel = "tests/unit/test_product_readiness_baseline.py"
     source = _real(rel).replace(
         "REPO_ROOT = Path(__file__).resolve().parents[2]\n",
-        'REPO_ROOT = Path(__file__).resolve().parents[2]\n'
+        "REPO_ROOT = Path(__file__).resolve().parents[2]\n"
         'ENTERPRISE_ROOT = REPO_ROOT.parent / "dream-studio-enterprise"\n',
         1,
     )

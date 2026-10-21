@@ -72,4 +72,3 @@ def test_main_repo_org_intelligence_is_a_real_package():
     oi_pkg = REPO_ROOT / "core" / "org_intelligence"
     assert oi_pkg.is_dir(), "core/org_intelligence must be a package directory"
     assert (oi_pkg / "__init__.py").exists(), "core/org_intelligence/__init__.py missing"
-

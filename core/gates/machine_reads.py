@@ -213,8 +213,10 @@ def _classify(sub: ast.AST, depth: int) -> _Read | None:
         name = _call_name(sub)
         text = _dotted(func)
         # Path.home() / pathlib.Path.home() / _Path.home()
-        if isinstance(func, ast.Attribute) and func.attr == "home" and _dotted(func.value).endswith(
-            "Path"
+        if (
+            isinstance(func, ast.Attribute)
+            and func.attr == "home"
+            and _dotted(func.value).endswith("Path")
         ):
             return _Read("home-read", "Path.home()", line)
         if name == "expanduser":
@@ -279,7 +281,9 @@ def _classify(sub: ast.AST, depth: int) -> _Read | None:
                 and _OWN_FILE.match(_dotted(sub.value))
                 and idx.value > depth
             ):
-                return _Read("sibling-read", f"{_dotted(sub)} (the repository is parents[{depth}])", line)
+                return _Read(
+                    "sibling-read", f"{_dotted(sub)} (the repository is parents[{depth}])", line
+                )
     elif isinstance(sub, ast.BinOp) and isinstance(sub.op, ast.Div):
         left, right = sub.left, sub.right
         if (

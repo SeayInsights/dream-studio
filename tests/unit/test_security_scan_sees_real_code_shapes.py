@@ -86,7 +86,7 @@ def test_the_keyword_line_is_reported_not_the_call_line():
 #: Lines 570-588 of ``control/execution/workflow/runner.py`` as it stood at ``c9e81457~1``,
 #: the revision before the fix, verbatim (wrapped in a class only so that it parses). Recover
 #: it with ``git show c9e81457~1:control/execution/workflow/runner.py``.
-_PRE_FIX_RUNNER_EXCERPT = '''\
+_PRE_FIX_RUNNER_EXCERPT = """\
 class Runner:
     def _verify(self, check):
         try:
@@ -108,7 +108,7 @@ class Runner:
         except OSError as exc:
             return "blocked", f"completion_check could not run ({type(exc).__name__}): {check}"
 
-'''
+"""
 
 
 def test_the_vulnerable_file_that_was_reported_clean_is_now_found():
@@ -335,9 +335,9 @@ def test_the_gate_looks_at_untracked_files_too(tmp_path):
 
     returned = changed_scannable_files(repo_root=repo)
 
-    assert probe in returned, (
-        f"an untracked file was not returned; the gate cannot see a new file. got {returned}"
-    )
+    assert (
+        probe in returned
+    ), f"an untracked file was not returned; the gate cannot see a new file. got {returned}"
 
 
 def test_changed_scannable_files_returns_only_scannable_paths(tmp_path):
