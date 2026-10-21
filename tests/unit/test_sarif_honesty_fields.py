@@ -154,6 +154,13 @@ def test_the_result_rule_index_form_is_checked_the_same_way():
     assert _confidence({"ruleId": "ghost", "rule": {"index": 0}}) is None
 
 
+def test_a_result_with_no_rule_at_all_is_not_matched_to_a_rule_that_has_no_id():
+    """None == None must not pair an id-less result with an id-less rule."""
+    anonymous = [{"properties": {"precision": "very-high"}}]
+    assert _confidence({}, rules=anonymous) is None
+    assert _confidence({"ruleId": ""}, rules=anonymous) is None
+
+
 def test_a_missing_ruleindex_finds_the_rule_by_id():
     assert _confidence({"ruleId": "r1"}) == "low"
 
