@@ -1399,3 +1399,39 @@ rules:
       blocks with the reason, where an empty string would silently turn a work-order-scoped
       query into a repo-global one that passes for anything. Orchestrator coverage went
       0/14 to 3/14 to 9/14 on that change alone.
+  - id: a-read-only-gate-preview-executes-nothing
+    statement: >
+      The close-gate preview reachable without a capability starts no subprocess, makes no
+      request, writes no event, opens the authority read-only and evaluates no authored
+      query; a gate part it could not evaluate is reported not_run, never pass and never
+      fail.
+    source: core/work_orders/close_main.py
+    enforced_by:
+      - tests/unit/test_close_gate_preview_no_exec.py::test_the_non_executing_preview_starts_no_subprocess_makes_no_request_writes_nothing
+      - tests/unit/test_close_gate_preview_no_exec.py::test_not_run_never_reads_as_a_pass
+      - tests/unit/test_close_gate_preview_no_exec.py::test_a_non_executing_evaluation_without_a_not_run_sink_is_refused
+      - tests/unit/test_close_gate_preview_no_exec.py::test_the_non_executing_preview_opens_the_authority_read_only
+      - tests/unit/test_close_gate_preview_no_exec.py::test_a_sql_check_is_never_evaluated_so_it_cannot_be_a_read_oracle
+      - tests/unit/test_close_gate_preview_no_exec.py::test_the_disk_gates_are_not_run_without_a_directory_never_failed
+      - tests/unit/integrations/test_mcp_server.py::test_no_mcp_module_reaches_the_executing_preview
+      - tests/unit/integrations/test_mcp_server.py::test_the_guard_catches_a_mutant
+    note: >
+      check_close_gates is documented as non-mutating, which meant only that it leaves the
+      work order's status alone: called by default it runs each TEST-CHECK as a subprocess,
+      sends each API-CHECK through a TestClient, runs git log to compare a stored artifact's
+      commit, and writes a validation.result_recorded event per executed check, SQL-CHECK
+      included (the issue that asked for this change assumed SQL-CHECK was side-effect free,
+      and it is not: the event is written for every check). A tool with no capability is open
+      to a read-only client, so the executing form cannot be offered there. The preview mode
+      is guarded by a test that makes every way out of the process raise and watches the
+      authority for a write, and each of those detectors was shown to fire by reintroducing
+      one execution at a time. not_run is its own state because the bare pass/fail pair of
+      run_gate_check would otherwise let a skipped gate read as a passed one.
+      Three things were added after an independent review. A SQL-CHECK is not evaluated even
+      read-only: whoever held work_order:add_task writes its text and any client could then run
+      it, a one-bit-per-call read oracle over the whole authority. The gates that read
+      .planning from disk report not_run when the caller has no project directory (a server),
+      because "not found" there is a false fail for work orders that pass with the right
+      directory. And the readers the preview calls open the authority mode=rw by default;
+      read_only_authority() forces them read-only for the preview, so a write through them
+      fails instead of merely not happening today.

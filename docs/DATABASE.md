@@ -25,6 +25,7 @@ Dream Studio uses three stores with distinct authority roles:
 Connection model:
 - `core/analytics/duckdb_store.connect_analytics(read_only=True)` — read-only analytics access (all API analytics reads)
 - `core/analytics/duckdb_store.connect_analytics(read_only=False)` — write access restricted to `core/projections/runner.py` only (enforced by the `authority-boundary` pre-push gate)
+- `core.config.database.read_only_authority()` — a context scope inside which every `connect_existing` opens the SQLite authority `mode=ro`, whatever its caller asked for (a `ContextVar`, so it is per thread or task). The non-executing close-gate preview (`ds_gate_check`) runs under it, so the artifact, runtime-state and carry-over readers it calls cannot write. No schema change.
 
 **Files store (files.db):** A versioned SQLite blob store for forward-only artifact writes (handoffs, evidence, release bundles, rollback state, and exports). Implemented in `core/files/store.py`. Schema: single `ds_files` table with auto-incrementing version per `(project_id, name)`. Authority boundary: files.db is NEVER-AUTHORITY — no canonical event or gate decision reads from this store. Connection: `core/files/store.connect_files()`. CLI: `ds files list [--project-id <id>] [--category <cat>]`.
 

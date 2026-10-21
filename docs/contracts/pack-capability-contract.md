@@ -61,10 +61,24 @@ to what the skill text and scripts actually call.
 | `work_order:advance` | `ds_work_order_advance` |
 | `work_order:close` | `ds_work_order_close` |
 | `review:dispatch` / `review:run` / `review:record` | `ds_review_dispatch` / `ds_review_run` / `ds_review_record` |
-| (read, no capability) | `ds_project_list`, `ds_project_state`, `ds_project_status`, `ds_work_order_list`, `ds_work_order_tasks`, `ds_review_status`, `ds_review_findings`, `ds_skill_list`, `ds_doctor`, `ds_memory_query` |
+| `gate:check` | `ds_gate_check`: read-only, no MCP capability, and the non-executing preview only (see below) |
+| (read, no capability) | `ds_project_list`, `ds_project_state`, `ds_project_status`, `ds_work_order_list`, `ds_work_order_tasks`, `ds_review_status`, `ds_review_findings`, `ds_skill_list`, `ds_doctor`, `ds_memory_query`, `ds_gate_check` |
 
 `review:dispatch` and `review:record` can never be held by one client (enforced in
 `auth.add_client`).
+
+`gate:check` previews a work order's close gates without running them
+(`check_close_gates(run_checks=False)`). It evaluates every gate that can be read and
+reports each gate as `pass`, `fail`, or `not_run`. Every `SQL-CHECK`, `TEST-CHECK` and
+`API-CHECK` criterion, the stored-commit comparison behind the artifact gates, and every gate
+that reads `.planning` from disk (the server has no project directory) come back `not_run`
+with the reason, never `pass` and never `fail`. It starts no subprocess, makes no request, writes no event, opens the
+authority read-only and evaluates no authored query, which is what lets a client with no capability call it. The executing form (the default of
+`check_close_gates`, run by the `ds` CLI) stays CLI-only: there is no MCP tool and no
+capability that runs a work order's checks. The preview is not a closability verdict;
+`close_work_order` enforces gates it does not evaluate (see the MCP server contract). A pack
+that contributes a gate gets this preview for the gates the core knows. Previewing a
+pack-contributed gate waits on `gate:register`, below.
 
 ### Present today (read model, not yet a capability)
 
@@ -127,7 +141,6 @@ usable:
 | --- | --- | --- |
 | `finding:record`, `finding:list` | Record and read findings in one typed shape: severity, location, `confidence`, `limitations`, `coverage` (`complete` \| `partial` \| `unknown`), evidence refs. The read model carries the three honesty fields (see "Present today"); storing them in `security_events` is built (migration 161), recording them through a capability is not. The capability needs `record_finding`'s three parameters exposed in `integrations/mcp/tools.py` as a client-gated write tool, and `finding:list` reads `core.findings.collect_findings`. | Append to a JSONL file beside the work; `list` reads it back. |
 | `evidence:attach` | Attach a content-hashed artifact (scan output, reproduction log) to a finding or work order. | Write the file next to the work; record its SHA256 in the finding. |
-| `gate:check` | Preview close gates for a work order. Exists in the `ds` CLI (`check_close_gates`), not in MCP, and cannot be exposed as a read tool as it stands: the preview runs the work order's `TEST-CHECK` and `API-CHECK` criteria and emits events (see the MCP server contract). It needs a mode that evaluates gates without running checks first. | Run each contributed gate's check command locally and print the results. |
 | `registry:work_order_type` (reach), `gate:register` | Let a pack supply work-order types (the registry exists, see above, but nothing loads a manifest into it) and gates (no registry yet; close gates are still bound to types by the `business_work_order_types` rows and literal sets in `close_main`). | Types and gates are read from the manifest and applied by the pack's own checklist. |
 | `artifact:write`, `artifact:read` | Named working artifacts (plans, audit reports). Replaces `ds files write` calls in skill text. | A project-local directory. |
 | `memory:record` | Record a lesson. | Append to a local lessons file. |
