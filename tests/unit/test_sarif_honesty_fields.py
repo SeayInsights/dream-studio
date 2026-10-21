@@ -216,7 +216,12 @@ def test_a_consistent_file_maps_exactly_as_before():
 
 @pytest.mark.parametrize(
     "invocation",
-    [{}, {"executionSuccessful": None}, {"executionSuccessful": 0}, {"executionSuccessful": "false"}],
+    [
+        {},
+        {"executionSuccessful": None},
+        {"executionSuccessful": 0},
+        {"executionSuccessful": "false"},
+    ],
 )
 def test_a_missing_or_non_boolean_executionsuccessful_is_not_a_failure(invocation):
     """Only an explicit false says the run was incomplete; absence says nothing."""
