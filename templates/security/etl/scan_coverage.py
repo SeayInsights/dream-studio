@@ -378,7 +378,57 @@ def is_not_scanned(meta: dict | None) -> bool:
     return meta is not None and _word(meta.get("outcome")) == "not_scanned"
 
 
+def _type_problems(meta: dict) -> list[str]:
+    """Fields scan_coverage reads for a decision that hold the wrong type.
+
+    scan-meta.json is written by an agent following prose, so any field can hold anything,
+    and `_word()` reads a non-string as "" (absent). A field that is PRESENT with the wrong
+    type is a claim the record makes and the code cannot read: the scan is `unknown`, never
+    `complete`. `null` is no value, the same as absent. The documented types: `source`,
+    `outcome` and `run.status` are text; `planned_steps` is a list of text; `steps` is a
+    list of objects, each with text `step`, `status` and (for a step that ran) `tool`.
+    `run` and `run.conclusion` are read by the code that needs them.
+    """
+    problems: list[str] = []
+
+    def not_text(name: str, value: object) -> None:
+        if value is not None and not isinstance(value, str):
+            problems.append(f"`{name}` is {type(value).__name__}, not text")
+
+    not_text("source", meta.get("source"))
+    not_text("outcome", meta.get("outcome"))
+    run = meta.get("run")
+    if isinstance(run, dict):
+        not_text("run.status", run.get("status"))
+    planned = meta.get("planned_steps")
+    if planned is not None and not (
+        isinstance(planned, list) and all(isinstance(item, str) for item in planned)
+    ):
+        problems.append("`planned_steps` is not a list of text")
+    steps = meta.get("steps")
+    if isinstance(steps, list):
+        for index, entry in enumerate(steps):
+            if not isinstance(entry, dict):
+                problems.append(f"`steps[{index}]` is {type(entry).__name__}, not an object")
+    return problems
+
+
 def _assess_run(meta: dict | None) -> tuple[bool, bool, list[str]]:
+    """See _assess_whole_run; this adds the type check, which can only make a scan unknown."""
+    if meta is None:
+        return False, False, []
+    partial, unknown, limitations = _assess_whole_run(meta)
+    problems = _type_problems(meta)
+    if problems:
+        unknown = True
+        limitations = [
+            "scan-meta.json holds a field of the wrong type: " + "; ".join(problems),
+            *limitations,
+        ]
+    return partial, unknown, limitations
+
+
+def _assess_whole_run(meta: dict | None) -> tuple[bool, bool, list[str]]:
     """What scan-meta.json says about the run as a whole: (partial, unknown, limitations).
 
     Whole-run facts, beyond the per-step record. Every word is read case- and

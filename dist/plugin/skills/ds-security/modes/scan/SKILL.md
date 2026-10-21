@@ -139,6 +139,7 @@ Extract from user input:
    `unknown`). A SARIF with no run, or whose runs hold no `results` list, is not a completed
    semgrep scan: it reads `partial` ("no runs in the SARIF"), and so does a second file for
    a scanner (named like it) that cannot be read.
+   Every field is read as the type documented here (`source`, `outcome` and `run.status` text; `planned_steps` a list of text; `steps` a list of objects): a field present with another type (a list where text belongs) is a record the code cannot read, and the scan reads `unknown`, never `complete`. `null` is the same as absent.
 
 5. Parse SARIF to extract finding counts: iterate `runs[].results[]`, group by `level` (error=critical/high, warning=medium, note=low).
 6. Run `py -3.12 <skill-dir>/templates/security/etl/parse_sarif.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json`. Every finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`; `coverage.json` holds the same per scan directory and is the only place coverage shows when a scan produced no findings. It reads the scanner outputs directly in `{scan_dir}` (SARIF, Bandit, TruffleHog and pip-audit JSON); an output it has no reader for (npm audit) leaves that scanner `ran` but unread, so the scan is `partial` and the file is named.

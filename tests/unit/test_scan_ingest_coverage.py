@@ -546,6 +546,7 @@ def test_the_ingest_steps_tell_the_agent_to_record_the_run_and_the_scanners() ->
     assert "with `source` `github-actions` and no `run` it reads `unknown`" in flat
     assert "Write `run.status` as `completed`" in flat
     assert '"no runs in the SARIF"' in flat
+    assert "a field present with another type" in flat and "`null` is the same as absent" in flat
 
 
 def test_scan_status_knows_a_not_scanned_directory_and_the_other_modes_directories():
