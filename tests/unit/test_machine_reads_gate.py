@@ -132,6 +132,55 @@ _READS = {
         "def test_x(isolated_home):\n    (REPO_ROOT.parent / 'beside').exists()\n",
         "sibling-read",
     ),
+    # Windows environment names are case-insensitive, so a lower-case spelling is the same read.
+    "os.getenv with a lower-case name": (
+        "import os\ndef test_x():\n    os.getenv('home')\n",
+        "home-read",
+    ),
+    "os.environ.get with a mixed-case name": (
+        "import os\ndef test_x():\n    os.environ.get('UserProfile')\n",
+        "home-read",
+    ),
+    "os.environ index with a lower-case name": (
+        "import os\ndef test_x():\n    os.environ['appdata']\n",
+        "home-read",
+    ),
+    "tilde-backslash literal given to Path": (
+        "from pathlib import Path\ndef test_x():\n    Path('~\\\\.claude')\n",
+        "home-read",
+    ),
+    "a bare tilde given to Path": (
+        "from pathlib import Path\ndef test_x():\n    Path('~')\n",
+        "home-read",
+    ),
+    "tilde literal given to open": (
+        "def test_x():\n    open('~/.claude/CLAUDE.md')\n",
+        "home-read",
+    ),
+    "tilde literal given to PurePath": (
+        "from pathlib import PurePath\ndef test_x():\n    PurePath('~/x')\n",
+        "home-read",
+    ),
+    "tilde literal given to os.path.exists": (
+        "import os\ndef test_x():\n    os.path.exists('~/x')\n",
+        "home-read",
+    ),
+    "tilde literal given to os.path.isfile": (
+        "import os\ndef test_x():\n    os.path.isfile('~/x')\n",
+        "home-read",
+    ),
+    "tilde literal given to os.path.isdir": (
+        "import os\ndef test_x():\n    os.path.isdir('~/x')\n",
+        "home-read",
+    ),
+    "tilde literal given to os.path.join": (
+        "import os\ndef test_x():\n    os.path.join('~/x', 'y')\n",
+        "home-read",
+    ),
+    "tilde literal given to os.path.abspath": (
+        "import os\ndef test_x():\n    os.path.abspath('~/x')\n",
+        "home-read",
+    ),
 }
 
 
@@ -251,7 +300,77 @@ _REDIRECTED = {
     "a tilde literal that is only data": (
         "def test_x():\n    assert '~/.dream-studio' in 'source text'\n"
     ),
+    "setenv USERPROFILE alone": (
+        "from pathlib import Path\n"
+        "def test_x(monkeypatch, tmp_path):\n"
+        "    monkeypatch.setenv('USERPROFILE', str(tmp_path))\n"
+        "    Path.home()\n"
+    ),
+    "setenv HOME alone": (
+        "from pathlib import Path\n"
+        "def test_x(monkeypatch, tmp_path):\n"
+        "    monkeypatch.setenv('HOME', str(tmp_path))\n"
+        "    Path.home()\n"
+    ),
+    "env mapping literal carrying HOME": (
+        "from pathlib import Path\n"
+        "def test_x(tmp_path):\n"
+        "    env = {'HOME': str(tmp_path)}\n"
+        "    Path.home()\n"
+    ),
+    "env mapping literal carrying USERPROFILE": (
+        "from pathlib import Path\n"
+        "def test_x(tmp_path):\n"
+        "    env = {'PATH': '', 'USERPROFILE': str(tmp_path)}\n"
+        "    Path.home()\n"
+    ),
+    "env mapping literal carrying CLAUDE_CONFIG_DIR": (
+        "from core.config.paths import claude_config_root\n"
+        "def test_x(tmp_path):\n"
+        "    env = {'CLAUDE_CONFIG_DIR': str(tmp_path)}\n"
+        "    claude_config_root()\n"
+    ),
+    "env mapping assigned a HOME key": (
+        "from pathlib import Path\n"
+        "def test_x(tmp_path):\n"
+        "    env = {}\n"
+        "    env['HOME'] = str(tmp_path)\n"
+        "    Path.home()\n"
+    ),
+    "env mapping built with dict(HOME=...)": (
+        "from pathlib import Path\n"
+        "def test_x(tmp_path):\n"
+        "    env = dict(HOME=str(tmp_path))\n"
+        "    Path.home()\n"
+    ),
+    # A write is not a read. Each of these reaches no operator state, and the gate must not
+    # call it one: the first has no other evidence in scope to excuse it (APPDATA is not a
+    # redirect key), the second is a deletion.
+    "storing to os.environ is not a read": (
+        "import os\ndef test_x(tmp_path):\n    os.environ['APPDATA'] = str(tmp_path)\n"
+    ),
+    "deleting from os.environ is not a read": (
+        "import os\ndef test_x():\n    del os.environ['XDG_CONFIG_HOME']\n"
+    ),
 }
+
+
+@pytest.mark.parametrize(
+    "verb",
+    ["log", "rev-parse", "status", "diff", "show", "tag", "branch", "fetch", "describe", "remote"],
+)
+def test_a_git_verb_that_reads_this_clone_fails_whichever_verb_it_is(tmp_path, verb):
+    """Only the verbs in ``_GIT_SELF_CONTAINED`` are exempt. ``log`` reads this clone's history
+    and ``rev-parse`` its refs, so neither may be waved through as if it built a repository."""
+    source = f"import subprocess\ndef test_x():\n    subprocess.run(['git', {verb!r}])\n"
+    result = _run(tmp_path, source)
+    assert _kinds(result) == ["git-checkout"], (verb, result["offenders"])
+
+
+@pytest.mark.parametrize("verb", ["init", "config", "version", "help", "clone", "ls-files"])
+def test_a_git_verb_that_builds_or_describes_its_own_repository_is_exempt(tmp_path, verb):
+    source = f"import subprocess\ndef test_x():\n    subprocess.run(['git', {verb!r}])\n"
+    assert _run(tmp_path, source)["status"] == "pass", verb
 
 
 @pytest.mark.parametrize("case", sorted(_REDIRECTED))
