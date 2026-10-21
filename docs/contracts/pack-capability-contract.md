@@ -181,8 +181,8 @@ Findings that constrain extraction order:
   modules are imported back by `core.gates` and `core.projects`, which inverts the
   layering.
 - Pack content depends on the checkout: seven skill files hardcode
-  `builds/dream-studio-clean/templates/...`, and 26 skill docs read the repo-level
-  `templates/` directory.
+  a path into one contributor's checkout (`builds/<checkout>/templates/...`), and 26 skill
+  docs read the repo-level `templates/` directory.
 
 ## Extraction order
 
