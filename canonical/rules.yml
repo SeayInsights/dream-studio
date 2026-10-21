@@ -1170,7 +1170,8 @@ rules:
     enforced_by:
       - tests/unit/test_graded_range_includes_own_commits.py::test_a_range_missing_its_own_commits_fails_loudly
       - tests/unit/test_graded_range_includes_own_commits.py::test_a_range_with_its_own_commits_reports_ownership
-      - tests/unit/test_delivery_boundary.py::test_the_live_attribution_does_not_carry_a_standing_neighbour_caveat
+      - tests/unit/test_delivery_boundary.py::test_a_neighbour_commit_that_predates_the_range_is_not_a_standing_caveat
+      - tests/unit/test_delivery_boundary.py::test_a_neighbour_commit_that_could_be_in_the_range_still_raises_the_caveat
     note: >
       Exclusion is one-sided: a commit goes only when ANOTHER work order recorded it, and
       this work order's own record is the only defence. So an empty or out-of-range record

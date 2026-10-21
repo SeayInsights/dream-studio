@@ -1601,35 +1601,123 @@ def test_a_neighbour_that_landed_elsewhere_is_not_reported_as_unmappable(db, tmp
     ), "a target outside the range must not be added to the ownership index either"
 
 
-def test_the_live_attribution_does_not_carry_a_standing_neighbour_caveat(db):
-    """The end-to-end property, on the real repository.
+def _dated_repo_with_side_commits(tmp_path: Path):
+    """A repo whose every timestamp is fixed, plus two commits no branch reaches.
 
-    Asserted against the actual history rather than a fixture, because the false alarm was
-    only visible at real scale: 45 recorded shas across 8 work orders, most of them merged
-    long before the range under test existed.
+    Returns ``(root, range_expr, old_side_sha, new_side_sha)``. The range's commits are
+    dated mid-2025. ``old_side_sha`` is dated 2020 and ``new_side_sha`` 2030, and both are
+    committed on a detached HEAD that is then abandoned: the objects stay readable (so a
+    timestamp can be read) while no commit on HEAD descends from them and no squash commit
+    names their subject (so they are neither reachable nor mappable).
+
+    Every date is passed explicitly. The test this replaces read ``origin/main...HEAD`` of
+    the checkout and the operator's live authority, so what it saw depended on which
+    commits happened to sit above main on the machine running it.
     """
-    import os
-    from dataclasses import asdict, is_dataclass
-    from pathlib import Path as _Path
+    root = tmp_path / "dated-repo"
+    root.mkdir()
+    base_env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+    }
 
+    def git(*args: str, when: str | None = None) -> str:
+        env = dict(base_env)
+        if when:
+            env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = when
+        out = subprocess.run(
+            ["git", "-c", "commit.gpgsign=false", *args],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            timeout=30,
+        )
+        assert out.returncode == 0, f"git {args}: {out.stderr}"
+        return out.stdout.strip()
+
+    def commit(name: str, when: str) -> str:
+        (root / f"{name}.txt").write_text(name, encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-q", "-m", f"commit {name}", when=when)
+        return git("rev-parse", "HEAD")
+
+    git("init", "-q")
+    shas = [commit(f"c{i}", f"2025-06-0{i + 1}T12:00:00+00:00") for i in range(4)]
+    tip = git("rev-parse", "HEAD")
+
+    git("checkout", "-q", "--detach", shas[0])
+    old_side = commit("side-old", "2020-01-01T12:00:00+00:00")
+    git("checkout", "-q", "--detach", shas[0])
+    new_side = commit("side-new", "2030-01-01T12:00:00+00:00")
+    git("checkout", "-q", "--detach", tip)
+
+    # The fixture's premise, asserted rather than assumed: a side commit that turned out to
+    # be reachable would make both tests below vacuous.
+    from core.work_orders.range_attribution import _is_reachable
+
+    assert not _is_reachable(old_side, root)
+    assert not _is_reachable(new_side, root)
+    return root, f"{shas[0]}..{shas[3]}", old_side, new_side
+
+
+def test_a_neighbour_commit_that_predates_the_range_is_not_a_standing_caveat(db, tmp_path):
+    """The end-to-end property of `attribute_range`, on a fixture with fixed dates.
+
+    A neighbour recorded a commit that is unreachable and unmappable, but it was committed
+    BEFORE the range's oldest commit, so it cannot have been squashed into the range. That
+    is arithmetic, not evidence, and it must not raise "a neighbour's work may be graded
+    here": measured on the live repository, every unmappable commit predated the range, so
+    the caveat fired on every verify and an alarm that is always on is one a grader skips.
+
+    This replaces a test that ran `attribute_range` against the operator's real
+    `~/.dream-studio` authority and `origin/main...HEAD`. It passed on a clean checkout only
+    because an empty range returns before the caveat is computed -- so it asserted nothing
+    until a commit sat above main, and then asserted whatever the machine's authority held
+    (236 unresolvable neighbour commits on the one it was reported from; GitHub issue #904).
+    """
     from core.work_orders.range_attribution import attribute_range
 
-    authority = _Path(os.path.expanduser("~/.dream-studio/state/studio.db"))
-    if not authority.is_file():
-        pytest.skip("no live authority on this machine")
+    root, expr, old_side, _new_side = _dated_repo_with_side_commits(tmp_path)
+    _own(db, "wo-neighbour", [old_side])
 
-    repo_root = _Path(__file__).resolve().parents[2]
-    result = attribute_range(
-        "e4e85949-7719-4e83-8b3a-8df8c897d561",
-        "origin/main...HEAD",
-        repo_root=repo_root,
-        db_path=authority,
+    result = attribute_range("wo-mine", expr, repo_root=root, db_path=db)
+
+    assert "may be graded here" not in result.note, (
+        "the neighbour caveat fired for a commit that predates the range's oldest commit "
+        f"and so cannot be inside it: {result.note}"
     )
-    fields = asdict(result) if is_dataclass(result) else vars(result)
-    assert "may be graded here" not in str(fields), (
-        "the neighbour caveat is firing on commits that cannot be in this range; a "
-        "caveat that is always present is one a grader learns to ignore"
+    assert "predate this range's oldest commit" in result.note, (
+        "the commit was ruled out by its date, and the note must say so -- silence here "
+        f"would be the absence-is-not-clean defect again: {result.note}"
     )
+
+
+def test_a_neighbour_commit_that_could_be_in_the_range_still_raises_the_caveat(db, tmp_path):
+    """The control for the test above, without which it passes against a caveat that is
+    never raised -- the always-quiet counterpart of the always-on alarm.
+
+    The same unreachable-and-unmappable neighbour commit, dated AFTER the range's oldest
+    commit: nothing rules out that its content sits in the range under a message that does
+    not name it, so the caveat must fire.
+    """
+    from core.work_orders.range_attribution import attribute_range
+
+    root, expr, _old_side, new_side = _dated_repo_with_side_commits(tmp_path)
+    _own(db, "wo-neighbour", [new_side])
+
+    result = attribute_range("wo-mine", expr, repo_root=root, db_path=db)
+
+    assert "may be graded here" in result.note, (
+        "an unmappable neighbour commit that does not predate the range was reported as "
+        f"harmless: {result.note}"
+    )
+    assert "predate this range's oldest commit" not in result.note, result.note
 
 
 # ── WO 654a54d7: a pin means finished, and only close means finished ───────────
