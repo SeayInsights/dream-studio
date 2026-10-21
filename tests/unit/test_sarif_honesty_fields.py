@@ -120,6 +120,102 @@ def test_parse_sarif_file_passes_what_the_file_states_to_record_finding(tmp_path
     assert unstated["coverage"] == "partial", "the run, not the rule, is what was incomplete"
 
 
+#: Two rules with different precision, so a wrong lookup is visible in the answer.
+_TWO_RULES = [
+    {"id": "someone-else", "properties": {"precision": "very-high"}},
+    {"id": "r1", "properties": {"precision": "low"}},
+]
+
+
+def _confidence(result: dict, rules=None) -> str | None:
+    return _honesty_from_sarif(result, _run(rules=rules or _TWO_RULES)).get("confidence")
+
+
+def test_a_ruleindex_that_matches_the_rule_id_is_used():
+    assert _confidence({"ruleId": "r1", "ruleIndex": 1}) == "low"
+
+
+def test_a_ruleindex_pointing_at_another_rule_is_not_trusted_and_the_id_lookup_wins():
+    """The file says rule 0 (very-high) but the result is r1 (low): the id decides."""
+    assert _confidence({"ruleId": "r1", "ruleIndex": 0}) == "low"
+
+
+def test_a_mismatched_ruleindex_with_no_rule_of_that_id_leaves_confidence_unknown():
+    """Neither resolves, so nothing is claimed: never the indexed rule's very-high."""
+    assert _confidence({"ruleId": "ghost", "ruleIndex": 0}) is None
+
+
+def test_a_ruleindex_is_used_when_the_result_carries_no_ruleid():
+    assert _confidence({"ruleIndex": 1}) == "low"
+
+
+def test_the_result_rule_index_form_is_checked_the_same_way():
+    assert _confidence({"ruleId": "r1", "rule": {"index": 0}}) == "low"
+    assert _confidence({"ruleId": "ghost", "rule": {"index": 0}}) is None
+
+
+def test_a_missing_ruleindex_finds_the_rule_by_id():
+    assert _confidence({"ruleId": "r1"}) == "low"
+
+
+def test_a_negative_ruleindex_does_not_index_from_the_end_of_the_list():
+    # -1 would be rules[-1], r1 (low). With ruleId someone-else the id lookup says very-high,
+    # and with no ruleId a negative index resolves to nothing at all.
+    assert _confidence({"ruleId": "someone-else", "ruleIndex": -1}) == "high"
+    assert _confidence({"ruleIndex": -1}) is None
+    assert _confidence({"ruleIndex": -2}) is None
+
+
+@pytest.mark.parametrize("index", [2, 99, 10**12])
+def test_an_out_of_range_ruleindex_falls_back_to_the_id_and_never_crashes(index):
+    assert _confidence({"ruleId": "r1", "ruleIndex": index}) == "low"
+    assert _confidence({"ruleIndex": index}) is None
+
+
+@pytest.mark.parametrize("index", [True, False, 1.0, 0.0, "1", "0", None, [1], {"a": 1}])
+def test_a_ruleindex_that_is_not_an_int_is_ignored(index):
+    """True is 1 and 1.0 == 1 in Python; neither is a SARIF index. The id still resolves."""
+    assert _confidence({"ruleId": "r1", "ruleIndex": index}) == "low"
+    assert _confidence({"ruleIndex": index}) is None
+
+
+def test_a_mismatched_file_is_not_given_the_indexed_rules_confidence_end_to_end(tmp_path):
+    run = _run(rules=_TWO_RULES)
+    run["results"] = [dict(_result("r1"), ruleIndex=0)]
+    seen: list[dict] = []
+    with (
+        patch.object(sarif_parser, "_record_finding", lambda **kw: seen.append(kw) or "id"),
+        patch.object(sarif_parser, "_check_duplicate", lambda *a: False),
+    ):
+        assert parse_sarif_file(str(_write_sarif(tmp_path, run))) == 1
+    assert seen[0]["confidence"] == "low"
+
+
+def test_a_consistent_file_maps_exactly_as_before():
+    run = _run(
+        rules=[{"id": "a", "properties": {"precision": "very-high"}}, {"id": "b"}],
+        invocations=[{"executionSuccessful": False}],
+    )
+    assert _honesty_from_sarif({"ruleId": "a", "ruleIndex": 0}, run) == {
+        "confidence": "high",
+        "coverage": "partial",
+        "limitations": ["the scanner reported executionSuccessful=false for this run"],
+    }
+    assert _honesty_from_sarif({"ruleId": "b", "ruleIndex": 1}, run) == {
+        "coverage": "partial",
+        "limitations": ["the scanner reported executionSuccessful=false for this run"],
+    }
+
+
+@pytest.mark.parametrize(
+    "invocation",
+    [{}, {"executionSuccessful": None}, {"executionSuccessful": 0}, {"executionSuccessful": "false"}],
+)
+def test_a_missing_or_non_boolean_executionsuccessful_is_not_a_failure(invocation):
+    """Only an explicit false says the run was incomplete; absence says nothing."""
+    assert _honesty_from_sarif({"ruleId": "r"}, _run(invocations=[invocation])) == {}
+
+
 def test_parse_sarif_file_passes_nothing_when_the_file_states_nothing(tmp_path):
     run = _run()
     run["results"] = [_result("r1")]

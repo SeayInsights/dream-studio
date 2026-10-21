@@ -132,11 +132,18 @@ def _rule_for(result: dict, run: dict) -> dict:
     if index is None:
         ref = result.get("rule")
         index = ref.get("index") if isinstance(ref, dict) else None
-    if isinstance(index, int) and 0 <= index < len(rules) and isinstance(rules[index], dict):
-        return rules[index]
-    for rule in rules:
-        if isinstance(rule, dict) and rule.get("id") == result.get("ruleId"):
-            return rule
+    rule_id = result.get("ruleId")
+    # ruleIndex is a claim the file makes, and SARIF requires it to agree with ruleId. It is
+    # used only when it does (or when the result names no rule to disagree with). A bool is
+    # an int to Python and 1.0 == 1, but neither is an index; a negative one would index from
+    # the end of the list.
+    if type(index) is int and 0 <= index < len(rules) and isinstance(rules[index], dict):
+        if not rule_id or rules[index].get("id") == rule_id:
+            return rules[index]
+    if rule_id:
+        for rule in rules:
+            if isinstance(rule, dict) and rule.get("id") == rule_id:
+                return rule
     return {}
 
 
