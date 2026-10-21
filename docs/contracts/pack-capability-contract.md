@@ -89,7 +89,10 @@ unknown: `core/projects/intake.py`, `control/analysis/bugs.py` and
 is never lost to its annotations. `emit_security_finding` reports whether a row was written:
 a failed write returns `emitted=False, failed=True` with a logged reason (the exception class,
 never the data) and leaves no row; `failed=False` with `emitted=False` is a skip (telemetry
-disabled, or a duplicate id). The SARIF importer uses a result's `ruleIndex` only when the
+disabled, or a duplicate id, including losing a race for the same id). A write that a
+trigger silently ignores is a failure, not a duplicate. The spool envelopes for a finding or a
+resolution are written only after the row is stored and the transaction has committed, so a
+failed write leaves nothing on the spool. The SARIF importer uses a result's `ruleIndex` only when the
 indexed rule's id matches the result's `ruleId`.
 
 ### Present today (Python API only, not yet reachable by a pack)
