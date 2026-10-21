@@ -345,6 +345,9 @@ _EXCLUDED_SKILL_SUFFIXES = frozenset({".pyc", ".pyo", ".pyd"})
 #: it straight back, one directory over. The audit trail stays in the repo.
 _EXCLUDED_SKILL_NAMES = frozenset({"REVIEWS.md"})
 
+#: Text files whose CRLF must survive the install: .gitattributes pins them (`*.cmd`, `*.bat`).
+_KEEP_BYTES_SUFFIXES = frozenset({".cmd", ".bat"})
+
 
 #: Files a skill's own modes EXECUTE or READ that live outside canonical/, shipped inside the
 #: skill's directory by BOTH channels (the plugin build and the installer): skill id ->
@@ -425,12 +428,24 @@ def _collect_skill_dir_ops(
             continue
         target = target_dir / rel
         file_hash = _compute_file_hash_chunked(file_path)
-        try:
-            source_content: str | None = file_path.read_text(encoding="utf-8")
-            source_path: Path | None = None
-        except (UnicodeDecodeError, ValueError):
-            source_content = None
-            source_path = file_path
+        if rel.suffix.lower() in _KEEP_BYTES_SUFFIXES:
+            # .gitattributes keeps these CRLF (`*.cmd`/`*.bat text eol=crlf`) because they
+            # do not run otherwise; reading them as text folds the CRLF, so they are copied.
+            source_content: str | None = None
+            source_path: Path | None = file_path
+        else:
+            try:
+                source_content = file_path.read_text(encoding="utf-8")
+                source_path = None
+            except (UnicodeDecodeError, ValueError):
+                source_content = None
+                source_path = file_path
+        if source_content is not None:
+            # The hash of what is WRITTEN (the newline-folded text, exactly as written), not
+            # of the working-tree file: a checkout's CRLF conversion of a .j2 or .mjs file
+            # made the recorded hash differ from the installed bytes on Windows, and every
+            # one of those files read as drift on a fresh install.
+            file_hash = hashlib.sha256(source_content.encode("utf-8")).hexdigest()
         # WO-AUTOACT-A: prepend synthesized description frontmatter to the
         # top-level SKILL.md so Claude Code's native skill auto-invoker has a
         # when-to-use description + trigger anchors to match. Canonical SKILL.md

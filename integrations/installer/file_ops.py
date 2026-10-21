@@ -9,11 +9,15 @@ from pathlib import Path
 
 
 def atomic_write(target: Path, content: str) -> None:
-    """Write content atomically using temp-file + rename pattern."""
+    """Write content atomically using temp-file + rename pattern.
+
+    The text is written exactly: LF, on every OS. It used to take the platform's newlines,
+    so on Windows an installed file was CRLF where the committed source is LF and no file
+    hashed equal to its source."""
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(target.suffix + ".tmp")
     try:
-        tmp.write_text(content, encoding="utf-8")
+        tmp.write_text(content, encoding="utf-8", newline="\n")
         os.replace(tmp, target)
     except Exception:
         try:
