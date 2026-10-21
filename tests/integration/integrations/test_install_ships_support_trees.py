@@ -192,7 +192,8 @@ def test_every_cli_entry_point_refuses_a_partial_source_root_without_a_traceback
     proc = _ds(partial_source_root, tmp_path, "integrate", *verb, "--config-root", str(config_root))
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "Traceback" not in proc.stderr
-    error = json.loads(proc.stderr[proc.stderr.index("{") :])
+    start = proc.stderr.index("{")
+    error = json.loads(proc.stderr[start:])
     assert error["ok"] is False
     assert "templates/security" in error["error"] and "ds-security" in error["error"]
     assert not (config_root / "skills").exists()  # nothing was written
