@@ -831,8 +831,15 @@ def guard_real_homedir(tmp_path, monkeypatch, request):
     # every test. Code that resolves the Claude config root then answers for THAT identity, not
     # for the temporary home the test built: test_detector and test_lib_paths both failed on it.
     # A test that means to exercise one sets it with monkeypatch.setenv, which still works.
-    for _ambient in ("CLAUDE_CONFIG_DIR", "CLAUDE_PLUGIN_ROOT", "CLAUDE_PROJECTS_DIR"):
-        monkeypatch.delenv(_ambient, raising=False)
+    #
+    # EXCEPT AN install_check. Those tests ask whether the install on THIS machine is right,
+    # and the install they check is the one the operator's shell points at: with CLAUDE_CONFIG_DIR
+    # scrubbed they would check ~/.claude whatever the shell said, and report a second identity
+    # healthy because the first one is (a decoy root that said "nothing here" still passed).
+    # They are never collected by default, so exempting them leaves every other test scrubbed.
+    if request.node.get_closest_marker("install_check") is None:
+        for _ambient in ("CLAUDE_CONFIG_DIR", "CLAUDE_PLUGIN_ROOT", "CLAUDE_PROJECTS_DIR"):
+            monkeypatch.delenv(_ambient, raising=False)
 
     # Reset machine_id process-level cache so each test gets a fresh hermetic ID.
     try:

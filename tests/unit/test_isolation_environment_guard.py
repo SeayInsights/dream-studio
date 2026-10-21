@@ -60,9 +60,14 @@ def test_after():
 """
 
 
-def _session(tmp_path: Path, test_source: str, extra_env: dict | None = None) -> str:
+def _session(
+    tmp_path: Path,
+    test_source: str,
+    extra_env: dict | None = None,
+    pytest_args: tuple[str, ...] = (),
+) -> str:
     tests = tmp_path / "tests"
-    tests.mkdir()
+    tests.mkdir(parents=True)
     shutil.copyfile(REPO_ROOT / "tests" / "conftest.py", tests / "conftest.py")
     (tests / "__init__.py").write_text("", encoding="utf-8")
     (tests / "test_subject.py").write_text(test_source, encoding="utf-8")
@@ -70,7 +75,7 @@ def _session(tmp_path: Path, test_source: str, extra_env: dict | None = None) ->
     env["PYTHONPATH"] = str(REPO_ROOT)
     env.update(extra_env or {})
     proc = subprocess.run(
-        [sys.executable, "-m", "pytest", "-v", "-p", "no:cacheprovider", "tests"],
+        [sys.executable, "-m", "pytest", "-v", "-p", "no:cacheprovider", *pytest_args, "tests"],
         cwd=str(tmp_path),
         env=env,
         capture_output=True,
@@ -177,3 +182,58 @@ def test_the_shells_claude_code_identity_does_not_reach_a_test(tmp_path):
         },
     )
     assert "2 passed" in out, out
+
+
+_INSTALL_CHECK_AMBIENT = """
+import os
+
+import pytest
+
+pytestmark = pytest.mark.install_check
+
+
+def test_an_install_check_sees_the_operators_config_root():
+    assert os.environ.get("CLAUDE_CONFIG_DIR") == os.environ["EXPECTED_CONFIG_DIR"]
+"""
+
+_NOT_AN_INSTALL_CHECK = """
+import os
+
+
+def test_an_ordinary_test_in_the_same_session_does_not():
+    assert "CLAUDE_CONFIG_DIR" not in os.environ
+"""
+
+
+def test_an_install_check_sees_the_operators_config_root_and_no_other_test_does(tmp_path):
+    """The scrub must not blind the tests whose whole job is to check the operator's install."""
+    identity = str(tmp_path / "another-identity")
+    extra_env = {"CLAUDE_CONFIG_DIR": identity, "EXPECTED_CONFIG_DIR": identity}
+    checked = _session(
+        tmp_path / "a",
+        _INSTALL_CHECK_AMBIENT,
+        extra_env=extra_env,
+        pytest_args=("-m", "install_check"),
+    )
+    assert "1 passed" in checked, checked
+    ordinary = _session(tmp_path / "b", _NOT_AN_INSTALL_CHECK, extra_env=extra_env)
+    assert "1 passed" in ordinary, ordinary
+
+
+def test_the_install_checks_read_the_identity_the_shell_names_not_dot_claude(tmp_path):
+    """The failure the verifier reproduced: a decoy root whose CLAUDE.md says nothing is here
+    must FAIL ``test_installed_claude_md_carries_the_routing_table``, not read ``~/.claude``."""
+    decoy = tmp_path / "decoy-identity"
+    decoy.mkdir()
+    (decoy / "CLAUDE.md").write_text("DECOY nothing here" + chr(10), encoding="utf-8")
+    source = (REPO_ROOT / "tests" / "install_checks" / "test_installed_copies.py").read_text(
+        encoding="utf-8"
+    )
+    out = _session(
+        tmp_path / "session",
+        source,
+        extra_env={"CLAUDE_CONFIG_DIR": str(decoy)},
+        pytest_args=("-m", "install_check", "-k", "routing_table"),
+    )
+    assert "test_installed_claude_md_carries_the_routing_table FAILED" in out, out
+    assert "CLAUDE.md missing routing markers" in out, out
