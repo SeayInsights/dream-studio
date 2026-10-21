@@ -14,7 +14,7 @@ import pytest
 from integrations.mcp import auth
 from integrations.mcp.app import build_app
 from integrations.mcp.server import handle_message
-from integrations.mcp.tools import TOOLS, TOOLS_BY_NAME
+from integrations.mcp.tools import TOOLS, TOOLS_BY_NAME, CallContext
 
 # ── protocol handler (no HTTP) ──────────────────────────────────────────────
 
@@ -75,9 +75,10 @@ def test_tools_call_unknown_tool_is_refused_as_invalid_params():
     assert resp["error"]["code"] == -32602
 
 
-def test_tools_call_missing_required_argument_reports_isError_not_a_crash():
-    """A required argument missing is the caller's mistake, not a server fault -- it
-    must come back as a tool result with isError, not raise out of handle_message."""
+def test_tools_call_missing_required_argument_is_invalid_params_not_a_crash():
+    """A required argument missing is the caller's mistake, not a server fault -- it comes
+    back as a JSON-RPC invalid-params error naming the argument (the advertised schema is
+    enforced before any handler runs), never raised out of handle_message."""
     resp = handle_message(
         {
             "jsonrpc": "2.0",
@@ -86,9 +87,8 @@ def test_tools_call_missing_required_argument_reports_isError_not_a_crash():
             "params": {"name": "ds_project_status", "arguments": {}},
         }
     )
-    result = resp["result"]
-    assert result["isError"] is True
-    assert "project_id" in result["content"][0]["text"]
+    assert resp["error"]["code"] == -32602
+    assert "project_id" in resp["error"]["message"]
 
 
 def test_unknown_method_is_method_not_found():
@@ -129,9 +129,12 @@ def test_every_tool_handler_reports_an_exception_as_isError_not_a_raise():
             },
             identity=root,
         )
-        assert "result" in resp, f"{tool.name} raised out of handle_message: {resp}"
         if required:
-            assert resp["result"]["isError"] is True
+            # The advertised schema is enforced before the handler: a missing required
+            # argument is invalid params (a JSON-RPC error), not a tool result.
+            assert resp["error"]["code"] == -32602, f"{tool.name}: {resp}"
+        else:
+            assert "result" in resp, f"{tool.name} raised out of handle_message: {resp}"
 
 
 # ── review tools distinguish "no such work order" from "not yet reviewed" ──
@@ -173,13 +176,13 @@ def test_review_status_rejects_a_work_order_id_that_names_nothing(bootstrapped_h
     this distinction (interfaces/cli/commands/review.py); the MCP tool must too."""
     with pytest.raises(ValueError, match="no work order"):
         TOOLS_BY_NAME["ds_review_status"].handler(
-            work_order_id="wo-does-not-exist", dream_studio_home=bootstrapped_home
+            CallContext(dream_studio_home=bootstrapped_home), work_order_id="wo-does-not-exist"
         )
 
 
 def test_review_status_succeeds_for_a_real_undispatched_work_order(bootstrapped_home):
     result = TOOLS_BY_NAME["ds_review_status"].handler(
-        work_order_id="wo-real", dream_studio_home=bootstrapped_home
+        CallContext(dream_studio_home=bootstrapped_home), work_order_id="wo-real"
     )
     assert result["blocking"] is True
     assert "no review has been dispatched" in " ".join(result["reasons"])
@@ -188,13 +191,13 @@ def test_review_status_succeeds_for_a_real_undispatched_work_order(bootstrapped_
 def test_review_findings_rejects_a_work_order_id_that_names_nothing(bootstrapped_home):
     with pytest.raises(ValueError, match="no work order"):
         TOOLS_BY_NAME["ds_review_findings"].handler(
-            work_order_id="wo-does-not-exist", dream_studio_home=bootstrapped_home
+            CallContext(dream_studio_home=bootstrapped_home), work_order_id="wo-does-not-exist"
         )
 
 
 def test_review_findings_succeeds_for_a_real_work_order(bootstrapped_home):
     result = TOOLS_BY_NAME["ds_review_findings"].handler(
-        work_order_id="wo-real", dream_studio_home=bootstrapped_home
+        CallContext(dream_studio_home=bootstrapped_home), work_order_id="wo-real"
     )
     assert result == {"open_findings": []}
 
@@ -1861,8 +1864,8 @@ def _fake_capability_gated_tool(name="ds_fake_mutation", capability="review:disp
     return Tool(
         name=name,
         description="test-only",
-        input_schema={"type": "object", "properties": {}},
-        handler=lambda **kwargs: {"called_with": sorted(kwargs)},
+        input_schema={"type": "object", "additionalProperties": False, "properties": {}},
+        handler=lambda ctx, /, **kwargs: {"called_with": sorted(kwargs)},
         required_capability=capability,
     )
 
