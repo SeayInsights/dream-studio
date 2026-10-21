@@ -146,7 +146,7 @@ def test_git_unavailable_does_not_prevent_recording(db, tmp_path):
 
 
 def test_a_failed_artifact_write_is_reported_not_raised(db, tmp_path):
-    repo, _head = _git_repo(tmp_path / "repo")
+    repo, _ = _git_repo(tmp_path / "repo")
     wo_id = str(uuid.uuid4())
     with patch(
         "core.work_orders.artifacts.set_wo_artifact", side_effect=RuntimeError("db exploded")
@@ -372,7 +372,7 @@ def test_uncommitted_work_is_visible(db, tmp_path):
     why an uncommitted deliverable reads as nothing delivered."""
     from core.work_orders.delivery_boundary import working_tree_changes
 
-    repo, _head = _git_repo(tmp_path / "repo")
+    repo, _ = _git_repo(tmp_path / "repo")
     (repo / "core").mkdir()
     (repo / "core" / "thing.py").write_text("x = 1\n", encoding="utf-8")  # untracked
     (repo / "a.txt").write_text("modified\n", encoding="utf-8")  # tracked, dirty
@@ -389,7 +389,7 @@ def test_dirty_files_outside_the_boundary_are_not_attributed(db, tmp_path):
     unrelated dirty file would let a WO be certified by work it never did."""
     from core.work_orders.delivery_boundary import working_tree_changes
 
-    repo, _head = _git_repo(tmp_path / "repo")
+    repo, _ = _git_repo(tmp_path / "repo")
     (repo / "mine").mkdir()
     (repo / "mine" / "x.py").write_text("1\n", encoding="utf-8")
     (repo / "theirs").mkdir()
@@ -407,7 +407,7 @@ def test_no_declared_boundary_attributes_nothing_and_says_why(db, tmp_path):
     silently would hide it."""
     from core.work_orders.delivery_boundary import working_tree_changes
 
-    repo, _head = _git_repo(tmp_path / "repo")
+    repo, _ = _git_repo(tmp_path / "repo")
     (repo / "z.py").write_text("1\n", encoding="utf-8")
 
     wo_id = _wo_with_boundary(db, repo, None)
@@ -420,7 +420,7 @@ def test_a_clean_tree_is_empty_without_a_reason(db, tmp_path):
     """Nothing uncommitted is a real answer, not a failure to look."""
     from core.work_orders.delivery_boundary import working_tree_changes
 
-    repo, _head = _git_repo(tmp_path / "repo")
+    repo, _ = _git_repo(tmp_path / "repo")
     wo_id = _wo_with_boundary(db, repo, "core/")
     paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
     assert paths == [] and reason is None
@@ -429,7 +429,7 @@ def test_a_clean_tree_is_empty_without_a_reason(db, tmp_path):
 def test_git_unavailable_reports_a_reason_rather_than_claiming_clean(db, tmp_path):
     from core.work_orders.delivery_boundary import working_tree_changes
 
-    repo, _head = _git_repo(tmp_path / "repo")
+    repo, _ = _git_repo(tmp_path / "repo")
     wo_id = _wo_with_boundary(db, repo, "core/")
     with patch("subprocess.run", side_effect=FileNotFoundError("git")):
         paths, reason = working_tree_changes(wo_id, repo_root=repo, db_path=db)
@@ -470,7 +470,7 @@ def test_attribution_fails_closed_where_enforcement_fails_open(db, tmp_path):
     # repo is excluded, and the caller resolves paths before asking.
     from core.work_orders.delivery_boundary import working_tree_changes
 
-    repo, _head = _git_repo(tmp_path / "repo")
+    repo, _ = _git_repo(tmp_path / "repo")
     (repo / "mine").mkdir()
     (repo / "mine" / "x.py").write_text("1\n", encoding="utf-8")
     (repo / "theirs").mkdir()
@@ -579,7 +579,7 @@ def test_the_range_diff_is_the_primary_evidence(db, tmp_path):
     anywhere in the commit message."""
     from core.work_orders.delivery_boundary import boundary_diff_text, record_delivery_boundary
 
-    repo, _head = _git_repo(tmp_path / "repo")
+    repo, _ = _git_repo(tmp_path / "repo")
     wo_id = _wo_with_boundary(db, repo, "core/")
     record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
 
@@ -615,7 +615,7 @@ def test_the_range_diff_is_the_primary_evidence(db, tmp_path):
 def test_uncommitted_work_appears_when_there_is_no_commit(db, tmp_path):
     from core.work_orders.delivery_boundary import boundary_diff_text, record_delivery_boundary
 
-    repo, _head = _git_repo(tmp_path / "repo")
+    repo, _ = _git_repo(tmp_path / "repo")
     wo_id = _wo_with_boundary(db, repo, "core/")
     record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
 
@@ -647,7 +647,7 @@ def test_nothing_delivered_is_reported_as_a_finding_not_as_missing_metadata(db, 
     about the WORK, not the metadata artifact 'unreviewable' used to mean."""
     from core.work_orders.delivery_boundary import boundary_diff_text, record_delivery_boundary
 
-    repo, _head = _git_repo(tmp_path / "repo")
+    repo, _ = _git_repo(tmp_path / "repo")
     wo_id = _wo_with_boundary(db, repo, "core/")
     record_delivery_boundary(wo_id, repo_root=repo, db_path=db)
     # No commits after start, nothing uncommitted, boundary path never created.
@@ -681,7 +681,7 @@ def test_the_unreviewable_message_names_every_layer_it_tried(db, tmp_path, monke
 
     from core.work_orders.verify_main import verify_work_order
 
-    repo, _head = _git_repo(tmp_path / "repo")
+    repo, _ = _git_repo(tmp_path / "repo")
     project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
     now = "2026-08-20T00:00:00+00:00"
     conn = sqlite3.connect(str(db))
@@ -829,7 +829,7 @@ def test_a_finished_work_order_records_its_end_commit(db, tmp_path):
     it, not merely nothing stopping it today."""
     from core.work_orders.delivery_boundary import record_delivery_boundary_end
 
-    root, _head = _git_repo(tmp_path / "repo")
+    root, _ = _git_repo(tmp_path / "repo")
     wo = str(uuid.uuid4())
     record_delivery_boundary(wo, repo_root=root, db_path=db)
 
@@ -974,7 +974,7 @@ def test_the_final_task_done_also_pins_the_boundary(db, tmp_path):
     )
     from core.work_orders.mutations import mark_task_done
 
-    root, _head = _git_repo(tmp_path / "repo")
+    root, _ = _git_repo(tmp_path / "repo")
     project_id, wo_id = str(uuid.uuid4()), str(uuid.uuid4())
     t1, t2 = str(uuid.uuid4()), str(uuid.uuid4())
     now = "2026-08-28T00:00:00+00:00"
@@ -1229,7 +1229,7 @@ def test_close_reports_bookkeeping_that_did_not_land(db, tmp_path, monkeypatch):
     monkeypatch.setattr("core.work_orders.delivery_boundary.record_delivery_boundary_end", _explode)
     monkeypatch.setattr("core.work_orders.range_attribution.record_commit_ownership", _explode)
 
-    repo, _head = _git_repo(tmp_path / "repo")
+    repo, _ = _git_repo(tmp_path / "repo")
     wid = _wo_with_boundary(db, repo, "core/")
     # close accepts only pushed/ci_issues; `_wo_with_boundary` seeds `in_progress`, and
     # this test is about the bookkeeping report reaching a close, not about the phase.
@@ -1511,7 +1511,7 @@ def test_a_gate_blocked_close_still_reports_bookkeeping_that_did_not_land(
     monkeypatch.setattr("core.work_orders.delivery_boundary.record_delivery_boundary_end", _explode)
     monkeypatch.setattr("core.work_orders.range_attribution.record_commit_ownership", _explode)
 
-    repo, _head = _git_repo(tmp_path / "repo")
+    repo, _ = _git_repo(tmp_path / "repo")
     wid = _wo_with_boundary(db, repo, "core/")
     # close accepts only pushed/ci_issues; this test needs a GATE refusal (verdict,
     # affirmation), not a phase refusal, so the WO must first be past the phase check --
