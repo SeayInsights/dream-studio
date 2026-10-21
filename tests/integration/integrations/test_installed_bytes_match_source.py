@@ -152,6 +152,60 @@ def test_a_line_ending_only_edit_is_not_drift_for_text_but_a_content_edit_is(fre
     assert verify_file_hashes(manifest) == [f"hash_mismatch: {target}"]
 
 
+@pytest.mark.parametrize(
+    "variant",
+    [
+        lambda b: b.replace(b"\n", b"\r", 1),  # a lone CR is not a CRLF
+        lambda b: b.replace(b"\n", b"\xc2\x85", 1),  # NEL is not a newline here
+        lambda b: b.replace(b"\n", b"\xe2\x80\xa8", 1),  # nor U+2028
+        lambda b: b"\xef\xbb\xbf" + b,  # a BOM is a changed byte sequence
+        lambda b: b.replace(b"\n", b"\r\r\n", 1),  # a CR left over after the fold
+        lambda b: b.replace(b"\n", b"\n\n", 1),  # an added blank line
+    ],
+    ids=["lone-cr", "nel", "line-separator", "bom", "double-cr", "blank-line"],
+)
+def test_the_newline_fold_folds_only_crlf_and_nothing_else_is_forgiven(fresh, variant):
+    config_root, ds_home = fresh
+    target = config_root / "skills" / "ds-security" / "templates" / "security" / "README.md"
+    original = target.read_bytes()
+    target.write_bytes(variant(original))
+    manifest = read_manifest("claude_code", ds_home, config_root)
+    assert verify_file_hashes(manifest) == [f"hash_mismatch: {target}"]
+
+
+def test_a_blank_line_added_to_a_file_with_none_is_drift(tmp_path: Path):
+    """A synthetic file with no blank line: the fold must not read an added one as the same."""
+    from integrations.manifest import compute_hash
+
+    path = tmp_path / "f.txt"
+    manifest = {"files": [{"path": str(path), "content_hash": compute_hash(b"a\nb\n")}]}
+    path.write_bytes(b"a\r\nb\r\n")
+    assert verify_file_hashes(manifest) == []
+    path.write_bytes(b"a\n\nb\n")
+    assert verify_file_hashes(manifest) == [f"hash_mismatch: {path}"]
+
+
+def test_the_doctors_directory_hash_folds_only_crlf(tmp_path: Path):
+    """The freshness hash is the other fold: CRLF == LF, and a lone CR, NEL or BOM is not."""
+    from core.health.doctor_skill_sync import _compute_directory_hash
+
+    def digest(content: bytes) -> str:
+        d = tmp_path / f"d{len(list(tmp_path.iterdir()))}"
+        d.mkdir()
+        (d / "a.txt").write_bytes(content)
+        return _compute_directory_hash(d)
+
+    base = b"one\ntwo\n"
+    assert digest(base.replace(b"\n", b"\r\n")) == digest(base)
+    for other in (
+        b"one\rtwo\r",
+        b"one\xc2\x85two\xc2\x85",
+        b"\xef\xbb\xbf" + base,
+        b"one\r\r\ntwo\n",
+    ):
+        assert digest(other) != digest(base), other
+
+
 def test_an_install_made_before_the_fix_still_verifies(fresh):
     """An older manifest recorded the hash of the working-tree source bytes (CRLF) for some
     files, and the file on disk was written with platform newlines: both forms verify."""

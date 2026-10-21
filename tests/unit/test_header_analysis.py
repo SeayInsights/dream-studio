@@ -140,6 +140,16 @@ def test_offsets_past_the_end_of_the_file_are_refused(pe, what):
         header_analysis.pe_checks(pe, 0x9000 if what == "certificate table" else 0xA000)
 
 
+def test_a_coff_symbol_record_is_eighteen_bytes_and_the_boundary_is_exact():
+    """10 records of 18 bytes end at pointer + 180: a file of exactly that size holds the whole
+    table, one byte less cuts the last record (a 16-byte or a 20-byte record misses by one)."""
+    pointer = 0x8000
+    pe = _fake_pe(signed=False, symbols=10, symbol_pointer=pointer)
+    assert header_analysis.pe_checks(pe, pointer + 180)[0] == {"debug_symbols_stripped": False}
+    with pytest.raises(ValueError, match="COFF symbol table"):
+        header_analysis.pe_checks(pe, pointer + 179)
+
+
 def test_a_header_that_declares_sections_pefile_could_not_parse_is_refused():
     """A PE cut to 512 bytes: the headers parse, the header says 8 sections, pefile reads 0,
     and with no section to look at no extent check ever ran (it exited 0)."""
