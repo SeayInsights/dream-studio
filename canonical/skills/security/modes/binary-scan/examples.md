@@ -190,7 +190,7 @@ Its exit status is the run record for this step:
   `header_analysis` as `skipped` with that reason -- do not just move on, because nothing
   downstream can tell a skipped header analysis from one that found nothing.
 - It exits 2: the file is not a PE or ELF binary (record `skipped`, reason from stderr), could
-  not be read, or is truncated: its headers point past the end of the file (record `failed`,
+  not be read, or is truncated: its headers point past the end of the file, or declare more sections than could be read (record `failed`,
   reason from stderr). No file is written. A missing `--output` directory is created; one that
   cannot be written also exits 2.
 

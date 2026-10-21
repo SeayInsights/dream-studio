@@ -50,13 +50,20 @@ def _fake_pe(
     symbols: int,
     sections: tuple[tuple[int, int], ...] = ((0x400, 0x1000),),
     symbol_pointer: int = 0x8000,
+    declared_sections: int | None = None,
+    size_of_headers: int = 0x400,
 ) -> SimpleNamespace:
     directories = [SimpleNamespace(VirtualAddress=0, Size=0) for _ in range(16)]
     if signed:
         directories[4] = SimpleNamespace(VirtualAddress=0x9000, Size=0x2E0)
     return SimpleNamespace(
-        OPTIONAL_HEADER=SimpleNamespace(DATA_DIRECTORY=directories),
-        FILE_HEADER=SimpleNamespace(NumberOfSymbols=symbols, PointerToSymbolTable=symbol_pointer),
+        OPTIONAL_HEADER=SimpleNamespace(DATA_DIRECTORY=directories, SizeOfHeaders=size_of_headers),
+        FILE_HEADER=SimpleNamespace(
+            NumberOfSymbols=symbols,
+            PointerToSymbolTable=symbol_pointer,
+            # a header that declares more sections than pefile could parse is a cut file
+            NumberOfSections=len(sections) if declared_sections is None else declared_sections,
+        ),
         sections=[
             SimpleNamespace(PointerToRawData=pointer, SizeOfRawData=size)
             for pointer, size in sections
@@ -133,6 +140,35 @@ def test_offsets_past_the_end_of_the_file_are_refused(pe, what):
         header_analysis.pe_checks(pe, 0x9000 if what == "certificate table" else 0xA000)
 
 
+def test_a_header_that_declares_sections_pefile_could_not_parse_is_refused():
+    """A PE cut to 512 bytes: the headers parse, the header says 8 sections, pefile reads 0,
+    and with no section to look at no extent check ever ran (it exited 0)."""
+    pe = _fake_pe(signed=False, symbols=0, sections=(), declared_sections=8)
+    with pytest.raises(ValueError, match="declares 8 sections but only 0"):
+        header_analysis.pe_checks(pe, 512)
+    pe = _fake_pe(signed=False, symbols=0, sections=((0x400, 0x100),), declared_sections=3)
+    with pytest.raises(ValueError, match="declares 3 sections but only 1"):
+        header_analysis.pe_checks(pe, FILE_SIZE)
+    pe = _fake_pe(signed=False, symbols=0, sections=((0x400, 0x100),), declared_sections=2)
+    with pytest.raises(ValueError, match="declares 2 sections but only 1"):  # off by one
+        header_analysis.pe_checks(pe, FILE_SIZE)
+    pe = _fake_pe(signed=False, symbols=0, sections=((0x400, 0x100),), declared_sections=0)
+    with pytest.raises(ValueError, match="declares 0 sections but only 1"):  # more than declared
+        header_analysis.pe_checks(pe, FILE_SIZE)
+
+
+def test_headers_that_run_past_the_end_of_the_file_are_refused():
+    pe = _fake_pe(signed=False, symbols=0, sections=(), size_of_headers=0x400)
+    with pytest.raises(ValueError, match="headers"):
+        header_analysis.pe_checks(pe, 0x3FF)
+    header_analysis.pe_checks(pe, 0x400)  # exactly the headers: fine for a file with no sections
+
+
+def test_a_pe_with_no_sections_at_all_is_still_readable_when_intact():
+    pe = _fake_pe(signed=False, symbols=0, sections=(), declared_sections=0)
+    assert header_analysis.pe_checks(pe, FILE_SIZE)[0] == {"debug_symbols_stripped": True}
+
+
 def test_offsets_exactly_at_the_end_of_the_file_are_fine():
     pe = _fake_pe(signed=True, symbols=0, sections=((0x400, 0x8C00),))
     # certificate table ends at 0x9000 + 0x2E0 = 0x92E0; the section at 0x400 + 0x8C00 = 0x9000
@@ -152,7 +188,7 @@ def test_a_truncated_pe_exits_2_through_main_and_writes_nothing(tmp_path, monkey
     out = tmp_path / "h.json"
     assert header_analysis.main([str(binary), "--output", str(out)]) == 2
     err = capsys.readouterr().err
-    assert "truncated" in err and "certificate table" in err
+    assert "truncated" in err and "headers run past the end" in err
     assert not out.exists()
 
 
@@ -540,6 +576,53 @@ def test_real_library_a_truncated_pe_is_refused(tmp_path: Path, capsys):
     assert header_analysis.main([str(truncated), "--output", str(out)]) == 2
     assert "truncated" in capsys.readouterr().err
     assert not out.exists()
+
+
+def _needed_extent(pefile_module, path: Path) -> int:
+    """The end of the last thing the script reads from the FULL file: headers, section raw
+    data, symbol table, certificate table."""
+    pe = pefile_module.PE(str(path), fast_load=True)
+    ends = [pe.OPTIONAL_HEADER.SizeOfHeaders]
+    security = pe.OPTIONAL_HEADER.DATA_DIRECTORY[4]
+    if security.VirtualAddress and security.Size:
+        ends.append(security.VirtualAddress + security.Size)
+    header = pe.FILE_HEADER
+    if header.NumberOfSymbols:
+        ends.append(header.PointerToSymbolTable + 18 * header.NumberOfSymbols)
+    ends += [s.PointerToRawData + s.SizeOfRawData for s in pe.sections if s.SizeOfRawData]
+    pe.close()
+    return max(ends)
+
+
+@pytest.mark.parametrize("name", ["python", "notepad.exe", "kernel32.dll"])
+def test_real_library_a_cut_is_accepted_exactly_when_every_field_read_is_intact(
+    tmp_path: Path, name: str
+):
+    """The truncation fuzz, kept as a test: for a stride of cuts and every boundary the script
+    reads (+-1), `analyze` accepts the cut iff it reaches the end of the full file's last
+    extent. A 512-byte cut of notepad.exe (header says 8 sections, pefile parses 0) was
+    accepted before the declared-section-count check."""
+    pefile = pytest.importorskip("pefile")
+    if sys.platform != "win32":
+        pytest.skip("needs the Windows system binaries")
+    path = Path(sys.executable) if name == "python" else _windows_system_binary(name)
+    data = path.read_bytes()
+    need = _needed_extent(pefile, path)
+    cuts = set(range(0, len(data), max(1, len(data) // 120)))
+    cuts.update({0, 1, 63, 64, 255, 256, 511, 512, 513, 1000, 1023, 1024, 1025, 4096})
+    cuts.update({need - 1, need, need + 1} & set(range(len(data) + 1)))
+    wrong = []
+    for cut in sorted(c for c in cuts if 0 <= c <= len(data)):
+        cut_file = tmp_path / "cut.bin"
+        cut_file.write_bytes(data[:cut])
+        try:
+            header_analysis.analyze(cut_file)
+            accepted = True
+        except Exception:  # noqa: BLE001 - any refusal is a refusal
+            accepted = False
+        if accepted != (cut >= need):
+            wrong.append((cut, accepted))
+    assert wrong == []
 
 
 def test_real_library_elf_on_a_system_binary(tmp_path: Path):

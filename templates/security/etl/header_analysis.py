@@ -87,9 +87,18 @@ def interpreter_is_trusted(interp: str | None) -> bool:
 
 
 def pe_extent_problem(pe, file_size: int) -> str | None:
-    """Why this PE cannot be analysed because it runs past the end of the file; None if it
-    does not. A truncated copy still parses its headers, and its directory offsets point
+    """Why this PE cannot be analysed because it runs past the end of the file, or because the
+    header declares more than could be read; None if it does not. A truncated copy still parses its headers, and its directory offsets point
     past EOF: reading `signed` or the symbol table from it would be reading nothing."""
+    declared = pe.FILE_HEADER.NumberOfSections
+    parsed = len(getattr(pe, "sections", ()))
+    if declared != parsed:
+        # pefile stops at the end of the data: a file cut inside (or before) the section
+        # table parses fewer sections than its header declares, and an extent check over the
+        # sections that survived says nothing about the ones that did not.
+        return f"the header declares {declared} sections but only {parsed} could be read"
+    if pe.OPTIONAL_HEADER.SizeOfHeaders > file_size:
+        return "the headers run past the end of the file"
     security = pe.OPTIONAL_HEADER.DATA_DIRECTORY[IMAGE_DIRECTORY_ENTRY_SECURITY]
     if security.VirtualAddress and security.VirtualAddress + security.Size > file_size:
         return "the certificate table lies past the end of the file"
