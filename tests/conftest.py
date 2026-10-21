@@ -500,6 +500,24 @@ def pytest_runtest_teardown(item, nextitem):
 
 
 @pytest.fixture(autouse=True)
+def tests_run_from_the_repository_root(monkeypatch):
+    """Every test starts in the repository root, whichever directory pytest was launched from.
+
+    About fifty test files read repo-relative paths (``Path("core/work_orders/close_main.py")``,
+    ``Path("docs/contracts/...")``) and a dozen start ``python -m interfaces.cli.ds`` or hand a
+    ``TEST-CHECK`` path to the admission gate with no ``cwd=``. All of them silently assumed the
+    process was started in the checkout, so ``pytest --rootdir <repo> <abs paths>`` from any
+    other directory failed 15 tests with ``No module named 'interfaces'`` and ``TEST-CHECK names
+    'tests/unit/test_admission.py', which is not a file``. The working directory is machine state
+    like any other; pinning it is the same move as pinning the home.
+
+    A test that wants another directory still says so with ``monkeypatch.chdir``, which restores
+    to the root afterwards; one that ``os.chdir``s and forgets is undone here.
+    """
+    monkeypatch.chdir(_PLUGIN_ROOT)
+
+
+@pytest.fixture(autouse=True)
 def reset_warnings():
     warnings.resetwarnings()
     yield
