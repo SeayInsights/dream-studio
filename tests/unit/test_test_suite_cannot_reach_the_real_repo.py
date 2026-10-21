@@ -34,6 +34,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.git_repo import requires_git
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: The variables git exports to hooks that point a git invocation away from its cwd.
@@ -608,6 +610,7 @@ def test_only_the_guarded_core_settings_are_read_from_the_config(config, expecte
     assert _conftest()._core_settings(config) == expected
 
 
+@requires_git
 def test_a_rewrite_of_the_shared_config_that_leaves_core_alone_is_not_damage(tmp_path, monkeypatch):
     """Everything another session does to the shared config in an ordinary day, none of which
     touches ``[core] bare`` -- and, in the same test, the change that IS damage still shows."""
@@ -667,6 +670,7 @@ def test_only_a_git_verb_that_could_move_the_guarded_state_counts_against_a_test
     assert _conftest()._could_move_the_guarded_state(argv) is moves
 
 
+@requires_git
 def test_a_read_only_git_call_and_a_config_rewrite_elsewhere_do_not_abort_a_clean_run(tmp_path):
     """The abort #911 describes, reproduced end to end and fixed.
 
@@ -719,6 +723,7 @@ def test_a_read_only_git_call_and_a_config_rewrite_elsewhere_do_not_abort_a_clea
     assert "[repo-guard]" in output, f"the external change went unreported\n{output[-2000:]}"
 
 
+@requires_git
 def test_a_fetch_that_overwrites_the_checked_out_branch_is_blamed_on_the_test(tmp_path):
     """`git fetch --update-head-ok <remote> +<src>:<current branch>` really moves the tip. It
     used to count as a read because plain `fetch` is on the read-only list, so the guard called
@@ -754,6 +759,7 @@ def test_a_fetch_that_overwrites_the_checked_out_branch_is_blamed_on_the_test(tm
     assert "fetch" in output and "--update-head-ok" in output, output[-3000:]
 
 
+@requires_git
 def test_a_bare_flip_is_still_named_with_the_setting_that_changed(tmp_path):
     """The other direction: damage to the guarded settings aborts, and says which."""
     victim = _victim(tmp_path)

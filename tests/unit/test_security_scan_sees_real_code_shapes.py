@@ -40,6 +40,7 @@ from control.analysis.security_patterns import (
 )
 from core.gates import security_scan
 from core.gates.security_scan import changed_scannable_files, offenders_in_text
+from tests.helpers.git_repo import requires_git
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -340,6 +341,7 @@ def test_the_gate_looks_at_untracked_files_too(tmp_path):
     ), f"an untracked file was not returned; the gate cannot see a new file. got {returned}"
 
 
+@requires_git
 def test_changed_scannable_files_returns_only_scannable_paths(tmp_path):
     """Every path this returns must be one the scanner accepts, or the gate would try to
     parse a PNG. Driven against a repository holding one file of each kind, so the answer

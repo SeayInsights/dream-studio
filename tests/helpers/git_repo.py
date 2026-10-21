@@ -16,11 +16,22 @@ checkout happens to be on are properties of one clone, not of the code.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 #: The instant every commit made through :func:`commit` carries unless a caller passes one.
 FIXED_DATE = "2025-01-01T12:00:00+00:00"
+
+#: Why a test that builds a repository did not run: the tool it needs is not installed here.
+NO_GIT_REASON = "git is not on PATH; this test builds and drives a repository with it"
+
+#: Skip a test (or a whole module, as ``pytestmark``) that drives ``git`` itself rather than
+#: through this module. The helpers below skip on their own: on a PATH without git a test that
+#: needs a repository said ``FileNotFoundError: [WinError 2]`` instead of what was missing.
+requires_git = pytest.mark.skipif(shutil.which("git") is None, reason=NO_GIT_REASON)
 
 
 def hermetic_env(**overrides: str) -> dict[str, str]:
@@ -53,6 +64,8 @@ def hermetic_env(**overrides: str) -> dict[str, str]:
 
 def git(repo: Path, *args: str, check: bool = True, **env: str) -> str:
     """Run ``git <args>`` in ``repo`` under :func:`hermetic_env`; return stripped stdout."""
+    if shutil.which("git") is None:
+        pytest.skip(NO_GIT_REASON)
     out = subprocess.run(
         ["git", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", *args],
         cwd=str(repo),
