@@ -15,14 +15,20 @@ MEASURED WHEN THIS WAS WRITTEN: 21 of 102 `enforced_by` references across 7 of 3
 named a module or a test file that is not in the tree. A register of enforcement claims
 that nobody verifies is the failure it was built to prevent, one level up.
 
-A NODE IS RESOLVED TO THE TEST, NOT JUST THE FILE. Until #896 a `file::name` reference
-counted as resolved once `file` existed, so a test renamed or deleted underneath a rule
-left the rule claiming enforcement by nothing and the gate still printed OK; two rules
-were found that way. The module is now parsed with `ast` -- never imported, so no test
-module runs on a push -- and the `Class::name` path must be defined there as a function
-or class. A parametrised id (`name[a-b]`) resolves when `name` does, because the ids are
-generated at collection time; an assignment is not a test and does not resolve; a file
-that does not parse is reported as a failure naming the line, never a crash.
+A NODE IS RESOLVED TO THE TEST PYTEST WOULD COLLECT, NOT JUST THE FILE. Until #896 a
+`file::name` reference counted as resolved once `file` existed, so a test renamed or deleted
+underneath a rule left the rule claiming enforcement by nothing and the gate still printed
+OK; two rules were found that way. `core/gates/pytest_node_resolver.py` now reads the module
+with `ast` -- never imports it, so no test module runs on a push -- and answers the question
+pytest answers: the name must match the repo's own `python_functions`/`python_classes`, a
+fixture, a class with `__init__` or `__test__ = False`, a def later shadowed or deleted, and
+a def under `if TYPE_CHECKING` are not tests, and a class's tests include the ones it
+inherits. A parametrised id (`name[a-b]`) resolves when `name` does. A base class the
+resolver cannot read is a failure that names it, never an acceptance.
+
+A REGISTER THAT CANNOT BE READ, OR HOLDS NOTHING, FAILS. An empty `rules:` used to report
+"OK - 0 references", a string-valued `enforced_by` was walked one character at a time, and a
+missing or malformed file was a traceback. Each is now one clear failure.
 
 THE DECLARATION IS THE OTHER HALF. Five of those seven lost their enforcement because the
 gate holding them up was deliberately removed as repo bookkeeping. Deleting the rules
@@ -37,10 +43,11 @@ declare in writing why you cannot. One repo, one shape for "I cannot enforce thi
 
 from __future__ import annotations
 
-import ast
 import sys
 from pathlib import Path
 from typing import Any
+
+from core.gates.pytest_node_resolver import NodeResolver
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = REPO_ROOT / "canonical" / "rules.yml"
@@ -52,85 +59,28 @@ MIN_REASON = 20
 _CODE_SUFFIXES = (".py", ".md", ".yml", ".yaml", ".json", ".toml", ".txt")
 
 
-def _definitions(body: list[ast.stmt]) -> dict[str, ast.stmt]:
-    """The functions and classes a scope defines, by name.
-
-    Definitions sitting under a module-level `if`/`try`/`with` are still defined in that
-    scope, so they are found there too. Only `def` and `class` count: pytest does not run
-    an assignment, and a rule that points at `test_x = something` is pointing at nothing.
-    When a name is defined twice the later one wins, as it does at import time.
-    """
-    found: dict[str, ast.stmt] = {}
-    for stmt in body:
-        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            found[stmt.name] = stmt
-        elif isinstance(stmt, (ast.If, ast.Try, ast.With, ast.AsyncWith)):
-            nested = list(stmt.body) + list(getattr(stmt, "orelse", []))
-            nested += list(getattr(stmt, "finalbody", []))
-            for handler in getattr(stmt, "handlers", []):
-                nested += list(handler.body)
-            found.update(_definitions(nested))
-    return found
+def _inside_repo(ref: str) -> bool:
+    try:
+        (REPO_ROOT / ref).resolve().relative_to(REPO_ROOT.resolve())
+    except ValueError:
+        return False
+    return True
 
 
-def _parse(path: Path, cache: dict[Path, ast.Module | str]) -> ast.Module | str:
-    """The parsed module, or the reason it cannot be. Parsed once per audit, never imported."""
-    if path not in cache:
-        try:
-            cache[path] = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        except SyntaxError as exc:
-            cache[path] = f"test file does not parse (line {exc.lineno})"
-        except (UnicodeDecodeError, ValueError):
-            cache[path] = "test file is not readable as utf-8 source"
-    return cache[path]
-
-
-def _resolve_node(reference: str, cache: dict[Path, ast.Module | str]) -> str | None:
-    """Resolve `file.py::Class::name[param]` by reading the file, never importing it."""
-    file_part, _, node_part = reference.partition("::")
-    # A parametrised id (`name[a-b]`) resolves when the function does. The parameter ids
-    # are generated at collection time and can hold `::` themselves, so the bracket is cut
-    # off before the path is split.
-    node_part = node_part.split("[", 1)[0]
-
-    path = REPO_ROOT / file_part
-    if not path.is_file():
-        return "no such test file"
-    if path.suffix != ".py":
-        return "node id into a non-python file"
-
-    segments = node_part.split("::")
-    if not all(segments):
-        return "empty segment in node id"
-
-    tree = _parse(path, cache)
-    if isinstance(tree, str):
-        return tree
-
-    body: list[ast.stmt] = tree.body
-    for position, name in enumerate(segments):
-        node = _definitions(body).get(name)
-        if node is None:
-            scope = "::".join(segments[:position]) or file_part
-            return f"no `{name}` defined in {scope}"
-        if position < len(segments) - 1:
-            if not isinstance(node, ast.ClassDef):
-                # pytest collects methods of a class, not functions nested in a function.
-                return f"`{name}` is a function, not a class holding tests"
-            body = node.body
-    return None
-
-
-def _resolve(reference: str, cache: dict[Path, ast.Module | str] | None = None) -> str | None:
+def _resolve(reference: Any, resolver: NodeResolver | None = None) -> str | None:
     """None when the reference resolves; otherwise why it does not."""
-    ref = str(reference).strip()
+    if not isinstance(reference, str):
+        return f"reference is a {type(reference).__name__}, not a string"
+    ref = reference.strip()
     if not ref:
         return "empty reference"
 
     if "::" in ref:  # a pytest node id: the file AND the test inside it must exist
-        return _resolve_node(ref, {} if cache is None else cache)
+        return (resolver or NodeResolver(REPO_ROOT)).resolve(ref)
 
     if "/" in ref or ref.endswith(_CODE_SUFFIXES):  # a path
+        if not _inside_repo(ref):
+            return "path escapes the repository"
         return None if (REPO_ROOT / ref).exists() else "no such path"
 
     if "." in ref:  # a dotted module
@@ -142,24 +92,61 @@ def _resolve(reference: str, cache: dict[Path, ast.Module | str] | None = None) 
     return "unrecognised reference"
 
 
-def audit(registry_path: Path | None = None) -> dict[str, Any]:
-    """Every rule whose enforcement claim does not hold, plus the declared ones."""
+class RegistryError(ValueError):
+    """The register cannot be read as a list of rules. Raised, never swallowed: an empty or
+    unreadable register that reports OK is a gate that cannot fail when it should."""
+
+
+def _load_rules(path: Path) -> list[dict[str, Any]]:
     import yaml
 
-    path = registry_path or REGISTRY
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise RegistryError(f"cannot read {path}: {exc}") from exc
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        first = str(exc).strip().splitlines()[0] if str(exc).strip() else "invalid yaml"
+        raise RegistryError(f"cannot parse {path}: {first}") from exc
+
     rules = data.get("rules") if isinstance(data, dict) else data
+    if not isinstance(rules, list):
+        raise RegistryError(f"{path} has no `rules` list")
+    if not rules:
+        raise RegistryError(f"{path} holds no rules; an empty register enforces nothing")
+    for index, rule in enumerate(rules, start=1):
+        if not isinstance(rule, dict):
+            raise RegistryError(f"rule #{index} in {path} is not a mapping")
+    return rules
+
+
+def audit(registry_path: Path | None = None) -> dict[str, Any]:
+    """Every rule whose enforcement claim does not hold, plus the declared ones."""
+    path = registry_path or REGISTRY
+    rules = _load_rules(path)
 
     broken: list[dict[str, Any]] = []
     declared: list[dict[str, Any]] = []
     guidance: list[dict[str, Any]] = []
     checked = 0
-    parsed: dict[Path, ast.Module | str] = {}
+    resolver = NodeResolver(REPO_ROOT)
 
     for rule in rules or []:
         rule_id = rule.get("id", "<no id>")
         reason = str(rule.get("unenforced") or "").strip()
-        references = list(rule.get("enforced_by") or [])
+        raw_references = rule.get("enforced_by")
+        if raw_references is not None and not isinstance(raw_references, list):
+            # A bare string would be walked one character at a time, and a mapping one key.
+            broken.append(
+                {
+                    "rule": rule_id,
+                    "reference": "(enforced_by shape)",
+                    "why": f"enforced_by must be a list, got {type(raw_references).__name__}",
+                }
+            )
+            continue
+        references = list(raw_references or [])
         guidance_why = str(rule.get("why") or "").strip()
 
         # GUIDANCE IS NOT A REGRESSION. `unenforced` records that something used to hold a
@@ -224,7 +211,7 @@ def audit(registry_path: Path | None = None) -> dict[str, Any]:
 
         for reference in references:
             checked += 1
-            why = _resolve(reference, parsed)
+            why = _resolve(reference, resolver)
             if why:
                 broken.append({"rule": rule_id, "reference": reference, "why": why})
 
@@ -238,7 +225,11 @@ def audit(registry_path: Path | None = None) -> dict[str, Any]:
 
 
 def main() -> int:
-    report = audit()
+    try:
+        report = audit()
+    except RegistryError as exc:
+        print(f"[rule-enforcement] FAIL - {exc}")
+        return 1
     declared = report["declared"]
 
     if report["broken"]:
