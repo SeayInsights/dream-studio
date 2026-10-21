@@ -29,47 +29,78 @@ LAYER TWO, WHICH TESTS A FILE HOLDS:
 
   * names follow `python_functions` / `python_classes` from the repo's own pytest config
     (pytest.toml, pytest.ini, pyproject.toml, tox.ini, setup.cfg, in pytest's order), not
-    defaults baked in here; `__test__ = True` collects a name pytest would otherwise skip and a
-    falsy `__test__` (`False`, `0`, `None`, assigned in the body, inherited, or set from
-    outside as `test_x.__test__ = False`) removes one;
-  * a module namespace is built statement by statement, so a later binding wins, an
-    alias of a test (`test_b = test_a`) is collected under its own name, an imported
-    test is collected (unless `collect_imported_tests = false`), `del` removes, and a
-    `with ... as test_x` or `for test_x in <non-empty literal>` target rebinds the name;
-  * a class is collected when its name matches, it defines no `__init__`/`__new__`, does not
-    set a falsy `__test__`, and holds at least one test pytest would collect; its members
-    are those of its real C3 linearisation (so a diamond resolves the way Python resolves it),
-    with bases found in the same file or elsewhere in the repo;
-  * a base class that is defined later in the file than the class using it, a base list with
-    no consistent MRO, and a top-level relative import in a directory that is not a package
-    all raise at import, so pytest collects nothing from the file, and the resolver says that;
+    defaults baked in here; an option that is present and empty is empty, not the default;
+    `__test__ = True` collects a name pytest would otherwise skip and a falsy `__test__`
+    (`False`, `0`, `None`, assigned in the body, inherited, or set from outside as
+    `test_x.__test__ = False`) removes one;
+  * a module namespace is built statement by statement, so a later binding wins, an alias of a
+    test (`test_b = test_a`, also `= module.attr`, `= functools.partial(test_a)`, a lambda, a
+    function assigned in a class body) is collected under its own name, an imported test is
+    collected (unless `collect_imported_tests = false`), `del`, a `with ... as test_x`, a walrus
+    and a `for test_x in <non-empty literal>` target rebind the name, and the body of a `for`
+    over an empty literal never runs;
+  * a class is collected when its name matches, it is not abstract (`ABC` or `ABCMeta` with a
+    method marked abstract and not overridden), it gets no `__init__`/`__new__` (its own, a
+    `@dataclass`, a builtin base that has one such as dict, Exception, int, list, str, tuple or
+    type, or an Enum, NamedTuple, TypedDict or Protocol base), does not set a falsy `__test__`,
+    and holds at least one test pytest would collect; its members are those of its real C3
+    linearisation (so a diamond resolves the way Python resolves it) with bases found in the
+    same file or elsewhere in the repo, a subscripted base (`Base[int]`) standing for `Base`;
+  * a `@property` is not callable and a fixture, also through `from pytest import fixture as
+    fx`, is not a test;
+  * a condition is decided when it is a constant, `not`/`and`/`or` over constants, a module
+    constant bound to one, `__name__ == "__main__"`, or `TYPE_CHECKING` however imported;
+  * a file that raises when imported is refused whole, for the causes a static read can PROVE: a
+    top-level `raise` or false `assert`, a base class defined later in the file or nowhere it
+    could come from, bases with no consistent MRO, a top-level relative import in a directory
+    that is not a package, a top-level `pytest.skip(..., allow_module_level=True)`, an import of
+    a module a regular repository package lacks, of a name a repository module does not define
+    (when it makes names by no route a static read cannot see), or of a repository helper that
+    does not parse;
   * `from x import *` binds what `x.__all__` lists when that is a literal list, otherwise the
-    public names, and a star import whose `__all__` cannot be evaluated is named as the doubt.
+    public names, and a star import whose `__all__` cannot be evaluated is named as the doubt;
+  * a path is judged as it is SPELLED (`skipme/` is excluded even when it is a link to `real/`)
+    and must match the case of the file on disk, as a Linux checkout would require.
 
 WHAT IT DOES NOT PRETEND TO KNOW. When a name cannot be found and a base class could not be
 read (it lives outside the repository, or is not a plain name), the answer is a failure that
 names that base -- never an acceptance. Accepting on doubt is the fail-open this gate exists to
 remove. Branches whose condition cannot be evaluated statically (`if sys.platform ...`) are
-accepted: either arm may run, and the gate cannot tell which; the same goes for a `def` inside a
-`try` whose import might fail. `if False`, `if 0`, `if TYPE_CHECKING`, `if __name__ == "__main__"`
-and a module constant bound to a literal (`DEBUG = False`; `if DEBUG:`) never run under pytest
-and are skipped.
+accepted: either arm may run, and the gate cannot tell which.
 
-DELIBERATELY NOT MODELLED, each of them accepted or refused as noted, never guessed:
+SKIPS. A test skipped by a marker (`@pytest.mark.skip`, `pytestmark`, `skipif`, `xfail`) still
+resolves: skipping is a run-time outcome and pytest collects the test either way, so the
+question this answers is whether the enforcer is there to run, not whether it runs green on
+this machine. A top-level `pytest.skip(..., allow_module_level=True)` is different, because it
+raises while the file is imported and no item ever exists, so it is REFUSED; one that is
+conditional or reached through a function call is not decidable and is a false accept (below).
 
-  * a SKIPPED test still resolves. Skipping (`@pytest.mark.skip`, `pytestmark`,
-    `pytest.skip(allow_module_level=True)`, `skipif`, `xfail`) is a run-time outcome, and pytest
-    collects the test either way; the question this answers is whether the enforcer is there to
-    run, not whether it runs green on this machine;
-  * a decorator that replaces the function with something else (one that returns `None` or an
-    `int`) cannot be evaluated statically; the decorated def is taken at its word;
-  * tests created dynamically (`setattr`, `pytest_generate_tests`, a generator or `exec`), an
-    abstract class (`ABC` with an abstract method, which pytest skips), `-o python_files=...` or
-    any option given on a command line or in `PYTEST_ADDOPTS` (only the repo's config and its
-    `addopts` are read), and plugins installed in the environment;
-  * `-k`, `-m`, `--noconftest`, `--confcutdir`, `--pyargs`, `--import-mode` and `-p <plugin>` in
-    `addopts` change collection in ways that need marks or imports to evaluate; a repo that sets
-    one gets a configuration error rather than a guess.
+THE KNOWN FALSE ACCEPTS: pytest collects nothing and the resolver says yes. Each is a case in
+`_KNOWN_LIMITS` (tests/helpers/resolver_cases.py), judged against `pytest --collect-only` by
+tests/unit/test_pytest_collection_agreement.py, which fails if one stops being a limit so that
+this list is corrected rather than left to rot:
+
+  * a file that fails to import for a reason not provable from source: a module missing from the
+    environment or from a namespace directory, a NameError other than an undefined base class,
+    a circular import, an `assert` on a condition that cannot be decided, `pytest.importorskip`
+    of a missing module, a conditional or function-called `pytest.skip(allow_module_level=True)`;
+  * a generator test function (pytest fails the file);
+  * a class or function decorator that replaces the object (one that returns `None` or an int)
+    or adds an `__init__` (attrs and its kin), and an abstract class reached through a base the
+    resolver cannot read;
+  * a `def` inside a `try` whose import may fail;
+  * options given on a command line or in `PYTEST_ADDOPTS`, `-o python_files=...`, and plugins
+    installed in the environment.
+
+THE KNOWN FALSE REFUSALS: pytest collects it and the resolver says no.
+
+  * a base made by a call (`class T(make_base())`) or splatted (`class T(*bases)`) that
+    supplies the test; a class built by a factory function; a `def` created through `global`;
+    a test made with `setattr`; and `unittest.TestCase.runTest`.
+
+REFUSED CONFIGURATION. `-k`, `-m`, `--noconftest`, `--confcutdir`, `--pyargs`, `--import-mode`,
+`--rootdir` and `-p <plugin>` in `addopts` change collection in ways that need marks, imports or
+a different rootdir to evaluate; a repo that sets one gets a configuration error, not a guess.
 """
 
 from __future__ import annotations
@@ -220,6 +251,16 @@ class _Module:
                             "from a directory that is not a package (no `__init__.py`), so the "
                             "import raises ImportError and pytest collects nothing from the file"
                         )
+                elif isinstance(stmt, ast.Raise):
+                    self.poison.append(
+                        f"line {stmt.lineno} always raises at import (a top-level `raise`), so "
+                        "pytest collects nothing from the file"
+                    )
+                elif isinstance(stmt, ast.Assert) and _static_truth(stmt.test, scope) is False:
+                    self.poison.append(
+                        f"line {stmt.lineno} asserts a condition that is always false at import, "
+                        "so pytest collects nothing from the file"
+                    )
                 elif isinstance(stmt, ast.Expr) and _skips_the_module(stmt.value):
                     self.poison.append(
                         f"line {stmt.lineno} skips the module at import "
@@ -247,12 +288,31 @@ class _Module:
 
 
 def _literal(node: ast.expr | None) -> Any:
+    """The value of a constant expression: a literal, or `not`/`and`/`or` over constants."""
     if node is None:
         return _UNKNOWN
     try:
         return ast.literal_eval(node)
     except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
-        return _UNKNOWN
+        return _combined_constant(node)
+
+
+def _combined_constant(node: ast.expr) -> Any:
+    """`not x`, `a and b` and `a or b` over constants, or _UNKNOWN when anything is not one."""
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        inner = _literal(node.operand)
+        return _UNKNOWN if inner is _UNKNOWN else (not inner)
+    if isinstance(node, ast.BoolOp):
+        values = [_literal(v) for v in node.values]
+        if _UNKNOWN in values:
+            return _UNKNOWN
+        keep_going = isinstance(node.op, ast.And)  # `and` goes on while truthy, `or` while falsy
+        picked = values[0]
+        for value in values[1:]:
+            if bool(picked) == keep_going:
+                picked = value
+        return picked
+    return _UNKNOWN
 
 
 def _static_truth(
@@ -267,6 +327,9 @@ def _static_truth(
         bound = scope.get(test.id) or (outer or {}).get(test.id)
         if bound is not None and bound.kind == "other" and bound.const is not _UNKNOWN:
             return bool(bound.const)
+        if bound is not None and bound.kind == "import" and bound.target is not None:
+            if bound.target[2] == "TYPE_CHECKING":  # `from typing import TYPE_CHECKING as TC`
+                return False
         return None
     if isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING":
         return False
@@ -296,10 +359,10 @@ def _static_truth(
 
 def _non_empty_literal(node: ast.expr) -> bool:
     """A `for` over this runs at least once, so its target is bound for certain."""
-    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
-        return bool(node.elts) and not any(isinstance(e, ast.Starred) for e in node.elts)
-    if isinstance(node, ast.Dict):
-        return bool(node.keys) and None not in node.keys
+    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):  # one element that is not `*x` suffices
+        return any(not isinstance(e, ast.Starred) for e in node.elts)
+    if isinstance(node, ast.Dict):  # a key of None is a `**x`, which may add nothing
+        return any(k is not None for k in node.keys)
     if isinstance(node, ast.Constant) and isinstance(node.value, (str, bytes)):
         return bool(node.value)
     if (
@@ -315,6 +378,27 @@ def _non_empty_literal(node: ast.expr) -> bool:
     return False
 
 
+def _certainly_empty(node: ast.expr) -> bool:
+    """A `for` over this never runs its body (its `else` still runs)."""
+    if isinstance(node, (ast.List, ast.Tuple)):
+        return not node.elts
+    if isinstance(node, ast.Dict):
+        return not node.keys
+    if isinstance(node, ast.Constant) and isinstance(node.value, (str, bytes)):
+        return not node.value
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "range"
+        and 1 <= len(node.args) <= 2
+        and not node.keywords
+    ):
+        bounds = [_literal(a) for a in node.args]
+        if all(isinstance(b, int) and not isinstance(b, bool) for b in bounds):
+            return bounds[-1] <= (bounds[0] if len(bounds) == 2 else 0)
+    return False
+
+
 def _set(scope: dict[str, _Binding], name: str, binding: _Binding, conditional: bool) -> None:
     # A value assigned inside a branch that may not run must not erase a def that is
     # already bound: either outcome is possible and the gate cannot tell which. It does
@@ -327,18 +411,99 @@ def _set(scope: dict[str, _Binding], name: str, binding: _Binding, conditional: 
     scope[name] = binding
 
 
+def _final_name(expr: ast.expr, lookup: Any) -> str:
+    """The name a decorator or base is known by where it was defined, through an import alias:
+    `fixture` for `@fx` after `from pytest import fixture as fx`."""
+    if isinstance(expr, ast.Name):
+        bound = lookup(expr.id)
+        if bound is not None and bound.kind == "import" and bound.target and bound.target[2]:
+            return bound.target[2]
+        return expr.id
+    if isinstance(expr, ast.Attribute):
+        return expr.attr
+    return ""
+
+
+def _alias_binding(
+    value: ast.expr | None,
+    scope: dict[str, _Binding],
+    outer: dict[str, _Binding] | None,
+    mod: _Module,
+) -> _Binding | None:
+    """The binding a plain assignment gives a name when the value is something pytest collects
+    under the new name: another name (an alias of a def or class, from this scope or the one
+    around a class body), a lambda, a `functools.partial` of a function, or `module.attr`."""
+
+    def lookup(name: str) -> _Binding | None:
+        return scope.get(name) or (outer or {}).get(name)
+
+    if isinstance(value, ast.Name):
+        return lookup(value.id)
+    if isinstance(value, ast.Lambda):  # pytest collects a lambda: it is a function
+        return _Binding("def", value, mod)
+    if isinstance(value, ast.Call):
+        if value.args and _final_name(value.func, lookup) == "partial":
+            first = value.args[0]
+            bound = lookup(first.id) if isinstance(first, ast.Name) else None
+            if bound is not None and bound.kind in ("def", "import"):
+                return bound  # pytest unwraps a partial to the function it wraps
+        return None
+    if isinstance(value, ast.Attribute):
+        parts: list[str] = []
+        node: ast.expr = value
+        while isinstance(node, ast.Attribute):
+            parts.append(node.attr)
+            node = node.value
+        root = lookup(node.id) if isinstance(node, ast.Name) else None
+        if root is not None and root.kind in ("module", "import"):
+            return _Binding("attr", mod=mod, const=(root, tuple(reversed(parts))))
+    return None
+
+
+def _bind_walrus(
+    expr: ast.expr | None,
+    mod: _Module,
+    scope: dict[str, _Binding],
+    cond: bool,
+    outer: dict[str, _Binding] | None,
+) -> None:
+    """`(name := value)` binds `name` wherever it sits, unless a short-circuit, a conditional
+    expression or a comprehension may keep it from running."""
+    if expr is None:
+        return
+    if isinstance(expr, ast.NamedExpr):
+        _bind_walrus(expr.value, mod, scope, cond, outer)
+        _bind_target(expr.target, expr.value, scope, cond, mod, outer)
+    elif isinstance(expr, ast.BoolOp):
+        _bind_walrus(expr.values[0], mod, scope, cond, outer)
+        for later in expr.values[1:]:
+            _bind_walrus(later, mod, scope, True, outer)
+    elif isinstance(expr, ast.IfExp):
+        _bind_walrus(expr.test, mod, scope, cond, outer)
+        _bind_walrus(expr.body, mod, scope, True, outer)
+        _bind_walrus(expr.orelse, mod, scope, True, outer)
+    elif isinstance(expr, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+        for inner in ast.walk(expr):
+            if isinstance(inner, ast.NamedExpr):
+                _bind_target(inner.target, inner.value, scope, True, mod, outer)
+    elif not isinstance(expr, ast.Lambda):
+        for child in ast.iter_child_nodes(expr):
+            if isinstance(child, ast.expr):
+                _bind_walrus(child, mod, scope, cond, outer)
+
+
 def _bind_target(
     target: ast.expr,
     value: ast.expr | None,
     scope: dict[str, _Binding],
     conditional: bool,
     mod: _Module,
+    outer: dict[str, _Binding] | None = None,
 ) -> None:
     if isinstance(target, ast.Name):
-        if isinstance(value, ast.Name) and value.id in scope:
-            _set(scope, target.id, scope[value.id], conditional)  # an alias of a def or class
-        elif isinstance(value, ast.Lambda):  # pytest collects a lambda: it is a function
-            _set(scope, target.id, _Binding("def", value, mod), conditional)
+        alias = _alias_binding(value, scope, outer, mod)
+        if alias is not None:
+            _set(scope, target.id, alias, conditional)
         else:
             _set(scope, target.id, _Binding("other", const=_literal(value)), conditional)
     elif isinstance(target, (ast.Tuple, ast.List, ast.Starred)):
@@ -369,6 +534,13 @@ def _bind_stmt(
     cond: bool,
     outer: dict[str, _Binding] | None,
 ) -> None:
+    if isinstance(stmt, ast.Expr):
+        _bind_walrus(stmt.value, mod, scope, cond, outer)
+    elif isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+        _bind_walrus(stmt.value, mod, scope, cond, outer)
+    elif isinstance(stmt, (ast.If, ast.While)):
+        _bind_walrus(stmt.test, mod, scope, cond, outer)
+
     if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
         scope[stmt.name] = _Binding("def", stmt, mod)
     elif isinstance(stmt, ast.ClassDef):
@@ -376,12 +548,12 @@ def _bind_stmt(
         scope[stmt.name] = _Binding("class", stmt, mod)
     elif isinstance(stmt, ast.Assign):
         for target in stmt.targets:
-            _bind_target(target, stmt.value, scope, cond, mod)
+            _bind_target(target, stmt.value, scope, cond, mod, outer)
     elif isinstance(stmt, ast.AnnAssign):
         if stmt.value is not None:
-            _bind_target(stmt.target, stmt.value, scope, cond, mod)
+            _bind_target(stmt.target, stmt.value, scope, cond, mod, outer)
     elif isinstance(stmt, ast.AugAssign):
-        _bind_target(stmt.target, None, scope, cond, mod)
+        _bind_target(stmt.target, None, scope, cond, mod, outer)
     elif isinstance(stmt, ast.Delete):
         if not cond:
             for target in stmt.targets:
@@ -422,10 +594,13 @@ def _bind_stmt(
                 _bind_target(item.optional_vars, None, scope, cond, mod)
         _bind_body(stmt.body, mod, scope, cond, outer)
     elif isinstance(stmt, (ast.For, ast.AsyncFor)):
-        runs = _non_empty_literal(stmt.iter)  # an empty or unknown iterable may bind nothing
-        _bind_target(stmt.target, None, scope, cond or not runs, mod)
-        _bind_body(stmt.body, mod, scope, cond or not runs, outer)
-        _bind_body(stmt.orelse, mod, scope, True, outer)
+        if _certainly_empty(stmt.iter):  # the body never runs; the `else` always does
+            _bind_body(stmt.orelse, mod, scope, cond, outer)
+        else:
+            runs = _non_empty_literal(stmt.iter)  # an unknown iterable may bind nothing
+            _bind_target(stmt.target, None, scope, cond or not runs, mod, outer)
+            _bind_body(stmt.body, mod, scope, cond or not runs, outer)
+            _bind_body(stmt.orelse, mod, scope, True, outer)
     elif isinstance(stmt, ast.While):
         if _static_truth(stmt.test, scope, outer) is not False:
             _bind_body(stmt.body, mod, scope, True, outer)
@@ -435,14 +610,69 @@ def _bind_stmt(
             _bind_body(case.body, mod, scope, True, outer)
 
 
-def _is_fixture(node: ast.AST) -> bool:
+def _decorators(node: ast.AST, mod: _Module) -> list[tuple[str, ast.expr]]:
+    """Each decorator as (the name it is known by where defined, the expression)."""
+    found = []
     for decorator in getattr(node, "decorator_list", []):
         expr = decorator.func if isinstance(decorator, ast.Call) else decorator
-        if isinstance(expr, ast.Name) and expr.id == "fixture":
-            return True
-        if isinstance(expr, ast.Attribute) and expr.attr == "fixture":
-            return True
-    return False
+        found.append((_final_name(expr, mod.scope.get), decorator))
+    return found
+
+
+def _is_fixture(node: ast.AST, mod: _Module) -> bool:
+    return any(name == "fixture" for name, _ in _decorators(node, mod))
+
+
+#: Decorators whose result is not a callable test: `@property` and its relatives.
+_NOT_CALLABLE = frozenset({"property", "cached_property", "setter", "getter", "deleter"})
+
+#: Decorators that mark a method abstract.
+_ABSTRACT = frozenset(
+    {"abstractmethod", "abstractproperty", "abstractclassmethod", "abstractstaticmethod"}
+)
+
+#: Stdlib bases that bring an `__init__` or `__new__` of their own, which pytest will not collect.
+_ENUM_BASES = frozenset({"Enum", "IntEnum", "StrEnum", "Flag", "IntFlag", "ReprEnum"})
+_TYPING_CONSTRUCTING = frozenset({"NamedTuple", "TypedDict", "Protocol"})
+
+
+def _stdlib_base(module: str, name: str) -> str | None:
+    """What a base imported from the stdlib means: "unittest", "constructs" (it brings an
+    __init__ or __new__), "abc" (it makes the class abstract-capable), "ignore" (it adds nothing
+    to look at), or None for a base this does not know."""
+    if module == "unittest" and name in _UNITTEST_BASES:
+        return "unittest"
+    if module == "enum" and name in _ENUM_BASES:
+        return "constructs"
+    if module in ("typing", "typing_extensions"):
+        if name in _TYPING_CONSTRUCTING:
+            return "constructs"
+        if name == "Generic":
+            return "ignore"
+    if module == "abc" and name == "ABC":
+        return "abc"
+    return None
+
+
+def _dataclass_problem(node: ast.ClassDef, mod: _Module) -> str | None:
+    """A `@dataclass` class is not collected: it gains an `__init__`, and with the default
+    `eq=True` it loses `__hash__`, which pytest needs of the instance it collects from. Only
+    `init=False` with `eq=False` leaves a class pytest can collect."""
+    for name, decorator in _decorators(node, mod):
+        if name != "dataclass":
+            continue
+        if isinstance(decorator, ast.Call):
+            switched_off = {
+                k.arg
+                for k in decorator.keywords
+                if k.arg in ("init", "eq")
+                and isinstance(k.value, ast.Constant)
+                and k.value.value is False
+            }
+            if switched_off == {"init", "eq"}:
+                return None
+        return "its `@dataclass` decorator"
+    return None
 
 
 def _verdict(flag: Any) -> bool | None:
@@ -468,6 +698,10 @@ class _ClassInfo:
     unresolved: list[str] = field(default_factory=list)
     unittest: bool = False
     error: str | None = None
+    #: why the class has an `__init__` or `__new__` it does not define itself, if it does
+    constructor: str | None = None
+    #: whether `abc.ABC` or `ABCMeta` is in play, so an unimplemented abstract method counts
+    abc: bool = False
 
 
 def _c3(sequences: list[list[Any]]) -> list[Any] | None:
@@ -645,6 +879,14 @@ class NodeResolver:
         """Follow imports until a def, class, module or plain value. The second item is
         why it could not, naming the import."""
         for _ in range(MAX_IMPORT_DEPTH):
+            if binding.kind == "attr":  # `x = module.attr`
+                root, parts = binding.const
+                assert binding.mod is not None
+                found, why = self._resolve_attribute(root, parts, binding.mod)
+                if found is None:
+                    return binding, why
+                binding = found
+                continue
             if binding.kind != "import":
                 return binding, None
             assert binding.target is not None and binding.mod is not None
@@ -666,23 +908,63 @@ class NodeResolver:
             binding = found
         return binding, "is reached through an import chain too long to follow"
 
+    def _resolve_attribute(
+        self, root: _Binding, parts: tuple[str, ...] | list[str], mod: _Module
+    ) -> tuple[_Binding | None, str | None]:
+        """What `root.a.b` names when `root` is a module in the repository: its binding, or
+        None and why it cannot be said. ("unittest.TestCase" style stdlib names are the
+        caller's business: `unittest` is not in the repository.)"""
+        followed, why = self._follow(root)
+        if why or followed.kind != "module":
+            return None, "is read from something that is not a module in the repository"
+        if followed.target is not None:
+            dotted = ".".join([followed.target[0], *parts[:-1]]).strip(".")
+            other = self._find_module(dotted, 0, mod)
+        else:  # a submodule imported by name, already loaded
+            other = followed.mod if len(parts) == 1 else None
+            dotted = ""
+        if isinstance(other, str):
+            return None, f"is read from `{dotted}`, which {other}"
+        if other is None:
+            return None, "is read from a module outside the repository"
+        found = self._lookup(other, parts[-1])
+        if found is None:
+            return None, f"is read from `{dotted or other.path.stem}`, which does not define it"
+        return found, None
+
     # -- classes ----------------------------------------------------------
 
     def _base(self, expr: ast.expr, mod: _Module, seen: _Seen) -> tuple[str, Any]:
         """How one base class reads: ("class", (node, module)) | ("unittest", name) |
-        ("ignore", None) | ("unresolved", text)."""
+        ("constructs", text) | ("abc", None) | ("ignore", None) | ("unresolved", text)."""
         text = ast.unparse(expr)
+        if isinstance(expr, ast.Subscript):  # `Base[int]`: a Generic alias stands for its origin
+            kind, payload = self._base(expr.value, mod, seen)
+            if kind in ("unresolved", "constructs"):
+                return kind, payload.replace(ast.unparse(expr.value), text, 1)
+            return kind, payload
+
+        def lookup(name: str) -> _Binding | None:
+            return self._lookup_in(mod, seen.names, seen.stars, name)
+
         if isinstance(expr, ast.Name):
-            binding = self._lookup_in(mod, seen.names, seen.stars, expr.id)
+            binding = lookup(expr.id)
             if binding is None:
-                if hasattr(builtins, expr.id):
+                found = getattr(builtins, expr.id, None)
+                if isinstance(found, type):
+                    # a builtin brings its own constructor unless it inherits object's
+                    if found.__init__ is not object.__init__ or found.__new__ is not object.__new__:
+                        return "constructs", text
+                    return "ignore", None
+                if found is not None:
                     return "ignore", None
                 return "unresolved", f"{text} (not defined in the file)"
             followed, why = self._follow(binding)
             if why:
                 target = binding.target
-                if target and target[0] == "unittest" and target[2] in _UNITTEST_BASES:
-                    return "unittest", target[2]
+                std = _stdlib_base(target[0], target[2]) if target and not target[1] else None
+                if std is not None:
+                    return self._stdlib_kind(std, target[2], text)  # type: ignore[index]
                 return "unresolved", f"{text} ({why})"
             if followed.kind == "class":
                 return "class", (followed.node, followed.mod)
@@ -693,28 +975,30 @@ class NodeResolver:
             while isinstance(node, ast.Attribute):
                 parts.append(node.attr)
                 node = node.value
-            if isinstance(node, ast.Name):
-                root = self._lookup_in(mod, seen.names, seen.stars, node.id)
-                if root is not None:
-                    followed, _ = self._follow(root)
-                    if followed.kind == "module":
-                        parts.reverse()
-                        if followed.target is not None:
-                            dotted = ".".join([followed.target[0], *parts[:-1]]).strip(".")
-                            if dotted == "unittest" and parts[-1] in _UNITTEST_BASES:
-                                return "unittest", parts[-1]
-                            other = self._find_module(dotted, 0, mod)
-                        else:  # a submodule imported by name, already loaded
-                            other = followed.mod if len(parts) == 1 else None
-                        if isinstance(other, _Module):
-                            found = self._lookup(other, parts[-1])
-                            if found is not None:
-                                inner, why = self._follow(found)
-                                if not why and inner.kind == "class":
-                                    return "class", (inner.node, inner.mod)
-                        return "unresolved", f"{text} (outside the repository or not a class)"
-            return "unresolved", f"{text} (cannot be read statically)"
+            parts.reverse()
+            root = lookup(node.id) if isinstance(node, ast.Name) else None
+            if root is not None:
+                followed, _ = self._follow(root)
+                if followed.kind == "module" and followed.target is not None:
+                    dotted = ".".join([followed.target[0], *parts[:-1]]).strip(".")
+                    std = _stdlib_base(dotted, parts[-1])
+                    if std is not None:
+                        return self._stdlib_kind(std, parts[-1], text)
+                found, why = self._resolve_attribute(root, parts, mod)
+                if found is not None:
+                    inner, why = self._follow(found)
+                    if not why and inner.kind == "class":
+                        return "class", (inner.node, inner.mod)
+                return "unresolved", f"{text} (outside the repository or not a class)"
         return "unresolved", f"{text} (cannot be read statically)"
+
+    @staticmethod
+    def _stdlib_kind(std: str, name: str, text: str) -> tuple[str, Any]:
+        if std == "unittest":
+            return "unittest", name
+        if std == "constructs":
+            return "constructs", text
+        return std, None
 
     def _class_info(self, node: ast.ClassDef, mod: _Module) -> _ClassInfo:
         key = id(node)
@@ -730,9 +1014,18 @@ class NodeResolver:
             _bind_body(node.body, mod, info.own, False, seen.names)
             sequences: list[list[Any]] = []
             direct: list[Any] = []
+            info.constructor = _dataclass_problem(node, mod)
+            info.abc = any(
+                kw.arg == "metaclass" and _final_name(kw.value, mod.scope.get) == "ABCMeta"
+                for kw in node.keywords
+            )
             for expr in node.bases:
                 kind, payload = self._base(expr, mod, seen)
-                if kind == "class":
+                if kind == "constructs":
+                    info.constructor = info.constructor or f"its base `{payload}`"
+                elif kind == "abc":
+                    info.abc = True
+                elif kind == "class":
                     inner = self._class_info(*payload)
                     if inner.error:
                         info.error = f"has a base `{ast.unparse(expr)}` that {inner.error}"
@@ -741,12 +1034,22 @@ class NodeResolver:
                     info.classes.update(inner.classes)
                     info.unresolved.extend(inner.unresolved)
                     info.unittest = info.unittest or inner.unittest
+                    info.abc = info.abc or inner.abc
+                    if inner.constructor and not info.constructor:
+                        info.constructor = f"{inner.constructor} on its base `{ast.unparse(expr)}`"
                 elif kind == "unittest":
                     chain = list(_UNITTEST_BASES[payload])
                     sequences.append(chain)
                     direct.append(chain[0])
                     info.unittest = True
                 elif kind == "unresolved":
+                    if payload.endswith("(not defined in the file)") and self._names_certain(
+                        mod, seen
+                    ):
+                        info.error = info.error or (
+                            f"has a base `{ast.unparse(expr)}` that is not defined anywhere it "
+                            "could come from, so importing the file raises NameError"
+                        )
                     self._opaque += 1
                     placeholder = f"?{self._opaque}"
                     sequences.append([placeholder])
@@ -797,11 +1100,37 @@ class NodeResolver:
                 f"`{name}` does not match python_functions "
                 f"({' '.join(self.rules.python_functions)}), so pytest never collects it"
             )
-        if _is_fixture(node):
+        if _is_fixture(node, mod):
             return f"`{name}` is a fixture, not a test"
+        if any(decorated in _NOT_CALLABLE for decorated, _ in _decorators(node, mod)):
+            return f"`{name}` is a property, which is not callable, so pytest never collects it"
         if _verdict(flag) is False:
             return f"`{name}` sets __test__ = {flag!r}, so pytest never collects it"
         return None
+
+    def _names_certain(self, mod: _Module, seen: _Seen) -> bool:
+        """Whether a name missing from `seen` is missing for certain: every star import before it
+        is a module in the repository (an outside one may supply anything) and the file does not
+        make names by `globals()`, `exec` and the like."""
+        if any(
+            not isinstance(self._find_module(module, level, mod), _Module)
+            for module, level in seen.stars
+        ):
+            return False
+        return not any(
+            isinstance(n, ast.Name) and n.id in self._DYNAMIC for n in ast.walk(mod.tree)
+        )
+
+    def _is_abstract(self, info: _ClassInfo) -> bool:
+        """`inspect.isabstract`: the class is built on `abc.ABC` or `ABCMeta` and the nearest
+        definition of some method in its MRO is still marked abstract."""
+        if not info.abc:
+            return False
+        for binding in info.members.values():
+            if binding.kind == "def" and binding.mod is not None and binding.node is not None:
+                if any(n in _ABSTRACT for n, _ in _decorators(binding.node, binding.mod)):
+                    return True
+        return False
 
     def _class_problem(self, name: str, info: _ClassInfo) -> str | None:
         flag = self._flag(info)
@@ -810,6 +1139,16 @@ class NodeResolver:
                 return (
                     f"class `{name}` does not match python_classes "
                     f"({' '.join(self.rules.python_classes)}), so pytest never collects it"
+                )
+            if self._is_abstract(info):
+                return (
+                    f"class `{name}` is abstract (a method marked abstract is not overridden), "
+                    "so pytest never collects it"
+                )
+            if info.constructor:
+                return (
+                    f"class `{name}` gets __init__ or __new__ from {info.constructor}, "
+                    "so pytest never collects it"
                 )
             if "__init__" in info.members or "__new__" in info.members:
                 return f"class `{name}` defines __init__ or __new__, so pytest never collects it"
@@ -838,6 +1177,96 @@ class NodeResolver:
                 ):
                     return True
         return False
+
+    # -- imports a static read can prove fail ---------------------------------
+
+    #: A module that reaches names by a route a static read cannot follow.
+    _DYNAMIC = frozenset({"globals", "locals", "vars", "setattr", "exec", "eval", "__getattr__"})
+
+    def _rel(self, path: Path) -> str:
+        return (
+            path.relative_to(self.root).as_posix() if path.is_relative_to(self.root) else str(path)
+        )
+
+    def _missing_submodule(self, dotted: str, origin: _Module) -> str | None:
+        """Why `import a.b.c` provably fails: `a` is a regular package here and some `b` below it
+        has no such module. Nothing else is claimed: a namespace directory, a module file that
+        stops the chain, or a first name that is not a package in the repository may be
+        completed from somewhere a static read cannot see."""
+        parts = dotted.split(".")
+        missing: str | None = None
+        for base in (self.root, origin.path.parent):
+            current = base / parts[0]
+            if not (current / "__init__.py").is_file():
+                continue
+            for part in parts[1:]:
+                if (current / part / "__init__.py").is_file():
+                    current = current / part
+                elif (current / f"{part}.py").is_file() or (current / part).is_dir():
+                    return None  # a module or a namespace directory: not provable
+                else:
+                    missing = f"package `{self._rel(current)}` has no module `{part}`"
+                    break
+            else:
+                return None  # the whole chain exists
+        return missing
+
+    def _missing_name(self, stmt: ast.ImportFrom, other: _Module, origin: _Module) -> str | None:
+        """Why `from m import name` provably fails: `m` is a repository module that defines no
+        such name by any route a static read can see, and `name` is not a submodule."""
+        if other is origin:
+            return None
+        other.scope  # noqa: B018 -- the star imports are known only once the namespace is built
+        if any(
+            (isinstance(n, ast.Name) and n.id in self._DYNAMIC)
+            or (isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in self._DYNAMIC)
+            for n in ast.walk(other.tree)
+        ):
+            return None
+        for star_module, star_level in other.stars:
+            if not isinstance(self._find_module(star_module, star_level, other), _Module):
+                return None  # a star import from outside may supply anything
+        module = stmt.module or ""
+        for alias in stmt.names:
+            if alias.name == "*" or self._lookup(other, alias.name) is not None:
+                continue
+            if self._find_module(f"{module}.{alias.name}", 0, origin) is not None:
+                continue  # a submodule
+            if any(
+                base.joinpath(*module.split("."), alias.name).is_dir()
+                for base in (self.root, origin.path.parent)
+            ):
+                continue  # a namespace directory
+            return f"line {stmt.lineno} imports `{alias.name}` from `{module}`, which does not define it"
+        return None
+
+    def _import_problem(self, mod: _Module) -> str | None:
+        """An import statement of the file itself that provably raises. Only top-level
+        statements are read: one inside a `try`, an `if` or a function may never run."""
+        ending = "so importing the file raises and pytest collects nothing from the file"
+        for stmt in mod.tree.body:
+            if isinstance(stmt, ast.Import):
+                for alias in stmt.names:
+                    why = self._missing_submodule(alias.name, mod)
+                    if why:
+                        return f"line {stmt.lineno} imports `{alias.name}`, but {why}, {ending}"
+                    other = self._find_module(alias.name, 0, mod)
+                    if isinstance(other, str):
+                        return f"line {stmt.lineno} imports `{alias.name}`, which {other}, {ending}"
+            elif isinstance(stmt, ast.ImportFrom) and stmt.level == 0 and stmt.module:
+                why = self._missing_submodule(stmt.module, mod)
+                if why:
+                    return f"line {stmt.lineno} imports from `{stmt.module}`, but {why}, {ending}"
+                other = self._find_module(stmt.module, 0, mod)
+                if isinstance(other, str):
+                    return (
+                        f"line {stmt.lineno} imports from `{stmt.module}`, which {other}, {ending}"
+                    )
+                if isinstance(other, _Module):
+                    why = self._missing_name(stmt, other, mod)
+                    if why:
+                        return f"{why}, {ending}"
+        return None
 
     # -- the walk ---------------------------------------------------------
 
@@ -909,6 +1338,9 @@ class NodeResolver:
             mod.scope  # noqa: B018 -- building the namespace is what finds what poisons the file
             if mod.poison:
                 return mod.poison[0]
+            problem = self._import_problem(mod)
+            if problem:
+                return problem
             for stmt in mod.tree.body:  # a class that cannot be built raises while importing
                 if isinstance(stmt, ast.ClassDef):
                     error = self._class_info(stmt, mod).error

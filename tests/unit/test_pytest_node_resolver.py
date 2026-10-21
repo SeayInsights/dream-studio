@@ -24,9 +24,11 @@ import pytest
 from core.gates.pytest_node_resolver import NodeResolver
 from tests.helpers.resolver_cases import (
     _CASES,
+    _CASES_FOLLOWUP,
     _CASES_ITEM3,
     _CASES_MORE,
     _HELPER,
+    _IMPORT_FILES,
     _PACKAGES,
     _POISONED,
     _STAR_HELPER,
@@ -260,16 +262,63 @@ def test_a_base_that_is_not_a_class_is_named_as_unreadable(tmp_path):
     assert "bases not searched" in why and "Base (not a class)" in why
 
 
-def test_a_base_that_is_defined_nowhere_is_named_as_unreadable(tmp_path):
+def test_a_base_that_is_defined_nowhere_raises_at_import_and_is_named(tmp_path):
     root = _tree(
         tmp_path,
         {"test_a.py": "class TestThing(Missing):\n    def test_own(self):\n        pass\n"},
     )
+    why = _why(root, "test_a.py::TestThing::test_own") or ""
+    assert "`Missing`" in why and "NameError" in why and "collects nothing from the file" in why
+
+
+def test_a_base_that_may_come_from_a_star_import_the_resolver_cannot_read_is_only_named(tmp_path):
+    """An outside star import may supply any name, so a base missing after one is a doubt, not
+    a proof, and it is reported as an unreadable base rather than a NameError."""
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "from elsewhere import *\n\n\nclass TestThing(Missing):\n"
+                "    def test_own(self):\n        pass\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::TestThing::test_own") is None
     why = _why(root, "test_a.py::TestThing::test_missing") or ""
     assert "bases not searched" in why and "Missing (not defined in the file)" in why
 
 
-@pytest.mark.parametrize("base", ["object", "Exception", "dict"])
+def test_a_base_that_the_file_could_build_by_globals_is_only_named(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "globals()['Missing'] = object\n\n\nclass TestThing(Missing):\n"
+                "    def test_own(self):\n        pass\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::TestThing::test_own") is None
+
+
+def test_a_base_supplied_by_a_star_import_that_comes_after_the_class_is_a_name_error(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "helper.py": "class TestBaseShared:\n    def test_from_base(self):\n        pass\n",
+            "test_a.py": (
+                "class TestA(TestBaseShared):\n    def test_own(self):\n        pass\n\n\n"
+                "from helper import *\n"
+            ),
+        },
+    )
+    why = _why(root, "test_a.py::TestA::test_own") or ""
+    assert "NameError" in why and "TestBaseShared" in why
+
+
+@pytest.mark.parametrize(
+    "base", ["object", "len"]
+)  # no tests in them, and no constructor of their own
 def test_a_builtin_base_defines_no_tests_so_it_is_not_reported_as_unreadable(tmp_path, base):
     root = _tree(
         tmp_path,
@@ -491,7 +540,7 @@ def test_resolving_never_imports_or_runs_the_test_module(tmp_path):
         {
             "test_side_effect.py": (
                 f"open({str(marker)!r}, 'w').write('ran')\n"
-                "raise RuntimeError('imported')\n"
+                "import sys\nif sys.platform:\n    raise RuntimeError('imported')\n"
                 "def test_x():\n    pass\n"
             ),
         },
@@ -766,7 +815,7 @@ def test_a_star_import_does_not_bind_private_names(tmp_path):
         },
     )
     why = _why(root, "test_a.py::TestA::test_h") or ""
-    assert "_Hidden (not defined in the file)" in why or "uses base `_Hidden`" in why
+    assert "`_Hidden`" in why and "NameError" in why  # pytest: NameError, the star skipped it
 
 
 def test_a_relative_import_in_a_directory_that_is_not_a_package_names_the_cause(tmp_path):
@@ -1096,13 +1145,13 @@ def test_a_unittest_class_counts_its_test_methods_only(tmp_path):
 
 
 def test_a_builtin_base_is_not_late_when_the_module_rebinds_its_name_afterwards(tmp_path):
-    """`Exception` resolves to the builtin when the class is made; defining a name `Exception`
+    """`object` resolves to the builtin when the class is made; defining a name `object`
     further down does not make the earlier use a NameError."""
     root = _tree(
         tmp_path,
         {
             "test_a.py": (
-                "class TestA(Exception):\n    def test_a(self):\n        pass\n\n\nException = None\n"
+                "class TestA(object):\n    def test_a(self):\n        pass\n\n\nobject = None\n"
             ),
         },
     )
@@ -1147,3 +1196,540 @@ def test_a_with_target_rebinds_a_def_that_came_before_it(tmp_path):
     )
     assert "not a function or class" in (_why(root, "test_a.py::test_x") or "")
     assert "not a function or class" in (_why(root, "test_a.py::test_y") or "")
+
+
+# --------------------------------------------------------------------------
+# Follow-ups: what a verifier found the resolver still got wrong
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def followup(tmp_path):
+    return _tree(tmp_path, {"tests/test_followup.py": _CASES_FOLLOWUP, "tests/helper.py": _HELPER})
+
+
+@pytest.mark.parametrize(
+    "candidate,fragment",
+    [
+        ("TestDataclass::test_a", "`@dataclass` decorator"),
+        ("TestDataclassNoInit::test_a", "`@dataclass` decorator"),
+        ("TestDataclassFrozen::test_a", "`@dataclass` decorator"),
+        ("TestDataclassChild::test_a", "`@dataclass` decorator"),
+        ("TestDictBase::test_a", "base `dict`"),
+        ("TestExceptionBase::test_a", "base `Exception`"),
+        ("TestIntBase::test_a", "base `int`"),
+        ("TestListBase::test_a", "base `list`"),
+        ("TestStrBase::test_a", "base `str`"),
+        ("TestTupleBase::test_a", "base `tuple`"),
+        ("TestTypeBase::test_a", "base `type`"),
+        ("TestEnum::test_a", "base `Enum`"),
+        ("TestEnumDirect::test_a", "base `enum.IntEnum`"),
+        ("TestNamedTuple::test_a", "base `NamedTuple`"),
+        ("TestProtocol::test_a", "base `Protocol`"),
+        ("TestProperty::test_prop", "is a property"),
+        ("TestAbstract::test_concrete", "is abstract"),
+        ("TestAbstractMeta::test_concrete", "is abstract"),
+        ("TestAbstractChildStillAbstract::test_concrete", "is abstract"),
+        ("test_under_not_true", "no `test_under_not_true` defined"),
+        ("test_under_type_checking_alias", "no `test_under_type_checking_alias` defined"),
+        ("test_under_type_checking_attribute", "no `test_under_type_checking_attribute`"),
+        ("test_walrus_def", "is not a function or class"),
+        ("test_in_empty_for", "no `test_in_empty_for` defined"),
+        ("test_fixture_alias", "is a fixture"),
+    ],
+)
+def test_the_follow_up_nodes_pytest_does_not_collect_are_refused(followup, candidate, fragment):
+    why = _why(followup, f"tests/test_followup.py::{candidate}")
+    assert why is not None and fragment in why, why
+    if "base `" in fragment or "decorator" in fragment:
+        assert "__init__ or __new__" in why
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        "TestDataclassNoInitNoEq::test_a",
+        "TestObjectBase::test_a",
+        "TestGeneric::test_a",
+        "TestSubscripted::test_a",
+        "TestProperty::test_real",
+        "TestAbstractChildOk::test_concrete",
+        "TestAbstractChildOk::test_abstract",
+        "TestAbcWithNothingAbstract::test_a",
+        "test_under_not_false",
+        "test_in_for_else",
+        "test_alias_attr",
+        "test_partial",
+        "test_partial_attr",
+        "TestClassAlias::test_from_outer",
+    ],
+)
+def test_the_follow_up_nodes_pytest_collects_resolve(followup, candidate):
+    assert _why(followup, f"tests/test_followup.py::{candidate}") is None
+
+
+@pytest.mark.parametrize("name", sorted(_IMPORT_FILES))
+def test_imports_that_work_or_may_work_are_not_refused(tmp_path, name):
+    body, candidates = _IMPORT_FILES[name]
+    root = _tree(tmp_path, {name: body, "tests/helper.py": _HELPER, **_PACKAGES})
+    for candidate in candidates:
+        assert _why(root, f"{name}::{candidate}") is None, candidate
+
+
+@pytest.mark.parametrize(
+    "body,fragment",
+    [
+        ("raise RuntimeError('x')\n", "always raises"),
+        ("assert False\n", "assert"),
+        ("assert 0, 'x'\n", "assert"),
+        ("assert not True\n", "assert"),
+        ("from pkgmiss.gone import x\n", "pkgmiss"),
+        ("import pkgmiss.gone\n", "pkgmiss"),
+        ("from helper import nothing_here\n", "nothing_here"),
+        ("import broken_helper\n", "does not parse"),
+    ],
+)
+def test_a_file_that_provably_raises_when_imported_says_what_raises(tmp_path, body, fragment):
+    root = _tree(
+        tmp_path,
+        {
+            "tests/test_a.py": body + "\n\ndef test_x():\n    pass\n",
+            "tests/helper.py": _HELPER,
+            **_PACKAGES,
+        },
+    )
+    why = _why(root, "tests/test_a.py::test_x") or ""
+    assert fragment in why and "collects nothing from the file" in why, why
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        # inside a try, an if, a function or a class: it may never run
+        {"test_a.py": "try:\n    raise RuntimeError\nexcept RuntimeError:\n    pass\n"},
+        {"test_a.py": "import sys\nif sys.platform == 'x':\n    raise RuntimeError\n"},
+        {"test_a.py": "def f():\n    raise RuntimeError\n"},
+        {"test_a.py": "assert True\nassert 1 + 1 == 2\nimport sys\nassert sys\n"},
+        # a namespace package may be completed by another path entry: not provable
+        {"nspkg/mod.py": "x = 1\n", "test_a.py": "from nspkg.gone import y\n"},
+        # a name a module may provide by a route a static read cannot see
+        {
+            "mod.py": "def __getattr__(name):\n    return 1\n",
+            "test_a.py": "from mod import anything\n",
+        },
+        {"mod.py": "globals()['made'] = 1\n", "test_a.py": "from mod import made\n"},
+        {"mod.py": "from elsewhere import *\n", "test_a.py": "from mod import anything\n"},
+        {"mod.py": "x = 1\n", "test_a.py": "import mod\nfrom mod import x\n"},
+        # a regular package with the submodule present
+        {"pkg/__init__.py": "", "pkg/sub.py": "x = 1\n", "test_a.py": "from pkg.sub import x\n"},
+        # a name that is itself a submodule
+        {"pkg/__init__.py": "", "pkg/sub.py": "x = 1\n", "test_a.py": "from pkg import sub\n"},
+        # a module that is not in the repository at all: stdlib, installed, or unknown
+        {"test_a.py": "import json\nimport not_installed_anywhere_zzz\n"},
+    ],
+)
+def test_an_import_that_cannot_be_proven_to_fail_is_not_refused(tmp_path, files):
+    body = {**files}
+    body["test_a.py"] = body["test_a.py"] + "\n\ndef test_x():\n    pass\n"
+    root = _tree(tmp_path, body)
+    assert _why(root, "test_a.py::test_x") is None
+
+
+def test_the_wrong_spelling_of_a_decorator_alias_is_not_a_fixture(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "from pytest import fixture as fx\nfrom pytest import fixture\n"
+                "import pytest as pt\n\n\n@fx\ndef test_aliased():\n    pass\n\n\n"
+                "@fixture\ndef test_bare():\n    pass\n\n\n@pt.fixture(scope='module')\n"
+                "def test_attr():\n    pass\n\n\n@other\ndef test_other():\n    pass\n"
+            ),
+        },
+    )
+    for name in ("test_aliased", "test_bare", "test_attr"):
+        assert "is a fixture" in (_why(root, f"test_a.py::{name}") or ""), name
+    assert _why(root, "test_a.py::test_other") is None
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
+        "import typing\nif typing.TYPE_CHECKING:",
+        "import typing as t\nif t.TYPE_CHECKING:",
+        "from typing import TYPE_CHECKING as TC\nif TC:",
+        "from typing import TYPE_CHECKING\nif TYPE_CHECKING:",
+        "from typing_extensions import TYPE_CHECKING as TC\nif TC:",
+    ],
+)
+def test_type_checking_in_every_spelling_is_never_true_at_run_time(tmp_path, head):
+    root = _tree(tmp_path, {"test_a.py": head + "\n    def test_x():\n        pass\n"})
+    assert "no `test_x` defined" in (_why(root, "test_a.py::test_x") or "")
+
+
+def test_a_del_inside_a_branch_that_may_not_run_does_not_erase_a_def(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "import sys\n\n\ndef test_x():\n    pass\n\n\ndef test_y():\n    pass\n\n\n"
+                "if sys.platform == 'plan9':\n    del test_x\nif True:\n    del test_y\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::test_x") is None
+    assert "no `test_y` defined" in (_why(root, "test_a.py::test_y") or "")
+
+
+def test_import_a_dot_b_binds_a_and_reaches_b_through_it(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "pkg/__init__.py": "",
+            "pkg/base.py": "class TestBase:\n    def test_deep(self):\n        pass\n",
+            "test_a.py": "import pkg.base\n\n\nclass TestA(pkg.base.TestBase):\n    pass\n",
+        },
+    )
+    assert _why(root, "test_a.py::TestA::test_deep") is None
+
+
+def test_a_while_loop_is_decided_by_its_condition_and_its_else_always_runs(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "while False:\n    def test_body_never():\n        pass\n"
+                "else:\n    def test_else_always():\n        pass\n\n"
+                "while True:\n    def test_body_may():\n        pass\n    break\n\n"
+                "import sys\nwhile sys.platform == 'x':\n    def test_body_unknown():\n"
+                "        pass\n"
+            ),
+        },
+    )
+    assert "no `test_body_never` defined" in (_why(root, "test_a.py::test_body_never") or "")
+    assert _why(root, "test_a.py::test_else_always") is None
+    assert _why(root, "test_a.py::test_body_may") is None
+    assert _why(root, "test_a.py::test_body_unknown") is None
+
+
+def test_an_assignment_in_the_body_of_a_try_is_not_conditional(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "def test_x():\n    pass\n\n\ntry:\n    test_x = None\nexcept Exception:\n    pass\n"
+            ),
+        },
+    )
+    assert "not a function or class" in (_why(root, "test_a.py::test_x") or "")
+
+
+def test_a_dict_with_a_double_star_may_be_empty_so_a_for_over_it_may_not_run(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "def test_x():\n    pass\n\n\nfor test_x in {**make()}:\n    pass\n\n\n"
+                "def test_y():\n    pass\n\n\nfor test_y in {'k': 1, **make()}:\n    pass\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::test_x") is None
+    assert "not a function or class" in (_why(root, "test_a.py::test_y") or "")
+
+
+@pytest.mark.parametrize(
+    "option,pattern,name,expected",
+    [
+        ("python_functions", "check_?", "check_a", True),
+        ("python_functions", "check_?", "check_ab", False),
+        ("python_functions", "[xy]est_*", "yest_a", True),
+        ("python_functions", "[xy]est_*", "zest_a", False),
+        ("python_functions", "*_check", "a_check", True),
+        ("python_functions", "*_check", "a_checks", False),
+    ],
+)
+def test_question_mark_and_bracket_globs_in_name_patterns_are_globs(
+    tmp_path, option, pattern, name, expected
+):
+    root = _tree(
+        tmp_path,
+        {
+            "pytest.ini": f"[pytest]\n{option} = {pattern}\n",
+            "test_a.py": f"def {name}():\n    pass\n",
+        },
+    )
+    assert (_why(root, f"test_a.py::{name}") is None) is expected
+
+
+def test_a_class_pattern_glob_matches_the_class_name(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "pytest.ini": "[pytest]\npython_classes = Spec?\n",
+            "test_a.py": (
+                "class SpecA:\n    def test_x(self):\n        pass\n\n\n"
+                "class SpecAB:\n    def test_x(self):\n        pass\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::SpecA::test_x") is None
+    assert "does not match python_classes" in (_why(root, "test_a.py::SpecAB::test_x") or "")
+
+
+def test_a_function_assigned_in_a_class_body_is_a_method_pytest_collects(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "def helper_f(self):\n    pass\n\n\nclass TestA:\n    test_from_outer = helper_f\n"
+                "    not_a_test = helper_f\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::TestA::test_from_outer") is None
+    assert "does not match python_functions" in (_why(root, "test_a.py::TestA::not_a_test") or "")
+
+
+def test_a_partial_of_something_that_is_not_a_function_is_not_a_function(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "from functools import partial\n\nVALUE = 3\ntest_p = partial(VALUE)\n"
+                "test_q = partial()\ntest_r = partial(make)\n"
+            ),
+        },
+    )
+    for name in ("test_p", "test_q", "test_r"):
+        assert "is not a function or class" in (_why(root, f"test_a.py::{name}") or ""), name
+
+
+def test_a_module_attribute_alias_reaches_through_a_package_and_a_class(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "pkg/__init__.py": "",
+            "pkg/mod.py": "def test_f():\n    pass\n\n\nclass TestC:\n    def test_m(self):\n        pass\n",
+            "test_a.py": (
+                "import pkg.mod\nimport pkg.mod as m\n\ntest_one = pkg.mod.test_f\ntest_two = m.test_f\n"
+                "TestAlias = m.TestC\ntest_missing = m.nothing_here\ntest_val = m.__name__\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::test_one") is None
+    assert _why(root, "test_a.py::test_two") is None
+    assert _why(root, "test_a.py::TestAlias::test_m") is None
+    assert "does not define it" in (_why(root, "test_a.py::test_missing") or "")
+
+
+def test_an_abstract_method_overridden_by_a_non_def_is_not_abstract(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "from abc import ABC, abstractmethod\n\n\nclass TestA(ABC):\n"
+                "    @abstractmethod\n    def test_x(self):\n        pass\n\n"
+                "    def test_y(self):\n        pass\n\n\nclass TestB(TestA):\n    test_x = None\n"
+            ),
+        },
+    )
+    assert "is abstract" in (_why(root, "test_a.py::TestA::test_y") or "")
+    assert _why(root, "test_a.py::TestB::test_y") is None
+
+
+@pytest.mark.parametrize("decorator", ["dataclass", "dataclasses.dataclass", "dc"])
+def test_a_dataclass_is_found_through_its_import_alias(tmp_path, decorator):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "import dataclasses\nfrom dataclasses import dataclass\n"
+                "from dataclasses import dataclass as dc\n\n\n"
+                f"@{decorator}\nclass TestA:\n    def test_x(self):\n        pass\n"
+            ),
+        },
+    )
+    assert "`@dataclass` decorator" in (_why(root, "test_a.py::TestA::test_x") or "")
+
+
+def test_a_builtin_that_adds_no_constructor_is_not_a_reason(tmp_path):
+    """Only a base whose __init__ or __new__ is not object's brings one."""
+    root = _tree(
+        tmp_path,
+        {"test_a.py": "class TestA(object):\n    def test_x(self):\n        pass\n"},
+    )
+    assert _why(root, "test_a.py::TestA::test_x") is None
+
+
+def test_an_imported_stdlib_base_is_known_by_the_name_it_was_imported_under(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "from enum import Enum as E\nimport typing as t\nfrom abc import ABC as Base\n\n\n"
+                "class TestA(E):\n    def test_x(self):\n        pass\n\n\n"
+                "class TestB(t.Protocol):\n    def test_x(self):\n        pass\n\n\n"
+                "class TestC(Base):\n    def test_x(self):\n        pass\n"
+            ),
+        },
+    )
+    assert "__init__ or __new__" in (_why(root, "test_a.py::TestA::test_x") or "")
+    assert "__init__ or __new__" in (_why(root, "test_a.py::TestB::test_x") or "")
+    assert _why(root, "test_a.py::TestC::test_x") is None
+
+
+def test_a_subscripted_base_that_cannot_be_read_is_still_named(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "from elsewhere import Base\n\n\nclass TestA(Base[int]):\n"
+                "    def test_x(self):\n        pass\n"
+            ),
+        },
+    )
+    why = _why(root, "test_a.py::TestA::test_missing") or ""
+    assert "Base[int]" in why and "bases not searched" in why
+
+
+def test_a_not_of_a_constant_is_a_constant(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "A = not True\nB = not False\nC = True and False\nD = make()\n\n"
+                "if A:\n    def test_a(): pass\nif B:\n    def test_b(): pass\n"
+                "if C:\n    def test_c(): pass\nif D:\n    def test_d(): pass\n"
+            ),
+        },
+    )
+    assert "no `test_a` defined" in (_why(root, "test_a.py::test_a") or "")
+    assert _why(root, "test_a.py::test_b") is None
+    assert "no `test_c` defined" in (_why(root, "test_a.py::test_c") or "")
+    assert _why(root, "test_a.py::test_d") is None
+
+
+def test_a_walrus_rebinds_for_certain_only_where_it_certainly_runs(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "def test_x():\n    pass\n\n\n(test_x := 3)\n\n\n"
+                "def test_y():\n    pass\n\n\nimport sys\nsys.platform == 'x' and (test_y := 3)\n\n\n"
+                "def test_z():\n    pass\n\n\nif (test_z := 3):\n    pass\n\n\n"
+                "def test_w():\n    pass\n\n\nvalue = [(test_w := n) for n in (1, 2)]\n"
+            ),
+        },
+    )
+    assert "is not a function or class" in (_why(root, "test_a.py::test_x") or "")
+    assert _why(root, "test_a.py::test_y") is None  # the right of an `and` may never run
+    assert "is not a function or class" in (_why(root, "test_a.py::test_z") or "")
+    assert _why(root, "test_a.py::test_w") is None  # a comprehension may not run
+
+
+def test_a_for_over_a_literal_that_is_empty_never_runs_its_body(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "for _ in ():\n    def test_tuple(): pass\nfor _ in {}:\n    def test_dict(): pass\n"
+                "for _ in '':\n    def test_str(): pass\nfor _ in range(0):\n    def test_range(): pass\n"
+                "for _ in range(3, 3):\n    def test_range2(): pass\n"
+                "for _ in [1]:\n    def test_one(): pass\nfor _ in make():\n    def test_unknown(): pass\n"
+                "for _ in [*make()]:\n    def test_star(): pass\n"
+            ),
+        },
+    )
+    for gone in ("test_tuple", "test_dict", "test_str", "test_range", "test_range2"):
+        assert f"no `{gone}` defined" in (_why(root, f"test_a.py::{gone}") or ""), gone
+    for kept in ("test_one", "test_unknown", "test_star"):
+        assert _why(root, f"test_a.py::{kept}") is None, kept
+
+
+def test_a_list_with_one_plain_element_and_a_star_is_not_empty(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "def test_x():\n    pass\n\n\nfor test_x in [1, *make()]:\n    pass\n\n\n"
+                "def test_y():\n    pass\n\n\nfor test_y in (*make(), 2):\n    pass\n"
+            ),
+        },
+    )
+    assert "not a function or class" in (_why(root, "test_a.py::test_x") or "")
+    assert "not a function or class" in (_why(root, "test_a.py::test_y") or "")
+
+
+def test_constants_combined_with_and_or_are_decided_the_way_python_decides_them(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "A = 0 or 3\nB = 3 and 0\nC = 0 or 0\nD = 2 and 5\nE = 1 or make()\n\n"
+                "if A:\n    def test_a(): pass\nif B:\n    def test_b(): pass\n"
+                "if C:\n    def test_c(): pass\nif D:\n    def test_d(): pass\n"
+                "if E:\n    def test_e(): pass\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::test_a") is None
+    assert "no `test_b` defined" in (_why(root, "test_a.py::test_b") or "")
+    assert "no `test_c` defined" in (_why(root, "test_a.py::test_c") or "")
+    assert _why(root, "test_a.py::test_d") is None
+    assert _why(root, "test_a.py::test_e") is None  # E is not decided: make() may be called
+
+
+def test_a_generic_base_adds_nothing_to_search(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "from typing import Generic, TypeVar\n\nT = TypeVar('T')\n\n\n"
+                "class TestA(Generic[T]):\n    def test_x(self):\n        pass\n\n\n"
+                "class TestB(Generic[T], object):\n    pass\n"
+            ),
+        },
+    )
+    why = _why(root, "test_a.py::TestA::test_missing") or ""
+    assert "no `test_missing` defined in TestA" in why and "bases not searched" not in why
+
+
+def test_an_abstract_method_makes_a_class_abstract_only_with_abc_in_play(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "from abc import abstractmethod\n\n\nclass TestA:\n    @abstractmethod\n"
+                "    def test_x(self):\n        pass\n"
+            ),
+        },
+    )
+    assert _why(root, "test_a.py::TestA::test_x") is None
+
+
+def test_a_namespace_directory_inside_a_regular_package_cannot_be_proven_missing(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "pkg/__init__.py": "",
+            "pkg/sub/other.py": "x = 1\n",
+            "test_a.py": "from pkg.sub.gone import y\n\n\ndef test_x():\n    pass\n",
+        },
+    )
+    assert _why(root, "test_a.py::test_x") is None
+
+
+def test_a_relative_import_is_not_judged_as_an_absolute_one(tmp_path):
+    """`from .present import f` means pkg/present.py, not the unrelated top-level package that
+    happens to share the name."""
+    root = _tree(
+        tmp_path,
+        {
+            "present/__init__.py": "",
+            "pkg/__init__.py": "",
+            "pkg/present.py": "def f():\n    pass\n",
+            "pkg/test_a.py": "from .present import f\n\n\ndef test_x():\n    pass\n",
+        },
+    )
+    assert _why(root, "pkg/test_a.py::test_x") is None

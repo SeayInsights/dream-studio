@@ -35,10 +35,14 @@ from core.gates.pytest_node_resolver import NodeResolver
 from tests.helpers.resolver_cases import (
     _CANDIDATES,
     _CASES,
+    _CASES_FOLLOWUP,
     _CASES_ITEM3,
     _CASES_MORE,
+    _FOLLOWUP_CANDIDATES,
     _HELPER,
+    _IMPORT_FILES,
     _ITEM3_CANDIDATES,
+    _KNOWN_LIMITS,
     _MORE_CANDIDATES,
     _PACKAGES,
     _POISONED,
@@ -98,8 +102,10 @@ def test_the_resolver_agrees_with_pytest_collection_on_every_candidate(tmp_path)
             "tests/test_cases.py": _CASES,
             "tests/test_more.py": _CASES_MORE,
             "tests/test_item3.py": _CASES_ITEM3,
+            "tests/test_followup.py": _CASES_FOLLOWUP,
             "tests/star_helper.py": _STAR_HELPER,
             "tests/star_nolist.py": _STAR_NOLIST,
+            **{name: body for name, (body, _) in _IMPORT_FILES.items()},
             **{name: body for name, (body, _) in _POISONED.items()},
             **_PACKAGES,
             "tests/other_test.py": _SUFFIX_FILE,
@@ -119,6 +125,8 @@ def test_the_resolver_agrees_with_pytest_collection_on_every_candidate(tmp_path)
         ("tests/test_cases.py", _CANDIDATES),
         ("tests/test_more.py", _MORE_CANDIDATES),
         ("tests/test_item3.py", _ITEM3_CANDIDATES),
+        ("tests/test_followup.py", _FOLLOWUP_CANDIDATES),
+        *((name, names) for name, (_, names) in _IMPORT_FILES.items()),
         *((name, names) for name, (_, names) in _POISONED.items()),
         ("tests/pkgrel/test_ok_rel.py", ["test_in_rel"]),
         ("tests/pkgrel/sub/test_up.py", ["test_in_rel"]),
@@ -251,3 +259,37 @@ def test_the_resolver_agrees_with_a_directory_run_on_what_is_left_out(tmp_path, 
     assert not disagreements, "\n".join(disagreements)
     # the check is only as strong as its spread: both outcomes must be present
     assert verdicts.count(True) >= 2 and verdicts.count(False) >= 2, verdicts
+
+
+def test_the_known_limits_of_the_resolver_are_still_limits(tmp_path):
+    """The resolver's docstring lists what it gets wrong. A list like that goes stale in one
+    direction -- somebody fixes a case and the doc keeps apologising -- so each entry is run
+    against pytest here and must STILL be wrong in the way it claims: a false accept (pytest
+    collects nothing, the resolver says yes) or a false refusal (pytest collects it, the resolver
+    says no). When one is fixed this fails; move the case out of `_KNOWN_LIMITS` and the
+    docstring, and into the agreement candidates."""
+    files = {"pytest.ini": "[pytest]\n"}
+    for _, case_files, _ in _KNOWN_LIMITS.values():
+        files.update(case_files)
+    root = _tree(tmp_path, files)
+    collected = _collected(root, "tests", root / "pytest.ini")
+    resolver = NodeResolver(root)
+
+    stale = []
+    for name, (kind, _, node) in _KNOWN_LIMITS.items():
+        pytest_collects = node in collected or any(c.startswith(node + "::") for c in collected)
+        resolver_accepts = resolver.resolve(node) is None
+        holds = (
+            (resolver_accepts and not pytest_collects)
+            if kind == "accept"
+            else (pytest_collects and not resolver_accepts)
+        )
+        if not holds:
+            stale.append(
+                f"{name}: documented as a false {kind}, but pytest "
+                f"{'collects' if pytest_collects else 'does not collect'} it and the resolver "
+                f"{'accepts' if resolver_accepts else 'refuses'} it"
+            )
+    assert not stale, "\n".join(stale)
+    kinds = {kind for kind, _, _ in _KNOWN_LIMITS.values()}
+    assert kinds == {"accept", "refuse"}

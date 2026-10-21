@@ -726,7 +726,330 @@ _PACKAGES = {
     "tests/pkgrel/sub/test_up.py": "from ..helper_rel import test_in_rel\n",
     "tests/pkgrel2/y.py": "def test_y():\n    pass\n",
     "tests/pkgrel2/sub/__init__.py": "",
+    # a regular package in the repository, and a helper that cannot be imported
+    "tests/pkgmiss/__init__.py": "",
+    "tests/pkgmiss/present.py": "def test_in_present():\n    pass\n",
+    "tests/broken_helper.py": "def broken(:\n    pass\n",
 }
+
+# More files that raise when imported, each from a cause a static read can PROVE: a statement
+# that always raises, an import of a module a regular repository package does not have, a name a
+# repository module does not define, a helper that does not parse.
+_POISONED.update(
+    {
+        "tests/test_raises.py": (
+            "def test_before():\n    pass\n\n\nraise RuntimeError('at import')\n",
+            ["test_before"],
+        ),
+        "tests/test_assert_false.py": (
+            "def test_before():\n    pass\n\n\nassert False, 'refused at import'\n",
+            ["test_before"],
+        ),
+        "tests/test_missing_module.py": (
+            "from pkgmiss.gone import thing\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_missing_module_plain.py": (
+            "import pkgmiss.gone\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_missing_name.py": (
+            "from helper import nothing_here\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_bad_helper.py": (
+            "import broken_helper\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+    }
+)
+
+# Imports that look like the cases above and work, or may: none may be refused.
+_IMPORT_FILES = {
+    "tests/test_import_guarded.py": (
+        "try:\n    from pkgmiss.gone import thing\nexcept ImportError:\n    thing = None\n\n\n"
+        "def test_guarded():\n    pass\n",
+        ["test_guarded"],
+    ),
+    "tests/test_import_ok.py": (
+        "import pkgmiss.present\nfrom pkgmiss import present\n"
+        "from pkgmiss.present import test_in_present\n\n\ndef test_here():\n    pass\n",
+        ["test_in_present", "test_here"],
+    ),
+}
+
+# What a verifier of the directory-run change found: classes pytest does not collect (a dataclass
+# or an Enum gains __init__/__new__, a dict or Exception base brings its own, an abstract class),
+# functions that are not callable (a property), conditions that are decidable (`not True`,
+# `TYPE_CHECKING as TC`, an empty `for`), a walrus that rebinds a def, and names pytest collects
+# that were refused (a partial, `x = module.attr`, a function assigned in a class body, a
+# subscripted Generic base).
+_CASES_FOLLOWUP = """\
+import abc
+import dataclasses
+import enum
+import functools
+import typing
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from enum import Enum
+from functools import partial
+from typing import TYPE_CHECKING as TC
+from typing import Generic, NamedTuple, Protocol, TypeVar
+
+import helper
+from pytest import fixture as fx
+
+T = TypeVar("T")
+
+
+@dataclass
+class TestDataclass:
+    def test_a(self):
+        pass
+
+
+@dataclasses.dataclass(init=False)
+class TestDataclassNoInit:
+    def test_a(self):
+        pass
+
+
+@dataclasses.dataclass(init=False, eq=False)
+class TestDataclassNoInitNoEq:
+    def test_a(self):
+        pass
+
+
+@dataclass(frozen=True)
+class TestDataclassFrozen:
+    def test_a(self):
+        pass
+
+
+class TestDataclassChild(TestDataclass):
+    pass
+
+
+class TestDictBase(dict):
+    def test_a(self):
+        pass
+
+
+class TestExceptionBase(Exception):
+    def test_a(self):
+        pass
+
+
+class TestIntBase(int):
+    def test_a(self):
+        pass
+
+
+class TestListBase(list):
+    def test_a(self):
+        pass
+
+
+class TestStrBase(str):
+    def test_a(self):
+        pass
+
+
+class TestTupleBase(tuple):
+    def test_a(self):
+        pass
+
+
+class TestTypeBase(type):
+    def test_a(cls):
+        pass
+
+
+class TestObjectBase(object):
+    def test_a(self):
+        pass
+
+
+class TestEnum(Enum):
+    A = 1
+
+    def test_a(self):
+        pass
+
+
+class TestEnumDirect(enum.IntEnum):
+    A = 1
+
+    def test_a(self):
+        pass
+
+
+class TestNamedTuple(NamedTuple):
+    x: int
+
+    def test_a(self):
+        pass
+
+
+class TestProtocol(Protocol):
+    def test_a(self):
+        pass
+
+
+class TestGeneric(Generic[T]):
+    def test_a(self):
+        pass
+
+
+class TestSubscripted(TestGeneric[int]):
+    pass
+
+
+class TestProperty:
+    @property
+    def test_prop(self):
+        return 1
+
+    def test_real(self):
+        pass
+
+
+class TestAbstract(ABC):
+    @abstractmethod
+    def test_abstract(self):
+        pass
+
+    def test_concrete(self):
+        pass
+
+
+class TestAbstractMeta(metaclass=abc.ABCMeta):
+    @abc.abstractmethod
+    def test_abstract(self):
+        pass
+
+    def test_concrete(self):
+        pass
+
+
+class TestAbstractChildOk(TestAbstract):
+    def test_abstract(self):
+        pass
+
+
+class TestAbstractChildStillAbstract(TestAbstract):
+    pass
+
+
+class TestAbcWithNothingAbstract(ABC):
+    def test_a(self):
+        pass
+
+
+X = not True
+Y = not False
+
+if X:
+
+    def test_under_not_true():
+        pass
+
+
+if Y:
+
+    def test_under_not_false():
+        pass
+
+
+if TC:
+
+    def test_under_type_checking_alias():
+        pass
+
+
+if typing.TYPE_CHECKING:
+
+    def test_under_type_checking_attribute():
+        pass
+
+
+def test_walrus_def():
+    pass
+
+
+(test_walrus_def := 3)
+
+for _ in []:
+
+    def test_in_empty_for():
+        pass
+
+else:
+
+    def test_in_for_else():
+        pass
+
+
+@fx
+def test_fixture_alias():
+    pass
+
+
+def test_orig():
+    pass
+
+
+test_alias_attr = helper.test_shared
+test_partial = partial(test_orig)
+test_partial_attr = functools.partial(test_orig)
+
+
+class TestClassAlias:
+    test_from_outer = test_orig
+"""
+
+_FOLLOWUP_CANDIDATES = [
+    "TestDataclass::test_a",
+    "TestDataclassNoInit::test_a",
+    "TestDataclassNoInitNoEq::test_a",
+    "TestDataclassFrozen::test_a",
+    "TestDataclassChild::test_a",
+    "TestDictBase::test_a",
+    "TestExceptionBase::test_a",
+    "TestIntBase::test_a",
+    "TestListBase::test_a",
+    "TestStrBase::test_a",
+    "TestTupleBase::test_a",
+    "TestTypeBase::test_a",
+    "TestObjectBase::test_a",
+    "TestEnum::test_a",
+    "TestEnumDirect::test_a",
+    "TestNamedTuple::test_a",
+    "TestProtocol::test_a",
+    "TestGeneric::test_a",
+    "TestSubscripted::test_a",
+    "TestProperty::test_prop",
+    "TestProperty::test_real",
+    "TestAbstract::test_concrete",
+    "TestAbstractMeta::test_concrete",
+    "TestAbstractChildOk::test_concrete",
+    "TestAbstractChildOk::test_abstract",
+    "TestAbstractChildStillAbstract::test_concrete",
+    "TestAbcWithNothingAbstract::test_a",
+    "test_under_not_true",
+    "test_under_not_false",
+    "test_under_type_checking_alias",
+    "test_under_type_checking_attribute",
+    "test_walrus_def",
+    "test_in_empty_for",
+    "test_in_for_else",
+    "test_fixture_alias",
+    "test_alias_attr",
+    "test_partial",
+    "test_partial_attr",
+    "TestClassAlias::test_from_outer",
+]
 
 # Node ids to ask both pytest and the resolver about. Every one names something, or
 # looks like it could.
@@ -971,5 +1294,194 @@ _SCENARIOS = {
             "elsewhere/test_not_in_testpaths.py": _OK,
         },
         "pyproject.toml",
+    ),
+}
+
+# What the resolver is KNOWN to get wrong, each judged against pytest by the agreement test and
+# listed in the resolver's docstring. "accept" is a false accept (pytest collects nothing and the
+# resolver says yes); "refuse" a false refusal (pytest collects it and the resolver says no).
+# They are pinned, not hidden: when one is fixed the agreement test fails until it is moved out
+# of this table and the docstring, so the list of limits cannot go stale.
+_LIM_HELPER = (
+    "tests/lim_helper.py",
+    "class TestBaseShared:\n    def test_from_base(self):\n        pass\n",
+)
+
+_KNOWN_LIMITS = {
+    "a module missing from the environment": (
+        "accept",
+        {"tests/test_lim_env.py": "import not_installed_zzz\n\n\ndef test_x():\n    pass\n"},
+        "tests/test_lim_env.py::test_x",
+    ),
+    "a module missing from a namespace directory": (
+        "accept",
+        {
+            "tests/nspkg_lim/m.py": "x = 1\n",
+            "tests/test_lim_ns.py": "from nspkg_lim.gone import y\n\n\ndef test_x():\n    pass\n",
+        },
+        "tests/test_lim_ns.py::test_x",
+    ),
+    "a NameError at import": (
+        "accept",
+        {"tests/test_lim_name.py": "x = undefined_name\n\n\ndef test_x():\n    pass\n"},
+        "tests/test_lim_name.py::test_x",
+    ),
+    "an assert on a condition that cannot be decided": (
+        "accept",
+        {
+            "tests/test_lim_assert.py": (
+                "import sys\nassert sys.platform == 'plan9'\n\n\ndef test_x():\n    pass\n"
+            )
+        },
+        "tests/test_lim_assert.py::test_x",
+    ),
+    "a circular import": (
+        "accept",
+        {
+            "tests/circ_a.py": "import circ_b\n",
+            "tests/circ_b.py": "from circ_a import thing\n",
+            "tests/test_lim_circ.py": "import circ_a\n\n\ndef test_x():\n    pass\n",
+        },
+        "tests/test_lim_circ.py::test_x",
+    ),
+    "importorskip of a missing module": (
+        "accept",
+        {
+            "tests/test_lim_skip1.py": (
+                "import pytest\n\npytest.importorskip('not_installed_zzz')\n\n\n"
+                "def test_x():\n    pass\n"
+            )
+        },
+        "tests/test_lim_skip1.py::test_x",
+    ),
+    "a conditional pytest.skip(allow_module_level=True)": (
+        "accept",
+        {
+            "tests/test_lim_skip2.py": (
+                "import sys\nimport pytest\n\nif sys.platform:\n"
+                "    pytest.skip('x', allow_module_level=True)\n\n\ndef test_x():\n    pass\n"
+            )
+        },
+        "tests/test_lim_skip2.py::test_x",
+    ),
+    "a pytest.skip(allow_module_level=True) reached through a function": (
+        "accept",
+        {
+            "tests/test_lim_skip3.py": (
+                "import pytest\n\n\ndef stop():\n    pytest.skip('x', allow_module_level=True)\n\n\n"
+                "stop()\n\n\ndef test_x():\n    pass\n"
+            )
+        },
+        "tests/test_lim_skip3.py::test_x",
+    ),
+    "a generator test function": (
+        "accept",
+        {"tests/test_lim_gen.py": "def test_x():\n    yield 1\n"},
+        "tests/test_lim_gen.py::test_x",
+    ),
+    "a class decorator that returns None": (
+        "accept",
+        {
+            "tests/test_lim_cdeco.py": (
+                "def deco(c):\n    return None\n\n\n@deco\nclass TestA:\n"
+                "    def test_x(self):\n        pass\n"
+            )
+        },
+        "tests/test_lim_cdeco.py::TestA::test_x",
+    ),
+    "a function decorator that returns None": (
+        "accept",
+        {
+            "tests/test_lim_fdeco.py": (
+                "def deco(f):\n    return None\n\n\n@deco\ndef test_x():\n    pass\n"
+            )
+        },
+        "tests/test_lim_fdeco.py::test_x",
+    ),
+    "a class decorator that adds an __init__": (
+        "accept",
+        {
+            "tests/test_lim_init.py": (
+                "def define(c):\n    def __init__(self):\n        pass\n\n"
+                "    c.__init__ = __init__\n    return c\n\n\n@define\nclass TestA:\n"
+                "    def test_x(self):\n        pass\n"
+            )
+        },
+        "tests/test_lim_init.py::TestA::test_x",
+    ),
+    "a def in a try whose import fails": (
+        "accept",
+        {
+            "tests/test_lim_try.py": (
+                "try:\n    import not_installed_zzz\n\n    def test_x():\n        pass\n"
+                "except ImportError:\n    pass\n"
+            )
+        },
+        "tests/test_lim_try.py::test_x",
+    ),
+    "a base made by a call": (
+        "refuse",
+        dict(
+            [_LIM_HELPER],
+            **{
+                "tests/test_lim_call.py": (
+                    "from lim_helper import TestBaseShared\n\n\ndef make():\n"
+                    "    return TestBaseShared\n\n\nclass TestA(make()):\n    pass\n"
+                )
+            },
+        ),
+        "tests/test_lim_call.py::TestA::test_from_base",
+    ),
+    "a base that is splatted": (
+        "refuse",
+        dict(
+            [_LIM_HELPER],
+            **{
+                "tests/test_lim_splat.py": (
+                    "from lim_helper import TestBaseShared\n\nbases = (TestBaseShared,)\n\n\n"
+                    "class TestA(*bases):\n    pass\n"
+                )
+            },
+        ),
+        "tests/test_lim_splat.py::TestA::test_from_base",
+    ),
+    "a class built by a factory function": (
+        "refuse",
+        {
+            "tests/test_lim_factory.py": (
+                "def make():\n    class TestMade:\n        def test_x(self):\n"
+                "            pass\n\n    return TestMade\n\n\nTestMade = make()\n"
+            )
+        },
+        "tests/test_lim_factory.py::TestMade::test_x",
+    ),
+    "a def created through global": (
+        "refuse",
+        {
+            "tests/test_lim_global.py": (
+                "def make():\n    global test_made\n\n    def test_made():\n        pass\n\n\n"
+                "make()\n"
+            )
+        },
+        "tests/test_lim_global.py::test_made",
+    ),
+    "unittest.TestCase.runTest": (
+        "refuse",
+        {
+            "tests/test_lim_runtest.py": (
+                "import unittest\n\n\nclass TestU(unittest.TestCase):\n"
+                "    def runTest(self):\n        pass\n"
+            )
+        },
+        "tests/test_lim_runtest.py::TestU::runTest",
+    ),
+    "a test made with setattr": (
+        "refuse",
+        {
+            "tests/test_lim_setattr.py": (
+                "import sys\n\nsetattr(sys.modules[__name__], 'test_made', lambda: None)\n"
+            )
+        },
+        "tests/test_lim_setattr.py::test_made",
     ),
 }
