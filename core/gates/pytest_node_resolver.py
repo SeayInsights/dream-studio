@@ -77,6 +77,7 @@ from __future__ import annotations
 import ast
 import builtins
 import fnmatch
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -520,6 +521,7 @@ class NodeResolver:
         self._classes: dict[int, _ClassInfo] = {}
         self._building: set[int] = set()
         self._opaque = 0
+        self._listings: dict[Path, list[str]] = {}
 
     # -- files ------------------------------------------------------------
 
@@ -539,9 +541,40 @@ class NodeResolver:
         return self._modules[path]
 
     def _inside(self, file_part: str) -> Path | None:
-        """The resolved path when it lies within the repository, else None."""
-        resolved = (self.root / file_part).resolve()
-        return resolved if resolved.is_relative_to(self.root) else None
+        """The path as it is SPELLED when it lies within the repository, else None.
+
+        pytest walks directories as they are spelled, so an exclusion applies to `skipme/` even
+        when that is a link to `real/`: the spelled path is what is judged. A link that leads
+        out of the repository is still refused by where it really points, since the file would
+        not be in a checkout."""
+        spelled = Path(os.path.abspath(self.root / file_part))
+        if not spelled.is_relative_to(self.root) or not spelled.resolve().is_relative_to(self.root):
+            return None
+        return spelled
+
+    def _listing(self, directory: Path) -> list[str]:
+        if directory not in self._listings:
+            try:
+                self._listings[directory] = os.listdir(directory)
+            except OSError:
+                self._listings[directory] = []
+        return self._listings[directory]
+
+    def _case_problem(self, path: Path) -> str | None:
+        """Windows finds `TESTS/Test_A.PY` for `tests/test_a.py`; a Linux checkout, which is
+        what CI is, does not. Every component must be spelled as it is on disk."""
+        current = self.root
+        for part in path.relative_to(self.root).parts:
+            names = self._listing(current)
+            if names and part not in names:
+                actual = next((n for n in names if n.lower() == part.lower()), None)
+                if actual is not None:
+                    return (
+                        f"`{part}` differs in case from `{actual}` on disk, so a case-sensitive "
+                        "checkout, which CI is, would not find it"
+                    )
+            current = current / part
+        return None
 
     def _find_module(self, name: str, level: int, origin: _Module) -> _Module | str | None:
         """An imported module that lives in the repository, best effort. None when it does
@@ -821,7 +854,11 @@ class NodeResolver:
             return None
         if not self.rules.under_a_root(path):
             return None
-        return self.rules.conftest_problem(path) or self.rules.excluded(path)
+        return (
+            self._case_problem(path)
+            or self.rules.conftest_problem(path)
+            or self.rules.excluded(path)
+        )
 
     def resolve(self, reference: str) -> str | None:
         """None when pytest would collect the node; otherwise why it would not."""
@@ -834,6 +871,9 @@ class NodeResolver:
             return "path escapes the repository"
         if not path.is_file():
             return "no such test file"
+        problem = self._case_problem(path)
+        if problem:
+            return problem
         if path.suffix != ".py":
             return "node id into a non-python file"
         relative = path.relative_to(self.root).as_posix()
@@ -844,7 +884,7 @@ class NodeResolver:
         patterns = self.rules.python_files
         if not self.rules.explicit(path) and not any(fnmatch_ex(p, path) for p in patterns):
             return (
-                f"file does not match python_files ({' '.join(patterns)}), so a directory "
+                f"file does not match python_files ({' '.join(patterns) or 'none set'}), so a directory "
                 "run never collects it"
             )
         excluded = self.rules.excluded(path)

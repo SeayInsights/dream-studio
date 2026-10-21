@@ -915,6 +915,27 @@ _SCENARIOS = {
         },
         "pytest.ini",
     ),
+    # an option that is present and empty is not an option that is absent
+    "empty-norecursedirs": (
+        {
+            "pytest.ini": "[pytest]\nnorecursedirs =\n",
+            "build/test_b.py": _OK,
+            "node_modules/test_n.py": _OK,
+            ".hidden/test_h.py": _OK,
+            "__pycache__/test_pyc.py": _OK,
+            "myenv/pyvenv.cfg": "home = x\n",
+            "myenv/test_in_a_virtualenv.py": _OK,
+        },
+        "pytest.ini",
+    ),
+    "empty-python-files": (
+        {
+            "pytest.ini": "[pytest]\npython_files =\ntestpaths = checks.py\n",
+            "checks.py": _OK,
+            "test_not_collected.py": _OK,
+        },
+        "pytest.ini",
+    ),
     "toml": (
         {
             "pytest.toml": (

@@ -90,7 +90,7 @@ _PLUGIN_REGISTRATION = frozenset({"register", "import_plugin", "consider_module"
 #: `addopts` options that change what is collected in a way that cannot be evaluated from
 #: source. Each takes a value except those in _FLAG_ONLY.
 _UNMODELLED_OPTIONS = frozenset(
-    {"-k", "-m", "--noconftest", "--confcutdir", "--pyargs", "--import-mode"}
+    {"-k", "-m", "--noconftest", "--confcutdir", "--pyargs", "--import-mode", "--rootdir"}
 )
 _FLAG_ONLY = frozenset({"--noconftest", "--pyargs"})
 
@@ -177,12 +177,12 @@ def _options(root: Path) -> tuple[str, dict[str, Any]]:
 def _args(options: dict[str, Any], key: str, default: tuple[str, ...]) -> tuple[str, ...]:
     """An ini option of pytest's `args` type: a list, or a string split the way a shell does."""
     value = options.get(key)
-    if value is None:
+    if value is None:  # absent: the default. Present and empty is an empty list, not the default.
         return default
     if isinstance(value, (list, tuple)):
-        return tuple(str(v) for v in value) or default
+        return tuple(str(v) for v in value)
     try:
-        return tuple(shlex.split(str(value))) or default
+        return tuple(shlex.split(str(value)))
     except ValueError as exc:
         raise CollectionConfigError(f"cannot read pytest config option {key}: {exc}") from exc
 
