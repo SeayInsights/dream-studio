@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from integrations.installer.base import FileOp
+from integrations.installer.base import FileOp, RefusalError
 
 from .claude_code_shared import _compute_file_hash_chunked, _python_cmd
 
@@ -373,7 +373,8 @@ def _skill_source_files(
     """(source file, path relative to the skill directory) for everything a skill ships:
     its canonical directory, then its registered support trees under `repo_root`.
 
-    A registered tree that is not under `repo_root` raises: shipping the instructions
+    A registered tree that is not under `repo_root` raises RefusalError (the installer's own
+    refusal, which every CLI entry point renders as one error line, not a traceback): shipping the instructions
     without what they run is the failure this exists to prevent, and it must not be silent.
     """
     pairs = [(f, f.relative_to(skill_dir)) for f in sorted(skill_dir.rglob("*")) if f.is_file()]
@@ -381,9 +382,11 @@ def _skill_source_files(
         for source_rel, dest_rel in SKILL_SUPPORT_TREES.get(skill_id, ()):
             source_root = repo_root / source_rel
             if not source_root.is_dir():
-                raise FileNotFoundError(
+                raise RefusalError(
                     f"{skill_id} ships {source_rel}/ in its skill directory, and it is not "
-                    f"under {repo_root}: the skill would name scripts it does not carry"
+                    f"under {repo_root}: the skill would name scripts it does not carry. "
+                    "Point --source-root at a complete Dream Studio tree (canonical/ and "
+                    f"{source_rel}/ side by side)."
                 )
             pairs.extend(
                 (f, Path(dest_rel) / f.relative_to(source_root))

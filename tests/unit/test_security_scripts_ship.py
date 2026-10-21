@@ -31,6 +31,8 @@ from pathlib import Path
 
 import pytest
 
+from integrations.installer.base import RefusalError
+
 from integrations.marketplace import plugin_dist
 from integrations.marketplace.plugin_dist import build_plugin_dist
 
@@ -160,7 +162,7 @@ def test_a_missing_source_tree_fails_the_build_loudly(tmp_path: Path, monkeypatc
     monkeypatch.setitem(
         plugin_dist.SKILL_SUPPORT_TREES, "ds-security", (("templates/nope", "templates/nope"),)
     )
-    with pytest.raises(FileNotFoundError, match="templates/nope"):
+    with pytest.raises(RefusalError, match="templates/nope"):
         build_plugin_dist(tmp_path / "plugin", repo_root=REPO_ROOT)
 
 
