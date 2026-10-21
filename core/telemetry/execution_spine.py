@@ -362,8 +362,29 @@ def record_invocation(conn: sqlite3.Connection, invocation_type: str, **values: 
         logger.debug("record_invocation: DB write skipped for %s — %s", table, exc)
 
 
-def record_security_finding(conn: sqlite3.Connection, **values: Any) -> None:
+#: The reason record_security_finding returns for a finding id that is already recorded:
+#: a skip, not a failure, so callers that distinguish the two can.
+FINDING_DUPLICATE = "duplicate finding id"
+
+
+def _failure_reason(exc: BaseException) -> str:
+    """A short reason naming the exception class (and SQLite's error code), never its message
+    or any value: the message can carry the data that failed to write."""
+    code = getattr(exc, "sqlite_errorname", None)
+    return f"{type(exc).__name__} ({code})" if code else type(exc).__name__
+
+
+def record_security_finding(conn: sqlite3.Connection, **values: Any) -> str | None:
+    """Write a finding.recorded row to the security_events spine.
+
+    Returns None when the row was written, FINDING_DUPLICATE when that id was already
+    recorded, and otherwise a short reason the write failed. A failure is logged and
+    returned, never swallowed: a caller that was told nothing would report a finding it
+    never stored. The failure is not raised, so a direct caller keeps its old contract;
+    emit_security_finding turns it into an unsuccessful TelemetryEmitResult.
+    """
     # findings table retired in migration 112 (WO-Y). Write to security_events spine.
+    reason: str | None
     try:
         from core.findings.mutations import _now, honesty_columns
 
@@ -391,29 +412,35 @@ def record_security_finding(conn: sqlite3.Connection, **values: Any) -> None:
                 values.get("limitations"),
             )
         )
-        conn.execute(
+        cursor = conn.execute(
             f"INSERT OR IGNORE INTO security_events ({', '.join(columns)}) "
             f"VALUES ({', '.join('?' * len(columns))})",
             tuple(columns.values()),
         )
-    except Exception:
-        pass
+        reason = None if cursor.rowcount else FINDING_DUPLICATE
+    except Exception as exc:  # noqa: BLE001
+        reason = _failure_reason(exc)
+        logger.warning("security finding was not written to security_events: %s", reason)
 
     # If a non-open status was supplied, immediately write a status_changed event
     # so FindingsProjection sees the correct current_status (not the default 'open').
     initial_status = values.get("status", "open")
-    if initial_status and initial_status != "open":
+    if reason is None and initial_status and initial_status != "open":
         try:
-            resolve_security_finding(
+            recorded = resolve_security_finding(
                 conn, finding_id=values["finding_id"], resolution=initial_status
             )
-        except Exception:  # noqa: BLE001
-            pass
+            reason = None if recorded else "status event not written"
+        except Exception as exc:  # noqa: BLE001
+            reason = _failure_reason(exc)
+        if reason is not None:
+            logger.warning("security finding status was not recorded: %s", reason)
 
     # findings_current_status dropped migration 140 (WO dff23cb0) — status
     # readers derive current_status from security_events directly (see
     # core/findings/current_status.py), computed fresh on every read, so there
     # is no projection to refresh here.
+    return reason
 
 
 def resolve_security_finding(

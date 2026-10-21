@@ -25,6 +25,7 @@ from typing import Any
 
 from core.findings.model import encode_honesty
 from core.telemetry.execution_spine import (
+    FINDING_DUPLICATE,
     record_execution_event,
     record_security_finding,
     resolve_security_finding,
@@ -32,6 +33,7 @@ from core.telemetry.execution_spine import (
 
 from .emitters_shared import (
     MODE_BEST_EFFORT,
+    MODE_STRICT,
     TelemetryContext,
     TelemetryEmitResult,
     _context,
@@ -128,7 +130,7 @@ def emit_security_finding(
             metadata=event_metadata,
             outcome_status=normalized_status,
         )
-        record_security_finding(
+        reason = record_security_finding(
             conn,
             **ctx.scope(),
             finding_id=finding_id,
@@ -151,6 +153,20 @@ def emit_security_finding(
             coverage=coverage,
             limitations=limitations,
         )
+        if reason == FINDING_DUPLICATE:
+            # Lost a race with another writer of the same finding id: a skip, as above.
+            conn.rollback()
+            return TelemetryEmitResult(
+                False, record_id=finding_id, error="duplicate security finding skipped"
+            )
+        if reason is not None:
+            # No security_events row, so the execution event written above would describe a
+            # finding that is not stored, and the spool must not announce one.
+            conn.rollback()
+            message = f"security finding write failed: {reason}"
+            if mode == MODE_STRICT:
+                raise RuntimeError(message)
+            return TelemetryEmitResult(False, record_id=finding_id, error=message, failed=True)
         try:
             from canonical.events.envelope import CanonicalEventEnvelope
             from canonical.events.redactor import redact_file_path as _redact

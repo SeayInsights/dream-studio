@@ -80,6 +80,9 @@ class TelemetryEmitResult:
     event_id: str | None = None
     record_id: str | None = None
     error: str | None = None
+    failed: bool = False
+    """True when a write was attempted and failed. emitted False with failed False is a
+    skip: telemetry disabled, or the record was already there."""
 
 
 def _status(value: Any) -> str:
@@ -120,7 +123,7 @@ def _emit(
     except Exception as exc:
         if mode == MODE_STRICT:
             raise
-        return TelemetryEmitResult(False, error=str(exc))
+        return TelemetryEmitResult(False, error=str(exc), failed=True)
 
 
 def _connect(db_path: Path | str | None) -> sqlite3.Connection:
