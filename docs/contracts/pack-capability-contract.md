@@ -80,8 +80,13 @@ read model's own normalisers). `limitations` of `[]` records "none exist", which
 as NULL. The migration is unreleased, so a live authority that has not applied it records the
 finding without the three fields and reads unknown. The guard log passes through the three keys
 when a log line carries them, and the audit-markdown reader attaches one limitation to a blocker
-it had to recover from prose. Every other value is unknown. Two writers still pass nothing: the
-analytics-import row writer (`core/analytics_ingestion_rows.py`) and the SARIF parser.
+it had to recover from prose. The SARIF importer records what the file states
+(`properties.precision` as confidence, a failed invocation as partial coverage with that
+limitation) and nothing else. Three producers still pass nothing, so their findings read
+unknown: `core/projects/intake.py`, `control/analysis/bugs.py` and
+`core/analytics_ingestion_rows.py`. A write that cannot encode a value (an object whose
+`__str__` raises) records the finding with the three fields unknown and logs it; a finding
+is never lost to its annotations.
 
 ### Present today (Python API only, not yet reachable by a pack)
 
