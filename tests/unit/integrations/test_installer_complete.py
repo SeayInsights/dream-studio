@@ -57,6 +57,11 @@ def canonical_root(tmp_path):
         skill_dir = root / "skills" / name
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(f"# {name} skill", encoding="utf-8")
+    # ds-security ships templates/security inside its skill directory (SKILL_SUPPORT_TREES): a
+    # source root that names the skill must carry the tree, or the plan refuses to build.
+    support = tmp_path / "templates" / "security" / "etl"
+    support.mkdir(parents=True)
+    (support / "parse_binary.py").write_text("# parser stub\n", encoding="utf-8")
     # ds-core gets a representative full directory structure
     core_dir = root / "skills" / "core"
     (core_dir / "config.yml").write_text("pack: ds-core\n", encoding="utf-8")

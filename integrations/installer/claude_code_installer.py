@@ -296,7 +296,12 @@ class ClaudeCodeInstaller(InstallerBase):
                     continue
                 skill_id = _skill_id_from_dir_name(skill_dir.name)
                 target_dir = self.config_root / "skills" / skill_id
-                skill_ops = _collect_skill_dir_ops(skill_dir, target_dir, skill_id, backup_base)
+                # repo_root: the skill's registered support trees (templates/security for
+                # ds-security) ship inside it too. In an installed app that root is code_root(),
+                # where the wheel carries templates/**.
+                skill_ops = _collect_skill_dir_ops(
+                    skill_dir, target_dir, skill_id, backup_base, repo_root=canonical_root.parent
+                )
                 ops.extend(skill_ops)
                 skill_targets.update(str(op.target) for op in skill_ops)
 

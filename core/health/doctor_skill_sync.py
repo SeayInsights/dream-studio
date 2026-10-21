@@ -31,6 +31,7 @@ def _compute_directory_hash(
     path: Path,
     *,
     transform: Callable[[str, bytes], bytes] | None = None,
+    extra_trees: tuple[tuple[Path, str], ...] = (),
 ) -> str:
     """SHA-256 over the relative paths and bytes of every regular file under ``path``.
 
@@ -41,19 +42,23 @@ def _compute_directory_hash(
     bytes, keyed by its POSIX relative path, before hashing. The skill-freshness
     check uses it to mirror the installer's top-level ``SKILL.md`` frontmatter
     synthesis so a correctly-installed skill is not reported as drifted.
+
+    ``extra_trees`` are ``(source directory, path under ``path``)`` pairs hashed AS IF they
+    sat under ``path``: the support trees the installer ships inside a skill
+    (SKILL_SUPPORT_TREES), so the canonical side is compared with what the install holds.
     """
     if not path.is_dir():
         return ""
     digest = hashlib.sha256()
-    for file_path in sorted(path.rglob("*")):
+    entries: list[tuple[Path, Path]] = [(f.relative_to(path), f) for f in path.rglob("*")]
+    for tree_root, dest_rel in extra_trees:
+        entries.extend((Path(dest_rel) / f.relative_to(tree_root), f) for f in tree_root.rglob("*"))
+    for rel_path, file_path in sorted(entries):
         if not file_path.is_file():
             continue
-        if any(
-            part.startswith(".") or part == "__pycache__"
-            for part in file_path.relative_to(path).parts
-        ):
+        if any(part.startswith(".") or part == "__pycache__" for part in rel_path.parts):
             continue
-        rel = file_path.relative_to(path).as_posix()
+        rel = rel_path.as_posix()
         digest.update(rel.encode("utf-8"))
         digest.update(b"\x00")
         try:
@@ -126,6 +131,22 @@ def _synthesized_skill_transform(
     return _transform
 
 
+def _support_trees(skill_id: str, repo_root: Path) -> tuple[tuple[Path, str], ...]:
+    """The support trees the installer ships inside this skill, that exist under `repo_root`.
+
+    The registry is the installer's (SKILL_SUPPORT_TREES): one list for every channel. A tree
+    the source root lacks is left out here (the installer refuses to plan it), so a doctor
+    run on a partial tree reports drift rather than crashing.
+    """
+    from integrations.installer.claude_code_fileops import SKILL_SUPPORT_TREES
+
+    return tuple(
+        (repo_root / source_rel, dest_rel)
+        for source_rel, dest_rel in SKILL_SUPPORT_TREES.get(skill_id, ())
+        if (repo_root / source_rel).is_dir()
+    )
+
+
 def _check_skill_freshness(
     canonical_skills_dir: Path,
     installed_skills_dir: Path,
@@ -149,6 +170,7 @@ def _check_skill_freshness(
         expected_hash = _compute_directory_hash(
             source_dir,
             transform=_synthesized_skill_transform(sid, canonical_root, packs_yaml_path),
+            extra_trees=_support_trees(sid, canonical_skills_dir.parent.parent),
         )
         if expected_hash != _compute_directory_hash(installed_dir):
             stale.append(sid)
