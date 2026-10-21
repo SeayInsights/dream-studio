@@ -88,19 +88,6 @@ jobs:
           DREAM_STUDIO_BASE_REF: origin/${{ github.base_ref || 'main' }}
         run: python interfaces/cli/impact_tests_gate.py
 
-      # THE REVIEW LANE'S REAL-CONTAINER TESTS. Four tests in tests/unit/test_lane_sandbox.py
-      # drive a real Docker engine (exit codes propagate, no network, nothing persists, the
-      # re-run catches a false claim) -- the operator rule that a review lane executes a
-      # reproduction in a container and the recording door re-runs it. They are install_check
-      # tests, which a default pytest run does not collect, so the impact set above no longer
-      # reaches them. Measured on run 35903510810 (the PR that added them): ubuntu-latest ran
-      # all 12 tests in the file, macos-latest and windows-latest skipped the four ("ssss") for
-      # want of an engine. GitHub's Ubuntu runners ship Docker, so this runs on Linux only; an
-      # engine that is missing there FAILS the step instead of skipping it.
-      - name: Review lane sandbox (real Docker engine)
-        if: runner.os == 'Linux'
-        run: python -m pytest -m install_check tests/unit/test_lane_sandbox.py -q --tb=short
-
       - name: Dashboard truth gate
         run: python -m interfaces.cli.ds doctor dashboard-truth
 

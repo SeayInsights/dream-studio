@@ -37,9 +37,19 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
 
-      # The four real-container tests of the review lane sandbox are install_check tests, so the
-      # parity gate's pytest run does not collect them; they ran here when they were plain
-      # tests. See the same step in ci.yml for the measurement. ubuntu-latest has Docker.
+      # THE REVIEW LANE'S REAL-CONTAINER TESTS. Four tests in tests/unit/test_lane_sandbox.py
+      # drive a real Docker engine (exit codes propagate, no network, nothing persists, the
+      # re-run catches a false claim) -- the operator rule that a review lane executes a
+      # reproduction in a container and the recording door re-runs it. They are install_check
+      # tests, which a default pytest run (ci_gate.py's included) does not collect, so they get
+      # their own step. They did run in CI before: the log of the PR that added them (run
+      # 35903510810) shows tests/unit/test_lane_sandbox.py as twelve passes on ubuntu-latest and
+      # eight passes plus four skips on macos and windows, which have no engine. GitHub's Ubuntu
+      # runners ship Docker, so a missing engine here FAILS the step instead of skipping it.
+      #
+      # NOT IN ci.yml (pr-smoke), deliberately: tests/unit/test_impact_tests_gate.py forbids
+      # that workflow a second list of tests to run -- what pr-smoke runs is decided by the
+      # impact gate alone.
       - name: Review lane sandbox (real Docker engine)
         run: python -m pytest -m install_check tests/unit/test_lane_sandbox.py -q --tb=short
 
