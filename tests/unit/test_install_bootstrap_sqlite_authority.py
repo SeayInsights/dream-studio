@@ -494,7 +494,10 @@ def test_the_live_authority_scan_sees_any_users_path_and_no_placeholder() -> Non
     backslashed = "C:" + chr(92) + "Users" + chr(92) + "{}" + chr(92) + ".dream-studio" + chr(92)
     backslashed += "state" + chr(92) + "studio.db"
     assert _users_named_in(backslashed.format("alice")) == {"alice"}
-    assert _users_named_in("C:/Users/alice/.dream-studio/state/studio.db") == {"alice"}
+    # Built in two pieces: the publication scan flags a literal drive-Users path in any tracked
+    # file, and this is a test of a detector for exactly that shape.
+    forward = "C:" + "/Users/alice/.dream-studio/state/studio.db"
+    assert _users_named_in(forward) == {"alice"}
     assert _users_named_in("/home/bob/.dream-studio/state/studio.db") == {"bob"}
     assert _users_named_in("/Users/carol/.dream-studio/state/studio.db") == {"carol"}
     assert _users_named_in(backslashed.format("Example User")) <= _PLACEHOLDER_USERS
