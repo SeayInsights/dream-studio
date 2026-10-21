@@ -174,32 +174,43 @@ not read at all.
 
 ### Step A7: PE/ELF Header Analysis (needs `pefile` for PE, `pyelftools` for ELF)
 
-Try the import first. If the library for the binary's format is not installed, record
-`header_analysis` as `skipped` with the reason (for example "pefile is not installed") --
-do not just move on, because nothing downstream can tell a skipped header analysis from
-one that found nothing.
+Run the header analysis script; it picks the format from the file's magic bytes, imports the
+library for it, and writes `header-analysis.json` in exactly the shape ingest reads:
 
-```python
-# For PE (Windows):
-import pefile
-pe = pefile.PE(binary_path)
-# Check: unsigned, debug symbols, known vulnerable compiler
-
-# For ELF (Linux):
-from elftools.elf.elffile import ELFFile
-# Check: interpreter, sections, symbols
+```bash
+py -3.12 templates/security/etl/header_analysis.py {binary_path} --output header-analysis.json
 ```
 
-Write the checks to `header-analysis.json`, one boolean per check, `true` when the
-property holds and `false` when it does not (each `false` becomes a finding):
+Its exit status is the run record for this step:
+
+- `header_analysis.py` exits 0: the file was written. Record `header_analysis` as `ran`, with
+  `tool` `pefile` (PE) or `pyelftools` (ELF).
+- It exits 3: the library for the binary's format is not installed (the message on stderr,
+  "pefile is not installed" or "pyelftools is not installed", is the reason). Record
+  `header_analysis` as `skipped` with that reason -- do not just move on, because nothing
+  downstream can tell a skipped header analysis from one that found nothing.
+- It exits 2: the file is not a PE or ELF binary (record `skipped`, reason from stderr) or
+  could not be read (record `failed`, reason from stderr). No file is written.
+
+The file is one boolean per check, `true` when the property holds and `false` when it does
+not (each `false` becomes a finding), plus the caveats the writer attaches, which ingest
+carries into the limitations:
 
 ```json
-{"format": "pe", "checks": {"signed": false, "debug_symbols_stripped": true,
-                            "no_known_vulnerable_compiler": true}}
+{"format": "pe", "checks": {"signed": false, "debug_symbols_stripped": true},
+ "notes": ["signed: an Authenticode signature block is present; the signature was not verified"]}
 ```
 
-PE checks: `signed`, `debug_symbols_stripped`, `no_known_vulnerable_compiler`. ELF
-checks: `interpreter_trusted`, `symbols_stripped`, `no_writable_executable_sections`.
+PE checks written: `signed` (a signature block is present; it is not verified, and a
+Windows binary signed with a revoked or broken signature still reads `true`) and
+`debug_symbols_stripped` (no embedded COFF symbol table; the PDB path an MSVC build leaves in
+the debug directory does not count). ELF checks written: `interpreter_trusted` (no
+interpreter, or a standard loader in a system directory), `symbols_stripped` (no `.symtab`)
+and `no_writable_executable_sections` (no section both writable and executable). A PE check
+this doc used to list, `no_known_vulnerable_compiler`, is not computed: it needs a list of
+defective compiler versions and none ships, so it is never written (a `true` would be a
+claim nothing checked). Ingest still accepts it from a hand-written file.
+
 `format` must be `pe` or `elf`, and the file counts as read only if it holds at least one
 of that format's checks with a boolean value; otherwise ingest leaves `header_analysis`
 unread (`partial`) and names why. A value that is not `true` or `false` (0, null,
