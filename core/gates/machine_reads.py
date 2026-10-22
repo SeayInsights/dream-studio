@@ -244,7 +244,16 @@ def _classify(sub: ast.AST, depth: int) -> _Read | None:
                     e.value if isinstance(e, ast.Constant) and isinstance(e.value, str) else None
                     for e in argv.elts
                 ]
-                sub_cmd = next((t for t in tokens[1:] if t and not t.startswith("-")), "")
+                # The sub-command is the first word that is not an option -- except the
+                # self-contained spellings that ARE options (``git --version``).
+                sub_cmd = next(
+                    (
+                        t
+                        for t in tokens[1:]
+                        if t and (not t.startswith("-") or t in _GIT_SELF_CONTAINED)
+                    ),
+                    "",
+                )
                 cwd = next((kw.value for kw in sub.keywords if kw.arg == "cwd"), None)
                 target: ast.AST | None = cwd
                 if "-C" in tokens:

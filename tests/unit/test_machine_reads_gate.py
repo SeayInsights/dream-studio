@@ -367,10 +367,139 @@ def test_a_git_verb_that_reads_this_clone_fails_whichever_verb_it_is(tmp_path, v
     assert _kinds(result) == ["git-checkout"], (verb, result["offenders"])
 
 
-@pytest.mark.parametrize("verb", ["init", "config", "version", "help", "clone", "ls-files"])
+@pytest.mark.parametrize(
+    "verb", ["init", "config", "version", "--version", "help", "clone", "ls-files"]
+)
 def test_a_git_verb_that_builds_or_describes_its_own_repository_is_exempt(tmp_path, verb):
+    """``--version`` is in the exempt set, and was dead there: the sub-command search skipped
+    every dash word, so ``git --version`` had no verb and was flagged as a read of the checkout."""
     source = f"import subprocess\ndef test_x():\n    subprocess.run(['git', {verb!r}])\n"
     assert _run(tmp_path, source)["status"] == "pass", verb
+
+
+def test_a_dash_word_that_is_not_self_contained_still_has_no_verb_and_is_flagged(tmp_path):
+    source = "import subprocess\ndef test_x():\n    subprocess.run(['git', '--no-pager'])\n"
+    assert _kinds(_run(tmp_path, source)) == ["git-checkout"]
+
+
+_HOME_ENV_NAMES = [
+    "HOME",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "HOMEPATH",
+    "HOMEDRIVE",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_STATE_HOME",
+]
+
+
+@pytest.mark.parametrize("name", _HOME_ENV_NAMES)
+@pytest.mark.parametrize(
+    "form",
+    ["os.getenv({n!r})", "os.environ.get({n!r})", "os.environ[{n!r}]"],
+    ids=["getenv", "environ.get", "environ-index"],
+)
+def test_every_variable_that_names_a_home_is_a_read(tmp_path, name, form):
+    """Each name is listed in the module docstring; listing one only in a comment, or deleting it
+    from the set, must fail here. Spelled out rather than read from the set under test."""
+    source = f"import os\ndef test_x():\n    {form.format(n=name)}\n"
+    assert _kinds(_run(tmp_path, source)) == ["home-read"], (name, form)
+
+
+@pytest.mark.parametrize("func", ["claude_config_root", "claude_config_root_with_reason"])
+def test_both_spellings_of_the_config_root_are_a_read(tmp_path, func):
+    source = f"from core.config.paths import {func}\ndef test_x():\n    {func}()\n"
+    assert _kinds(_run(tmp_path, source)) == ["config-root-read"], func
+
+
+@pytest.mark.parametrize(
+    "setup",
+    [
+        "monkeypatch.setitem(os.environ, 'HOME', str(tmp_path))",
+        "os.environ.update(HOME=str(tmp_path))",
+        "patch.dict(os.environ, HOME=str(tmp_path))",
+        "patch.object(Path, 'home', return_value=tmp_path)",
+        "monkeypatch.setattr(os.path, 'expanduser', lambda p: p)",
+        "monkeypatch.setenv('USERPROFILE', str(tmp_path))",
+    ],
+    ids=["setitem", "update", "patch.dict", "patch.object", "setattr-expanduser", "setenv"],
+)
+def test_each_way_of_redirecting_the_home_is_recognised(tmp_path, setup):
+    """Each of these is the only redirect evidence in its test (no dict literal, no subscript
+    assignment), so the call name alone has to be recognised."""
+    source = (
+        "import os\nfrom pathlib import Path\nfrom unittest.mock import patch\n"
+        "def test_x(monkeypatch, tmp_path):\n"
+        f"    {setup}\n"
+        "    Path.home()\n    os.path.expanduser('x')\n"
+    )
+    assert _run(tmp_path, source)["status"] == "pass", setup
+
+
+def test_assigning_claude_config_dir_into_an_env_mapping_redirects_a_config_root_read(tmp_path):
+    source = (
+        "from core.config.paths import claude_config_root\n"
+        "def test_x(tmp_path):\n"
+        "    env = {}\n"
+        "    env['CLAUDE_CONFIG_DIR'] = str(tmp_path)\n"
+        "    claude_config_root()\n"
+    )
+    assert _run(tmp_path, source)["status"] == "pass"
+
+
+def test_a_fixture_that_is_not_autouse_does_not_redirect_a_test_that_never_asks_for_it(tmp_path):
+    for decorator in ("pytest.fixture(autouse=False)", "pytest.fixture", "pytest.fixture()"):
+        source = (
+            "import pytest\nfrom pathlib import Path\n"
+            f"@{decorator}\n"
+            "def _home(monkeypatch, tmp_path):\n"
+            "    monkeypatch.setattr(Path, 'home', classmethod(lambda cls: tmp_path))\n"
+            "def test_x():\n    Path.home()\n"
+        )
+        assert _kinds(_run(tmp_path, source)) == ["home-read"], decorator
+
+
+def test_a_decorator_that_merely_says_autouse_is_not_an_autouse_fixture(tmp_path):
+    source = (
+        "import pytest\nfrom pathlib import Path\n"
+        "@some.other(autouse=True)\n"
+        "def _home(monkeypatch, tmp_path):\n"
+        "    monkeypatch.setattr(Path, 'home', classmethod(lambda cls: tmp_path))\n"
+        "def test_x():\n    Path.home()\n"
+    )
+    assert _kinds(_run(tmp_path, source)) == ["home-read"]
+
+
+def test_a_home_redirect_does_not_excuse_a_git_read_of_the_checkout(tmp_path):
+    """Sibling reads were pinned; the git read has the same exemption rule and was not."""
+    source = (
+        "import subprocess\n"
+        "def test_x(isolated_home):\n"
+        "    subprocess.run(['git', 'log', '-1'])\n"
+    )
+    assert _kinds(_run(tmp_path, source)) == ["git-checkout"]
+
+
+def test_a_module_level_usefixtures_mark_redirects_every_test_in_the_module(tmp_path):
+    source = (
+        "import pytest\nfrom pathlib import Path\n"
+        "pytestmark = pytest.mark.usefixtures('isolated_home')\n"
+        "def test_x():\n    Path.home()\n"
+        "def test_y():\n    Path.home()\n"
+    )
+    assert _run(tmp_path, source)["status"] == "pass"
+
+
+def test_a_module_level_mark_that_redirects_nothing_excuses_nothing(tmp_path):
+    source = (
+        "import pytest\nfrom pathlib import Path\n"
+        "pytestmark = pytest.mark.slow\n"
+        "def test_x():\n    Path.home()\n"
+    )
+    assert _kinds(_run(tmp_path, source)) == ["home-read"]
 
 
 @pytest.mark.parametrize("case", sorted(_REDIRECTED))
