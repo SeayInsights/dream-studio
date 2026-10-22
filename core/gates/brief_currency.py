@@ -105,16 +105,18 @@ def brief_currency(project_id: str, *, conn: Any, db_path: Path | None = None) -
         "reason": None,
     }
     try:
+        # The NEWEST brief by created_at is "the" brief -- the same one `ds design-brief
+        # show`, the work-order start context and the project state read. An older locked
+        # brief behind a newer draft is not current: the gate and `show` used to disagree.
         row = conn.execute(
-            "SELECT brief_id, updated_at, created_at FROM business_design_briefs"
-            " WHERE project_id = ? AND status = 'locked'"
-            " ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 1",
+            "SELECT brief_id, updated_at, created_at, status FROM business_design_briefs"
+            " WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
             (project_id,),
         ).fetchone()
     except Exception as exc:  # noqa: BLE001 - unreadable bookkeeping must not block a close
         result["reason"] = f"brief currency undetermined: {type(exc).__name__}"
         return result
-    if row is None:
+    if row is None or row[3] != "locked":
         # Existence is the other half of the gate and is checked there; nothing to
         # judge the currency of.
         result["reason"] = "no locked brief for this project"

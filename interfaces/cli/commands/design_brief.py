@@ -170,7 +170,10 @@ def _design_brief_create(
     if not result.get("ok"):
         print(json.dumps(result))
         return 1
-    print(f"Draft brief created: {result['brief_id']}")
+    if result.get("created") is False:
+        print(f"Draft brief already exists: {result['brief_id']}")
+    else:
+        print(f"Draft brief created: {result['brief_id']}")
     print(f"Next: {result['next_step']}")
     return 0
 
@@ -188,7 +191,7 @@ def _design_brief_lock(*, brief_id: str, source_root: Path, dream_studio_home: P
     if not result.get("ok"):
         print(json.dumps(result))
         return 1
-    print(f"Brief {brief_id} locked.")
+    print(result.get("message") or f"Brief {brief_id} locked.")
     return 0
 
 

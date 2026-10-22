@@ -12,9 +12,13 @@ Fix 3 removes the 40-120s filesystem walk from the popup load path.
 
 from __future__ import annotations
 
+import ast
 import inspect
 import json
+import re
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).parents[2]
 
@@ -45,43 +49,41 @@ class TestFix1UnblockWorkOrder:
 # ── Fix 2: Design brief mutations emit canonical events ───────────────────
 
 
+_BRIEF_DML = re.compile(
+    r"(INSERT\s+(OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+business_design_briefs",
+    re.IGNORECASE,
+)
+
+
+def direct_brief_writes(source: str) -> list[str]:
+    """Every string literal in ``source`` that is INSERT/UPDATE/DELETE against
+    business_design_briefs.
+
+    Whole module, every literal (plain, implicitly concatenated, the constant parts of an
+    f-string, a SQL held in a variable first): the old guard sliced the public functions'
+    text, so a direct UPDATE added to a helper passed it.
+    """
+    found: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if _BRIEF_DML.search(node.value):
+                found.append(node.value)
+        elif isinstance(node, ast.JoinedStr):
+            text = "".join(
+                v.value
+                for v in node.values
+                if isinstance(v, ast.Constant) and isinstance(v.value, str)
+            )
+            if _BRIEF_DML.search(text):
+                found.append(text)
+    return found
+
+
 class TestFix2DesignBriefEmits:
-    def _get_design_brief_source(self):
-        return (REPO_ROOT / "core/design_briefs/mutations.py").read_text(encoding="utf-8")
-
-    def test_create_design_brief_emits_event(self):
-        """create_design_brief() must emit design_brief.created."""
-        source = self._get_design_brief_source()
-        fn_start = source.find("def create_design_brief(")
-        fn_end = source.find("\ndef ", fn_start + 1)
-        fn_body = source[fn_start:fn_end]
-        assert (
-            "design_brief.created" in fn_body
-        ), "create_design_brief() must emit design_brief.created event"
-
-    def test_lock_design_brief_emits_event(self):
-        """lock_design_brief() must emit design_brief.locked."""
-        source = self._get_design_brief_source()
-        fn_start = source.find("def lock_design_brief(")
-        fn_end = source.find("\ndef ", fn_start + 1)
-        fn_body = source[fn_start:fn_end]
-        assert (
-            "design_brief.locked" in fn_body
-        ), "lock_design_brief() must emit design_brief.locked event"
-
-    def test_update_design_brief_field_emits_event_with_field_and_value(self):
-        """update_design_brief_field() must emit event carrying field name + value."""
-        source = self._get_design_brief_source()
-        fn_start = source.find("def update_design_brief_field(")
-        fn_end = source.find("\ndef ", fn_start + 1)
-        fn_body = source[fn_start:fn_end]
-        assert (
-            "design_brief.updated" in fn_body
-        ), "update_design_brief_field() must emit design_brief.updated event"
-        # Event payload must carry field name — W16 requirement
-        assert (
-            '"field"' in fn_body or "'field'" in fn_body
-        ), "Event payload must include 'field' key for W16 dynamic-field compliance"
+    """The mutations never write business_design_briefs themselves: DesignBriefProjection
+    is the sole writer. What each function emits, and that the effect lands, is asserted
+    by running them (tests/unit/test_design_brief_sync.py); this class holds the static
+    guards that cannot be a behaviour test."""
 
     def test_design_brief_events_in_registry(self):
         """All design_brief.* event types must be registered."""
@@ -94,50 +96,33 @@ class TestFix2DesignBriefEmits:
                 "config/event_type_registry_entries_business.py"
             )
 
-    def test_lock_design_brief_no_direct_update(self):
-        """lock_design_brief() must not do direct UPDATE — projection handles it."""
-        source = self._get_design_brief_source()
-        fn_start = source.find("def lock_design_brief(")
-        fn_end = source.find("\ndef ", fn_start + 1)
-        fn_body = source[fn_start:fn_end]
-        # No direct SQL UPDATE after migration — projection is the writer
-        assert "UPDATE business_design_briefs" not in fn_body, (
-            "lock_design_brief() must not directly UPDATE business_design_briefs. "
-            "DesignBriefProjection applies the state change from the canonical event."
+    def test_the_mutations_module_has_no_direct_write_anywhere(self):
+        source = (REPO_ROOT / "core/design_briefs/mutations.py").read_text(encoding="utf-8")
+        assert direct_brief_writes(source) == [], (
+            "core/design_briefs/mutations.py must not INSERT/UPDATE/DELETE "
+            "business_design_briefs anywhere: DesignBriefProjection applies every change "
+            "from the canonical event."
         )
 
-    def test_create_design_brief_no_direct_insert(self):
-        """create_design_brief() must not do direct INSERT — projection handles it."""
-        source = self._get_design_brief_source()
-        fn_start = source.find("def create_design_brief(")
-        fn_end = source.find("\ndef ", fn_start + 1)
-        fn_body = source[fn_start:fn_end]
-        assert "INSERT INTO business_design_briefs" not in fn_body, (
-            "create_design_brief() must not directly INSERT into business_design_briefs. "
-            "DesignBriefProjection applies the row from the design_brief.created event."
-        )
+    @pytest.mark.parametrize(
+        "snippet",
+        [
+            'conn.execute("UPDATE business_design_briefs SET status = 1")',
+            'conn.execute("insert into business_design_briefs (a) values (1)")',
+            'conn.execute("INSERT OR IGNORE INTO business_design_briefs (a) VALUES (1)")',
+            'conn.execute("DELETE FROM business_design_briefs")',
+            'conn.execute("UPDATE business_design_briefs " "SET status = 1")',
+            'sql = "UPDATE business_design_briefs SET x = 1"; conn.execute(sql)',
+            'conn.execute(f"UPDATE business_design_briefs SET {field} = ?")',
+            "def helper(conn):\n    conn.execute('UPDATE business_design_briefs SET x = 1')",
+        ],
+    )
+    def test_the_guard_sees_a_direct_write_wherever_it_hides(self, snippet):
+        assert direct_brief_writes(snippet), snippet
 
-    def test_update_design_brief_field_no_direct_update(self):
-        """update_design_brief_field() must not do direct UPDATE — projection handles it."""
-        source = self._get_design_brief_source()
-        fn_start = source.find("def update_design_brief_field(")
-        fn_end = source.find("\ndef ", fn_start + 1)
-        fn_body = source[fn_start:fn_end]
-        assert "UPDATE business_design_briefs" not in fn_body, (
-            "update_design_brief_field() must not directly UPDATE business_design_briefs. "
-            "DesignBriefProjection applies the field change from the design_brief.updated event."
-        )
-
-    def test_set_design_system_no_direct_update(self):
-        """set_design_system() must not do direct UPDATE — projection handles it."""
-        source = self._get_design_brief_source()
-        fn_start = source.find("def set_design_system(")
-        fn_end = source.find("\ndef ", fn_start + 1)
-        fn_body = source[fn_start:fn_end]
-        assert "UPDATE business_design_briefs" not in fn_body, (
-            "set_design_system() must not directly UPDATE business_design_briefs. "
-            "DesignBriefProjection applies the update from the design_brief.updated event."
-        )
+    def test_the_guard_ignores_reads(self):
+        read = 'conn.execute("SELECT status FROM business_design_briefs WHERE brief_id = ?")'
+        assert direct_brief_writes(read) == []
 
 
 # ── Fix 3: _repo_stack_evidence not on critical path ─────────────────────

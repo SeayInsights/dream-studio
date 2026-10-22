@@ -266,10 +266,14 @@ def run_gate_check(
 
     if gate_name == "design_brief_locked":
         try:
+            # The newest brief is the one that counts (as in `ds design-brief show`): an
+            # older locked brief behind a newer draft does not satisfy the gate.
             row = conn.execute(
-                "SELECT 1 FROM business_design_briefs"
-                " WHERE project_id = ? AND status = 'locked' LIMIT 1",
-                (project_id,),
+                "SELECT 1 FROM business_design_briefs WHERE project_id = ?"
+                " AND brief_id = (SELECT brief_id FROM business_design_briefs"
+                "   WHERE project_id = ? ORDER BY created_at DESC LIMIT 1)"
+                " AND status = 'locked'",
+                (project_id, project_id),
             ).fetchone()
         except sqlite3.OperationalError:
             try:

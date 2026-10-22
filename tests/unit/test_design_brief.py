@@ -23,9 +23,19 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
-def db_home(tmp_path):
+def db_home(tmp_path, monkeypatch):
+    # The mutations emit an event and project it in-process, and both read the home from
+    # the environment (the CLI's --home sets it; a direct call does not), so this home
+    # must BE the environment's home. Without it a call for this home wrote into the
+    # test session's spool and database, and the mutations now refuse that.
+    from core.config.database import DatabaseRuntime
+
     db_path = tmp_path / "state" / "studio.db"
     db_path.parent.mkdir(parents=True)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path))
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
+    DatabaseRuntime.reset_instance()
     bootstrap_database(db_path)
     conn = sqlite3.connect(str(db_path))
     try:
@@ -44,7 +54,8 @@ def db_home(tmp_path):
         conn.commit()
     finally:
         conn.close()
-    return tmp_path
+    yield tmp_path
+    DatabaseRuntime.reset_instance()
 
 
 def _db_path(db_home: Path) -> Path:
@@ -106,8 +117,7 @@ def test_design_brief_create_inserts_draft_row(db_home, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert "Draft brief created:" in out
-    # Row is applied by DesignBriefProjection from the design_brief.created event,
-    # not synchronously — no direct DB check here (emit-only contract).
+    # The row itself is asserted end to end in test_design_brief_sync.py.
 
 
 # ── 2b. A2.5: direct-call create_design_brief returns a structured dict ──────
@@ -132,29 +142,9 @@ def test_create_design_brief_returns_dict_with_draft_status(db_home):
     assert "website:discover" in result["next_step"]
 
 
-def test_create_design_brief_does_not_write_row_synchronously(db_home):
-    """create_design_brief() emits design_brief.created; the row is absent until
-    DesignBriefProjection applies the event (emit-only contract)."""
-    from core.design_briefs.mutations import create_design_brief
-
-    result = create_design_brief(
-        project_id=PROJECT_ID,
-        source_root=REPO_ROOT,
-        dream_studio_home=db_home,
-    )
-    assert result["ok"] is True
-    conn = sqlite3.connect(str(_db_path(db_home)))
-    try:
-        row = conn.execute(
-            "SELECT brief_id FROM business_design_briefs WHERE project_id = ?",
-            (PROJECT_ID,),
-        ).fetchone()
-    finally:
-        conn.close()
-    assert row is None, "business_design_briefs row must not be written synchronously"
-
-
-def test_create_design_brief_each_call_produces_distinct_brief_id(db_home):
+def test_create_design_brief_twice_returns_the_existing_draft(db_home):
+    """Two drafts make "the" brief ambiguous (show, the start context and the close gate all
+    mean the newest), so a second create hands back the draft that exists."""
     from core.design_briefs.mutations import create_design_brief
 
     r1 = create_design_brief(
@@ -163,7 +153,17 @@ def test_create_design_brief_each_call_produces_distinct_brief_id(db_home):
     r2 = create_design_brief(
         project_id=PROJECT_ID, source_root=REPO_ROOT, dream_studio_home=db_home
     )
-    assert r1["brief_id"] != r2["brief_id"]
+    assert r1["created"] is True
+    assert r2["ok"] is True and r2["created"] is False
+    assert r2["brief_id"] == r1["brief_id"]
+    conn = sqlite3.connect(str(_db_path(db_home)))
+    try:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM business_design_briefs WHERE project_id = ?", (PROJECT_ID,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert count == 1
 
 
 # ── 3. ds design-brief show prints brief fields ───────────────────────────────
