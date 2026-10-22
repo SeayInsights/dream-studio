@@ -2391,3 +2391,48 @@ def test_a_test_inherited_from_an_imported_base_is_collected_when_imported_tests
     )
     assert _why(root, "test_a.py::TestA::test_b") is None
     assert "collect_imported_tests" in (_why(root, "test_a.py::TestBaseX::test_b") or "")
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "import unittest.case\n\n\nclass TestU(unittest.case.TestCase):",
+        "from unittest.case import TestCase as TC\n\n\nclass TestU(TC):",
+        "import unittest\n\n\nclass TestU(unittest.TestCase):",
+        "from unittest import IsolatedAsyncioTestCase\n\n\nclass TestU(IsolatedAsyncioTestCase):",
+    ],
+)
+def test_every_spelling_of_a_unittest_case_is_a_unittest_class_not_a_constructor_class(
+    tmp_path, header
+):
+    """unittest.case.TestCase has an __init__, and pytest collects it anyway (through unittest)."""
+    body = (
+        header + "\n    def test_a(self):\n        pass\n\n    def check_a(self):\n        pass\n"
+    )
+    root = _tree(tmp_path, {"test_a.py": body})
+    assert _why(root, "test_a.py::TestU::test_a") is None
+    assert "does not start with `test`" in (_why(root, "test_a.py::TestU::check_a") or "")
+    assert _why(root, "test_a.py::TestU") is None
+
+
+def test_a_module_file_cannot_hold_a_submodule(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "lib.py": "x = 1\n",
+            "test_a.py": "import lib.sub\n\n\ndef test_x():\n    pass\n",
+            "test_b.py": "import lib\n\n\ndef test_x():\n    pass\n",
+        },
+    )
+    assert "is a module, not a package" in (_why(root, "test_a.py::test_x") or "")
+    assert _why(root, "test_b.py::test_x") is None
+
+
+def test_a_test_file_reached_by_two_spellings_is_one_module_not_a_name_clash(tmp_path):
+    from tests.unit.test_pytest_collection_rules import _link
+
+    root = _tree(tmp_path, {"tests/real/test_a.py": "def test_x():\n    pass\n"})
+    if not _link(root / "tests" / "alias", root / "tests" / "real"):
+        pytest.skip("this platform will not make a directory link here")
+    assert _why(root, "tests/alias/test_a.py::test_x") is None
+    assert _why(root, "tests/real/test_a.py::test_x") is None

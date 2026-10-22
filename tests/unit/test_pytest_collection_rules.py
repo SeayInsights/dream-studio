@@ -636,6 +636,10 @@ def test_a_native_toml_bool_is_read(tmp_path):
     [
         ("-mslow", "-m"),
         ("-kfoo", "-k"),
+        ("--lf", "--lf"),
+        ("--last-failed", "--last-failed"),
+        ("--sw", "--sw"),
+        ("--stepwise", "--stepwise"),
         ("--rootdir=sub", "--rootdir"),
         ("--rootdir sub", "--rootdir"),
         ("-pplugin_x", "-p"),

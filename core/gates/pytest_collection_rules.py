@@ -107,7 +107,19 @@ _PLUGIN_REGISTRATION = frozenset({"register", "import_plugin", "consider_module"
 #: `addopts` options that change what is collected in a way that cannot be evaluated from
 #: source. Each takes a value except those in _FLAG_ONLY.
 _UNMODELLED_OPTIONS = frozenset(
-    {"-k", "-m", "--noconftest", "--confcutdir", "--pyargs", "--import-mode", "--rootdir"}
+    {
+        "-k",
+        "-m",
+        "--noconftest",
+        "--confcutdir",
+        "--pyargs",
+        "--import-mode",
+        "--rootdir",
+        "--lf",
+        "--last-failed",
+        "--sw",
+        "--stepwise",
+    }
 )
 _FLAG_ONLY = frozenset({"--noconftest", "--pyargs"})
 

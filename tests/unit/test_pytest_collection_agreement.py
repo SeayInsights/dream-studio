@@ -305,3 +305,56 @@ def test_the_known_limits_of_the_resolver_are_still_limits(tmp_path):
     assert not stale, "\n".join(stale)
     kinds = {kind for kind, _, _ in _KNOWN_LIMITS.values()}
     assert kinds == {"accept", "refuse"}
+
+
+#: Limits that need a configuration or a conftest of their own, so they cannot share the tree
+#: above: a conftest that cannot be imported aborts pytest's whole session, and doctest items
+#: exist only under `--doctest-modules`.
+_ISOLATED_LIMITS = {
+    "a conftest that imports a module missing from the environment": (
+        "accept",
+        {
+            "pytest.ini": "[pytest]\n",
+            "tests/conftest.py": "import not_installed_zzz\n",
+            "tests/test_a.py": "def test_ok():\n    pass\n",
+        },
+        "tests/test_a.py::test_ok",
+    ),
+    "a doctest item collected under --doctest-modules": (
+        "refuse",
+        {
+            "pytest.ini": "[pytest]\naddopts = --doctest-modules\n",
+            "tests/lib.py": 'def f():\n    """\n    >>> 1\n    1\n    """\n',
+            "tests/test_a.py": "def test_ok():\n    pass\n",
+        },
+        "tests/lib.py::lib.f",
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_ISOLATED_LIMITS))
+def test_the_limits_that_need_their_own_configuration_are_still_limits(tmp_path, name):
+    kind, files, node = _ISOLATED_LIMITS[name]
+    root = _tree(tmp_path, files)
+    env = {k: v for k, v in os.environ.items() if k != "PYTEST_ADDOPTS"}
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"]
+        + ["--rootdir", str(root), "-c", str(root / "pytest.ini")],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=120,
+        env=env,
+    )
+    collected = {
+        line.strip()
+        for line in result.stdout.splitlines()
+        if "::" in line and not line.startswith((" ", "="))
+    }
+    pytest_collects = node in collected
+    resolver_accepts = NodeResolver(root).resolve(node) is None
+    if kind == "accept":
+        assert resolver_accepts and not pytest_collects, (result.stdout, result.stderr)
+    else:
+        assert pytest_collects and not resolver_accepts, (result.stdout, result.stderr)

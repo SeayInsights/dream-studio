@@ -102,6 +102,11 @@ this list is corrected rather than left to rot:
     environment or from a namespace directory, a NameError other than an undefined base class,
     a circular import, an `assert` on a condition that cannot be decided, `pytest.importorskip`
     of a missing module, a conditional or function-called `pytest.skip(allow_module_level=True)`;
+  * a conftest that imports a module missing from the environment (pytest aborts the session);
+  * a NameError in a def's default argument, decorator or annotation, or in a class keyword or
+    a call used as a base; a base an outside star import was meant to supply; an import of a name
+    a module defines only under a run-time condition;
+  * a metaclass that changes how the class is called;
   * a generator test function (pytest fails the file);
   * a class or function decorator that replaces the object (one that returns `None` or an int)
     or adds an `__init__` (attrs and its kin);
@@ -121,8 +126,10 @@ THE KNOWN FALSE REFUSALS: pytest collects it and the resolver says no.
   * a base made by a call (`class T(make_base())`) or splatted (`class T(*bases)`) that
     supplies the test; a class built by a factory function; a `def` created through `global`; a
     test made with `setattr`; a test assigned by tuple unpacking; `unittest.TestCase.runTest`;
-  * a star import that overrides a base class defined above it, and a base class defined in each
-    arm of an `if` only the run can decide (the resolver takes the last).
+  * a star import that overrides a base class defined above it, a base class defined in each arm
+    of an `if` only the run can decide (the resolver takes the last), a star import whose
+    `__all__` is computed, a test made by writing into `globals()`, a class made by `type()`, a
+    tuple of tests made by a comprehension, and the doctest items `--doctest-modules` adds.
 
 REFUSED CONFIGURATION. `-k`, `-m`, `--noconftest`, `--confcutdir`, `--pyargs`, `--import-mode`,
 `--rootdir` and `-p <plugin>` in `addopts` change collection in ways that need marks, imports or
@@ -849,7 +856,11 @@ def _stdlib_traits(module: str, name: str) -> dict[str, Any]:
         return _NO_TRAITS
     if not isinstance(found, type):
         return _NO_TRAITS
+    import unittest
+
     return {
+        # pytest collects a unittest.TestCase subclass through unittest, not by its constructor
+        "unittest": issubclass(found, unittest.TestCase),
         "constructs": found.__init__ is not object.__init__ or found.__new__ is not object.__new__,
         "unhashable": found.__hash__ is None,
         "abstract": frozenset(getattr(found, "__abstractmethods__", ())),
@@ -1213,6 +1224,8 @@ class NodeResolver:
                 traits = (
                     _stdlib_traits(target[0], target[2]) if target and not target[1] else _NO_TRAITS
                 )
+                if traits and traits["unittest"]:
+                    return "unittest", target[2]  # type: ignore[index]
                 if traits:
                     return "external", (text, why, traits)
                 return "unresolved", f"{text} ({why})"
@@ -1241,6 +1254,8 @@ class NodeResolver:
                     if std is not None:
                         return self._stdlib_kind(std, parts[-1], text)
                     traits = _stdlib_traits(dotted, parts[-1])
+                    if traits and traits["unittest"]:
+                        return "unittest", parts[-1]
                     if traits:
                         return "external", (text, "outside the repository", traits)
                 found, why = self._resolve_attribute(root, parts, mod)
@@ -1328,7 +1343,9 @@ class NodeResolver:
                     if inner.constructor and not info.constructor:
                         info.constructor = f"{inner.constructor} on its base `{ast.unparse(expr)}`"
                 elif kind == "unittest":
-                    chain = list(_UNITTEST_BASES[payload])
+                    chain = list(
+                        _UNITTEST_BASES.get(payload, (f"unittest.{payload}", "unittest.TestCase"))
+                    )
                     sequences.append(chain)
                     direct.append(chain[0])
                     info.unittest = True
@@ -1545,6 +1562,13 @@ class NodeResolver:
             if level == 0:
                 current = base / parts[0]
                 if not (current / "__init__.py").is_file():
+                    if (
+                        len(parts) > 1
+                        and (base / f"{parts[0]}.py").is_file()
+                        and not current.is_dir()
+                    ):
+                        module_file = self._rel(base / f"{parts[0]}.py")
+                        missing = f"`{module_file}` is a module, not a package"
                     continue
                 chain = parts[1:]
             else:
@@ -1700,7 +1724,12 @@ class NodeResolver:
         for other in files:
             if other == path:
                 return None
-            if other.name == path.name and not (other.parent / "__init__.py").is_file():
+            if (
+                other.name == path.name
+                and not (other.parent / "__init__.py").is_file()
+                and other.resolve()
+                != path.resolve()  # the same file by two spellings is one module
+            ):
                 return (
                     f"`{path.name}` is also `{self._rel(other)}`, which pytest imports first as "
                     "the same top-level module, so this one fails with an import file mismatch "

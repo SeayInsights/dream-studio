@@ -1144,6 +1144,7 @@ import io
 import logging
 import pathlib
 import threading
+import unittest.case
 from collections import namedtuple
 from unittest import mock
 
@@ -1298,6 +1299,11 @@ def helper_decorated_istest():
     pass
 
 
+class TestUnitCase(unittest.case.TestCase):
+    def test_a(self):
+        pass
+
+
 class TestStatic:
     test_s = staticmethod(lambda: None)
     test_c = classmethod(lambda cls: None)
@@ -1340,6 +1346,7 @@ _VERIFIER2_CANDIDATES = [
     "test_decorated_nottest",
     "TestDecoratedNottest::test_a",
     "helper_decorated_istest",
+    "TestUnitCase::test_a",
     "TestStatic::test_s",
     "TestStatic::test_c",
     "test_while_true",
@@ -1897,6 +1904,91 @@ _KNOWN_LIMITS.update(
                 )
             },
             "tests/test_lim_arms.py::TestA::test_a",
+        ),
+    }
+)
+
+# Found by replaying the reviewer's harness against pytest: more names a run-time condition or a
+# NameError decides, an outside star import, a metaclass, and names made by code the resolver does
+# not run.
+_KNOWN_LIMITS.update(
+    {
+        "an import of a name a module defines only under a run-time condition": (
+            "accept",
+            {
+                "tests/lim_cond.py": "import os\n\nif os.name == 'zzz':\n    nothere = 1\n",
+                "tests/test_lim_cond.py": "from lim_cond import nothere\n\n\ndef test_x():\n    pass\n",
+            },
+            "tests/test_lim_cond.py::test_x",
+        ),
+        "a NameError in a default argument": (
+            "accept",
+            {"tests/test_lim_default.py": "def test_x(a=undefined_name):\n    pass\n"},
+            "tests/test_lim_default.py::test_x",
+        ),
+        "a NameError in a decorator or annotation": (
+            "accept",
+            {"tests/test_lim_deco.py": ("@undefined_decorator\ndef test_x():\n    pass\n")},
+            "tests/test_lim_deco.py::test_x",
+        ),
+        "a NameError in a class keyword": (
+            "accept",
+            {
+                "tests/test_lim_kw.py": (
+                    "class TestA(metaclass=Undefined):\n    def test_a(self):\n        pass\n"
+                )
+            },
+            "tests/test_lim_kw.py::TestA::test_a",
+        ),
+        "a base that an outside star import was meant to supply": (
+            "accept",
+            {
+                "tests/test_lim_outer.py": (
+                    "from os.path import *\n\n\nclass TestA(Unknown):\n"
+                    "    def test_a(self):\n        pass\n"
+                )
+            },
+            "tests/test_lim_outer.py::TestA::test_a",
+        ),
+        "a metaclass that changes how the class is called": (
+            "accept",
+            {
+                "tests/test_lim_meta.py": (
+                    "class M(type):\n    def __call__(cls):\n        return 1\n\n\n"
+                    "class TestA(metaclass=M):\n    def test_a(self):\n        pass\n"
+                )
+            },
+            "tests/test_lim_meta.py::TestA::test_a",
+        ),
+        "a star import whose __all__ is computed": (
+            "refuse",
+            {
+                "tests/lim_allc.py": (
+                    "names = ['test_lib']\n__all__ = [n for n in names]\n\n\n"
+                    "def test_lib():\n    pass\n"
+                ),
+                "tests/test_lim_allc.py": "from lim_allc import *\n",
+            },
+            "tests/test_lim_allc.py::test_lib",
+        ),
+        "a test made by writing into globals()": (
+            "refuse",
+            {"tests/test_lim_globals.py": "globals()['test_g'] = lambda: None\n"},
+            "tests/test_lim_globals.py::test_g",
+        ),
+        "a class made by type()": (
+            "refuse",
+            {
+                "tests/test_lim_type.py": (
+                    "TestT = type('TestT', (), {'test_a': lambda self: None})\n"
+                )
+            },
+            "tests/test_lim_type.py::TestT::test_a",
+        ),
+        "a tuple of tests made by a comprehension": (
+            "refuse",
+            {"tests/test_lim_comp.py": ("test_x, test_y = [lambda: None for _ in range(2)]\n")},
+            "tests/test_lim_comp.py::test_x",
         ),
     }
 )
