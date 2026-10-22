@@ -218,13 +218,23 @@ def test_eval_resume_contract(patched_paths, tmp_path: Path) -> None:
 # ── eval_brief ────────────────────────────────────────────────────────────────
 
 
-def test_eval_brief_contract(patched_paths, db_path: Path, tmp_path: Path) -> None:
+def test_eval_brief_contract(
+    patched_paths, db_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """brief: create → update_field → lock lifecycle produces correct DB state."""
+    from core.config.database import DatabaseRuntime
     from core.design_briefs.mutations import (
         create_design_brief,
         lock_design_brief,
         update_design_brief_field,
     )
+
+    # The real path: each call emits its event and projects it in-process, so the next call
+    # finds the row with nothing standing in for a daemon. That needs the process
+    # environment to name this home, as the CLI's --home does.
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
+    DatabaseRuntime.reset_instance()
 
     create_result = create_design_brief(
         project_id=PROJECT_ID,
@@ -234,16 +244,6 @@ def test_eval_brief_contract(patched_paths, db_path: Path, tmp_path: Path) -> No
     assert create_result["ok"] is True
     assert create_result["status"] == "draft"
     brief_id = create_result["brief_id"]
-
-    # create_design_brief is now emit-only; DesignBriefProjection writes the row.
-    # Simulate the daemon so DB-read functions (update/lock) can find the brief.
-    with sqlite3.connect(str(db_path)) as _conn:
-        _conn.execute(
-            "INSERT OR IGNORE INTO business_design_briefs"
-            " (brief_id, project_id, created_at, updated_at) VALUES (?, ?, ?, ?)",
-            (brief_id, PROJECT_ID, create_result["created_at"], create_result["created_at"]),
-        )
-        _conn.commit()
 
     update_result = update_design_brief_field(
         brief_id=brief_id,
@@ -264,9 +264,13 @@ def test_eval_brief_contract(patched_paths, db_path: Path, tmp_path: Path) -> No
     assert lock_result["ok"] is True
     assert lock_result["status"] == "locked"
 
-    # DB state updates (lock, field write) are now deferred to DesignBriefProjection.
-    # Return-value assertions above confirm the writer contract; projection behavior
-    # is covered by tests/unit/test_phase18_2_4_design_brief_projection.py.
+    with sqlite3.connect(str(db_path)) as conn:
+        row = conn.execute(
+            "SELECT status, purpose FROM business_design_briefs WHERE brief_id = ?",
+            (brief_id,),
+        ).fetchone()
+    DatabaseRuntime.reset_instance()
+    assert row == ("locked", "Track project progress")
 
 
 # ── eval_review ───────────────────────────────────────────────────────────────

@@ -395,12 +395,13 @@ def seed_gate_artifact_files(
                 if existing is None:
                     from core.design_briefs.mutations import create_design_brief
 
-                    create_design_brief(
+                    created = create_design_brief(
                         project_id=project_id,
                         source_root=source_root,
                         dream_studio_home=dream_studio_home,
                     )
-                    design_brief_seeded = True
+                    # Seeded means a brief was made, not that create was attempted.
+                    design_brief_seeded = bool(created.get("ok") and created.get("created", True))
         except Exception:
             pass
 

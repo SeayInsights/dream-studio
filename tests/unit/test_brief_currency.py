@@ -211,7 +211,7 @@ def test_a_brief_without_a_timestamp_fails_open(db):
             class _R:
                 @staticmethod
                 def fetchone():
-                    return ("brief-1", None, None)
+                    return ("brief-1", None, None, "locked")
 
             return _R()
 

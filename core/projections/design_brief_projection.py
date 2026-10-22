@@ -174,7 +174,7 @@ class DesignBriefProjection(Projection):
         conn.execute(
             f"UPDATE {_TABLE}"
             f" SET {field} = ?, updated_at = ?, last_event_id = ?"
-            f" WHERE brief_id = ?",
+            f" WHERE brief_id = ? AND status != 'locked'",
             (new_value, now, event_id, brief_id),
         )
         return 1
@@ -188,10 +188,13 @@ class DesignBriefProjection(Projection):
     ) -> int:
         # safe_upsert cannot be used: business_design_briefs.project_id is NOT NULL.
         # _ensure_skeleton guarantees the row exists before this runs.
+        # `AND status != 'locked'`: updated_at IS the lock time (there is no locked_at
+        # column) and brief_currency measures staleness from it, so a second lock event
+        # must not move it -- re-locking would make a stale brief current with no review.
         conn.execute(
             f"UPDATE {_TABLE}"
             " SET status = 'locked', updated_at = ?, last_event_id = ?"
-            " WHERE brief_id = ?",
+            " WHERE brief_id = ? AND status != 'locked'",
             (now, event_id, brief_id),
         )
         return 1

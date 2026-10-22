@@ -66,6 +66,21 @@ def spool_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
+@pytest.fixture
+def home_env(db_path: Path, spool_root: Path, monkeypatch: pytest.MonkeyPatch):
+    """The process environment names this test's home, as the CLI's --home does.
+
+    The design-brief mutations emit an event and project it in-process; both read the home
+    from the environment, so a test that wants a brief to actually exist needs this.
+    """
+    from core.config.database import DatabaseRuntime
+
+    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
+    DatabaseRuntime.reset_instance()
+    yield db_path
+    DatabaseRuntime.reset_instance()
+
+
 def _read_spool_events(spool_root: Path) -> list[dict]:
     events_dir = spool_root / "spool"
     if not events_dir.is_dir():
@@ -309,7 +324,7 @@ def test_seed_gate_artifacts_no_op_for_unrelated_specifier(tmp_path: Path) -> No
 
 
 def test_seed_gate_artifacts_website_discover_seeds_design_brief(
-    patched_paths, db_path: Path, tmp_path: Path, spool_root: Path
+    patched_paths, db_path: Path, tmp_path: Path, spool_root: Path, home_env: Path
 ) -> None:
     from core.skills.invocation import seed_gate_artifact_files
 
@@ -339,6 +354,55 @@ def test_seed_gate_artifacts_website_discover_seeds_design_brief(
     ]
     assert len(created) == 1, f"expected one design_brief.created event; got: {created}"
     assert created[0]["payload"]["project_id"] == PROJECT_ID
+    with sqlite3.connect(str(db_path)) as conn:
+        assert conn.execute(
+            "SELECT status FROM business_design_briefs WHERE project_id = ?", (PROJECT_ID,)
+        ).fetchall() == [("draft",)]
+
+
+def test_seed_gate_artifacts_reports_no_seed_when_create_fails(
+    patched_paths, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """design_brief_seeded means a brief was made: it used to be True whenever create was
+    CALLED, so a failed create was reported as a seeded brief."""
+    import core.design_briefs.mutations as mutations
+    from core.skills.invocation import seed_gate_artifact_files
+
+    monkeypatch.setattr(
+        mutations, "create_design_brief", lambda **_k: {"ok": False, "error": "boom"}
+    )
+    result = seed_gate_artifact_files(
+        specifier="website:discover",
+        target=None,
+        work_order_id=WO_ID,
+        milestone_id=None,
+        project_id=PROJECT_ID,
+        planning_root=tmp_path / ".planning",
+        source_root=REPO_ROOT,
+        dream_studio_home=tmp_path,
+    )
+    assert result["design_brief_seeded"] is False
+
+
+def test_seed_gate_artifacts_reports_no_seed_when_the_home_disagrees(
+    patched_paths, tmp_path: Path, spool_root: Path
+) -> None:
+    """The real refusal, end to end: this test's home is not the environment's home (no
+    home_env), so create refuses to write into the wrong spool and nothing is seeded."""
+    from core.skills.invocation import seed_gate_artifact_files
+
+    result = seed_gate_artifact_files(
+        specifier="website:discover",
+        target=None,
+        work_order_id=WO_ID,
+        milestone_id=None,
+        project_id=PROJECT_ID,
+        planning_root=tmp_path / ".planning",
+        source_root=REPO_ROOT,
+        dream_studio_home=tmp_path,
+    )
+    assert result["design_brief_seeded"] is False
+    assert not list((spool_root / "spool").glob("*.json")), "nothing may be emitted"
 
 
 def test_seed_gate_artifacts_website_discover_skips_when_brief_exists(
