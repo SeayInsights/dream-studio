@@ -154,8 +154,7 @@ def _broken_references(skills_root: Path) -> list[tuple[str, str, str]]:
 
 @pytest.fixture(scope="module")
 def broken() -> list[tuple[str, str, str]]:
-    if not SHIPPED_SKILLS.is_dir():
-        pytest.skip("no built plugin tree to inspect")
+    assert SHIPPED_SKILLS.is_dir(), "dist/plugin/skills is tracked and must exist in every checkout"
     return _broken_references(SHIPPED_SKILLS)
 
 

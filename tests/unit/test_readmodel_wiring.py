@@ -8,7 +8,6 @@ Verifies:
 
 from __future__ import annotations
 
-import os
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -303,7 +302,7 @@ def test_hooks_executions_route_reads_its_own_authoritys_store_not_ambient(
     # Ambient store, under a genuinely separate DREAM_STUDIO_HOME.
     ambient_home = tmp_path / "ambient-home"
     (ambient_home / "state").mkdir(parents=True)
-    os.environ["DREAM_STUDIO_HOME"] = str(ambient_home)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(ambient_home))
     ambient_conn = connect_analytics(
         ambient_home / "state" / "aggregate_metrics.db", read_only=False
     )
@@ -333,7 +332,6 @@ def test_hooks_executions_route_reads_its_own_authoritys_store_not_ambient(
         assert hook_names == {"own-authority-hook"}, hook_names
     finally:
         DatabaseRuntime.reset_instance()
-        os.environ.pop("DREAM_STUDIO_HOME", None)
 
 
 # ── T5: /api/v1/metrics/models reads its own authority's analytics store ───
@@ -361,7 +359,7 @@ def test_model_metrics_route_reads_its_own_authoritys_store_not_ambient(
     # Ambient store, under an isolated DREAM_STUDIO_HOME: an unrelated model.
     ambient_home = tmp_path / "ambient-home"
     (ambient_home / "state").mkdir(parents=True)
-    os.environ["DREAM_STUDIO_HOME"] = str(ambient_home)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(ambient_home))
     ambient_conn = connect_analytics(
         ambient_home / "state" / "aggregate_metrics.db", read_only=False
     )
@@ -402,7 +400,6 @@ def test_model_metrics_route_reads_its_own_authoritys_store_not_ambient(
         assert "claude-opus-4-8" not in data["by_model"], data["by_model"]
     finally:
         DatabaseRuntime.reset_instance()
-        os.environ.pop("DREAM_STUDIO_HOME", None)
 
 
 # ── T6: dashboard routes read their own authority's analytics store, not
@@ -442,7 +439,7 @@ def test_analytics_performance_route_reads_its_own_authoritys_store_not_ambient(
     # omitted) rows collapse to one.
     ambient_home = tmp_path / "ambient-home"
     (ambient_home / "state").mkdir(parents=True)
-    os.environ["DREAM_STUDIO_HOME"] = str(ambient_home)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(ambient_home))
     ambient_conn = connect_analytics(
         ambient_home / "state" / "aggregate_metrics.db", read_only=False
     )
@@ -487,7 +484,6 @@ def test_analytics_performance_route_reads_its_own_authoritys_store_not_ambient(
         assert data["session_flow"]["started"] == 3, data["session_flow"]
     finally:
         DatabaseRuntime.reset_instance()
-        os.environ.pop("DREAM_STUDIO_HOME", None)
 
 
 def test_work_rhythm_route_reads_its_own_authoritys_store_not_ambient(
@@ -519,7 +515,7 @@ def test_work_rhythm_route_reads_its_own_authoritys_store_not_ambient(
     # Ambient store, under a genuinely separate DREAM_STUDIO_HOME: 5 sessions.
     ambient_home = tmp_path / "ambient-home"
     (ambient_home / "state").mkdir(parents=True)
-    os.environ["DREAM_STUDIO_HOME"] = str(ambient_home)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(ambient_home))
     ambient_conn = connect_analytics(
         ambient_home / "state" / "aggregate_metrics.db", read_only=False
     )
@@ -557,7 +553,6 @@ def test_work_rhythm_route_reads_its_own_authoritys_store_not_ambient(
         assert data["busiest_day_count"] == 1, data
     finally:
         DatabaseRuntime.reset_instance()
-        os.environ.pop("DREAM_STUDIO_HOME", None)
 
 
 def test_system_controls_route_reads_its_own_authoritys_store_not_ambient(
@@ -592,7 +587,7 @@ def test_system_controls_route_reads_its_own_authoritys_store_not_ambient(
     # Ambient store: a hook that fails consistently (attention_needed material).
     ambient_home = tmp_path / "ambient-home"
     (ambient_home / "state").mkdir(parents=True)
-    os.environ["DREAM_STUDIO_HOME"] = str(ambient_home)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(ambient_home))
     ambient_conn = connect_analytics(
         ambient_home / "state" / "aggregate_metrics.db", read_only=False
     )
@@ -638,7 +633,6 @@ def test_system_controls_route_reads_its_own_authoritys_store_not_ambient(
         assert data["health"]["hook_success_rate"]["value"] == "100.0%", data["health"]
     finally:
         DatabaseRuntime.reset_instance()
-        os.environ.pop("DREAM_STUDIO_HOME", None)
 
 
 # ── T4: process_run_drilldowns reads from execution_events ─────────────────
@@ -688,7 +682,7 @@ def test_attribution_breakouts_route_reads_its_own_authoritys_store_not_ambient(
     # Ambient store, under a genuinely separate DREAM_STUDIO_HOME.
     ambient_home = tmp_path / "ambient-home"
     (ambient_home / "state").mkdir(parents=True)
-    os.environ["DREAM_STUDIO_HOME"] = str(ambient_home)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(ambient_home))
     ambient_conn = connect_analytics(
         ambient_home / "state" / "aggregate_metrics.db", read_only=False
     )
@@ -729,7 +723,6 @@ def test_attribution_breakouts_route_reads_its_own_authoritys_store_not_ambient(
         assert skill_ids == {"own-skill"}, skill_ids
     finally:
         DatabaseRuntime.reset_instance()
-        os.environ.pop("DREAM_STUDIO_HOME", None)
 
 
 def test_hooks_and_rhythm_routes_degrade_gracefully_when_no_analytics_store_exists(
@@ -752,6 +745,15 @@ def test_hooks_and_rhythm_routes_degrade_gracefully_when_no_analytics_store_exis
     db_path = own_dir / "studio.db"
     # No aggregate_metrics.db created here at all -- the missing-store case.
     assert not (own_dir / "aggregate_metrics.db").exists()
+
+    # The ambient Dream Studio home is empty too, stated here instead of inherited. A site
+    # that fell back to the ambient store would otherwise answer from whichever home the
+    # process happened to hold: a six-test leak elsewhere in this file used to unset
+    # DREAM_STUDIO_HOME for the rest of the session, which made this test read the
+    # operator's real ~/.dream-studio/state/aggregate_metrics.db in a large run.
+    empty_home = tmp_path / "ambient-empty-home"
+    (empty_home / "state").mkdir(parents=True)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(empty_home))
 
     client = _client_for_db(db_path, monkeypatch)
     try:

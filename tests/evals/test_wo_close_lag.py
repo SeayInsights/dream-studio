@@ -192,7 +192,12 @@ def test_milestone_close_flushes_projection(live_like_home):
         conn.close()
 
     # Milestone-close gate artifacts.
-    ms_dir = Path.cwd() / ".planning" / "milestones" / milestone_id
+    # In the test's own home, passed to close_milestone below. This used to be
+    # ``Path.cwd() / ".planning"`` -- the gate's default -- which wrote a milestone directory
+    # into whichever checkout ran the test (and `.planning` on disk is forbidden), and made the
+    # result depend on the directory pytest was started in.
+    planning_root = home / ".planning"
+    ms_dir = planning_root / "milestones" / milestone_id
     ms_dir.mkdir(parents=True, exist_ok=True)
     (ms_dir / "design-audit.md").write_text("Score: 4/5\nDesign audit: PASS", encoding="utf-8")
     (ms_dir / "security-audit.md").write_text("No critical findings. PASS", encoding="utf-8")
@@ -200,7 +205,12 @@ def test_milestone_close_flushes_projection(live_like_home):
 
     from core.milestones.close import close_milestone
 
-    result = close_milestone(milestone_id=milestone_id, source_root=home, dream_studio_home=home)
+    result = close_milestone(
+        milestone_id=milestone_id,
+        source_root=home,
+        dream_studio_home=home,
+        planning_root=planning_root,
+    )
     assert result["ok"] is True, f"close_milestone failed: {result}"
 
     assert _status(db, "business_milestones", "milestone_id", milestone_id) == "complete", (

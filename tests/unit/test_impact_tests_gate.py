@@ -17,6 +17,7 @@ needs three sources, not one:
 from __future__ import annotations
 
 import ast
+import os
 import re
 from pathlib import Path
 
@@ -311,6 +312,84 @@ def test_ci_no_longer_carries_a_second_list_of_tests_to_run():
             )
 
     assert any("impact_tests_gate.py" in str(s.get("run", "")) for s in steps)
+
+
+#: Stands in for pytest, receiving exactly what pytest would: it reports what it was handed and
+#: exits 7, so the exit code the gate returns can be checked too. Everything BEFORE it -- the
+#: temp file, the command line, the operating system's own limit on that command line -- is real.
+_PYTEST_STAND_IN = (
+    "import sys, json; arg = sys.argv[1]; "
+    "lines = open(arg[1:], encoding='utf-8').read().split(chr(10)) if arg.startswith('@') "
+    "else sys.argv[1:-1]; "
+    "sys.stdout.write(json.dumps({'n': len(lines), 'first': lines[0], 'last': lines[-1], "
+    "'tail': sys.argv[2:]})); sys.exit(7)"
+)
+
+
+def _run_with_stand_in(monkeypatch, tests):
+    import json
+    import subprocess
+
+    seen: dict = {}
+    real_run = subprocess.run
+
+    def run(cmd, *args, **kwargs):
+        assert cmd[1:3] == ["-m", "pytest"], cmd
+        stand_in = [cmd[0], "-c", _PYTEST_STAND_IN, *cmd[3:]]
+        seen["command_line_chars"] = sum(len(part) + 1 for part in stand_in)
+        done = real_run(stand_in, *args, capture_output=True, text=True, **kwargs)
+        seen["received"] = json.loads(done.stdout)
+        return done
+
+    monkeypatch.setattr(gate.subprocess, "run", run)
+    return gate.run_pytest(tests), seen
+
+
+def test_a_selection_of_two_thousand_long_paths_does_not_meet_the_os_argument_limit(monkeypatch):
+    """A change to tests/conftest.py makes every test an impact test: 769 paths were 33,123
+    characters and Windows refuses a command line over 32,767 (WinError 206) before pytest
+    starts. 2,000 paths of this length are ~250,000, over every operating system's limit for
+    one command, so passing them as arguments fails here whatever the platform."""
+    tests = [
+        f"tests/unit/{'sub' * 12}/test_{'a_long_module_name_' * 3}{i:05d}.py" for i in range(2000)
+    ]
+    assert sum(len(t) + 1 for t in tests) > 100_000
+
+    returncode, seen = _run_with_stand_in(monkeypatch, tests)
+
+    assert returncode == 7, "the gate must return pytest's own exit code"
+    assert seen["command_line_chars"] < 1_000, seen
+    assert seen["received"]["n"] == 2000
+    assert seen["received"]["first"] == tests[0] and seen["received"]["last"] == tests[-1]
+    assert seen["received"]["tail"] == ["-q"]
+
+
+def test_the_selection_file_is_removed_and_keeps_the_selection_order(monkeypatch):
+    import glob
+    import tempfile
+
+    before = set(glob.glob(str(Path(tempfile.gettempdir()) / "impact-tests-*.args")))
+    tests = ["tests/unit/test_z.py", "tests/unit/test_a.py", "tests/integration/test_m.py"]
+    _returncode, seen = _run_with_stand_in(monkeypatch, tests)
+    assert seen["received"]["n"] == 3 and seen["received"]["first"] == tests[0]
+    assert seen["received"]["last"] == tests[-1]
+    after = set(glob.glob(str(Path(tempfile.gettempdir()) / "impact-tests-*.args")))
+    assert after == before, "the gate left its argument file behind"
+
+
+def test_pytest_itself_reads_the_selection_from_the_file_and_the_exit_code_survives(tmp_path):
+    """The one thing the stand-in cannot prove: that pytest understands ``@file``."""
+    # Its own config makes tmp_path the rootdir. Without one, pytest (started from the
+    # repository) walks the directories between the two, up to the user's home, and a neighbour
+    # deleting something under %TEMP% in that moment fails the session with FileNotFoundError.
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+    passing = tmp_path / "test_passes.py"
+    passing.write_text("def test_p():\n    assert True\n", encoding="utf-8")
+    failing = tmp_path / "test_fails.py"
+    failing.write_text("def test_f():\n    assert False\n", encoding="utf-8")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")}
+    assert gate.run_pytest([str(passing)], env=env) == 0
+    assert gate.run_pytest([str(passing), str(failing)], env=env) == 1
 
 
 def test_the_job_budget_matches_the_work():

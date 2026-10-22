@@ -13,6 +13,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import core.config.paths as lp  # noqa: E402
 from core.config.paths import user_data_dir_writable, warn_version_mismatch  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def no_ambient_claude_identity(monkeypatch):
+    """The plugin cache these tests build lives under ``<home>/.claude``, which is where the
+    version check looks only when ``CLAUDE_CONFIG_DIR`` is unset. An operator running a second
+    Claude Code identity has it set in every shell, and the cache-mismatch test then looked in
+    that identity's directory and failed."""
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+
+
 # ── plugin_root: RuntimeError when no markers found (line 39) ─────────────
 
 

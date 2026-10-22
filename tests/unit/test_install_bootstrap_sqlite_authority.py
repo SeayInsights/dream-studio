@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 
@@ -16,7 +17,6 @@ from core.release.repo_publication_readiness import PRIVATE_CONTENT_RULES
 from core.telemetry.read_models import global_telemetry_summary
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LIVE_DB = Path.home() / ".dream-studio" / "state" / "studio.db"
 
 
 def _schema_version(db_path: Path) -> int:
@@ -67,7 +67,7 @@ def test_fresh_temp_home_runtime_bootstrap_creates_db_and_applies_latest(
         # (latest > released) to `ds migrate activate`. This equals latest only when no
         # migration is pending release; with one pending (e.g. 153) it is released.
         assert _schema_version(expected_db) == released_migration_version(expected_db)
-        assert expected_db != LIVE_DB
+        assert expected_db.is_relative_to(tmp_path)
     finally:
         DatabaseRuntime.reset_instance()
 
@@ -359,7 +359,7 @@ def test_studio_db_connect_and_read_models_use_injected_temp_db(tmp_path) -> Non
     assert summary["entity_counts"]["projects"] == 1
     assert summary["derived_view"] is True
     assert summary["primary_authority"] is False
-    assert db_path != LIVE_DB
+    assert db_path.is_relative_to(tmp_path)
 
 
 def test_migration_baseline_exists_in_repo_and_runtime_state_is_gitignored() -> None:
@@ -449,18 +449,56 @@ def test_the_two_home_path_guards_agree_on_one_placeholder() -> None:
     )
 
 
+#: Users that appear in test data as placeholders, never as a real home: the repository's
+#: own ``Example User`` convention, and the names used as sanitizer inputs.
+_PLACEHOLDER_USERS = {"example user", "example", "runner", "jane"}
+
+#: An absolute path to a user's authority database, on any platform, for any user. This used
+#: to be the literal ``str(Path.home() / ".dream-studio" / "state" / "studio.db")`` of the
+#: machine running the test, so it looked for one operator's path and could not see another's
+#: (or, on a CI runner, anyone's).
+_REAL_HOME_AUTHORITY = re.compile(
+    r"(?:[A-Za-z]:[\\/]+Users|/Users|/home)[\\/]+([^\\/\s\"']+)"
+    r"[\\/]+\.dream-studio[\\/]+state[\\/]+studio\.db"
+)
+
+
+def _users_named_in(text: str) -> set[str]:
+    return {m.group(1).lower() for m in _REAL_HOME_AUTHORITY.finditer(text)}
+
+
 def test_tests_do_not_target_live_local_db_for_validation_writes() -> None:
     test_root = REPO_ROOT / "tests"
-    live = str(LIVE_DB)
     # test_contract_atlas.py intentionally uses live-style paths as sanitizer
-    # test data (to verify the public export scrubber strips them). Exclude it.
-    SANITIZER_TEST_VECTORS = {"tests/unit/test_contract_atlas.py"}
+    # test data (to verify the public export scrubber strips them). Exclude it, and this
+    # file, which spells the paths it looks for.
+    exempt = {
+        "tests/unit/test_contract_atlas.py",
+        "tests/unit/test_install_bootstrap_sqlite_authority.py",
+    }
     offenders: list[str] = []
     for path in test_root.rglob("test_*.py"):
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        if rel in exempt:
+            continue
         text = path.read_text(encoding="utf-8", errors="ignore")
-        if live in text or "C:\\Users\\Example User\\.dream-studio\\state\\studio.db" in text:
-            rel = str(path.relative_to(REPO_ROOT))
-            if rel not in SANITIZER_TEST_VECTORS:
-                offenders.append(rel)
+        if _users_named_in(text) - _PLACEHOLDER_USERS:
+            offenders.append(rel)
 
     assert offenders == []
+
+
+def test_the_live_authority_scan_sees_any_users_path_and_no_placeholder() -> None:
+    """The control: the pattern must catch a real home on every platform, whoever it belongs
+    to, and ignore the placeholders -- or the scan above passes by matching nothing."""
+    backslashed = "C:" + chr(92) + "Users" + chr(92) + "{}" + chr(92) + ".dream-studio" + chr(92)
+    backslashed += "state" + chr(92) + "studio.db"
+    assert _users_named_in(backslashed.format("alice")) == {"alice"}
+    # Built in two pieces: the publication scan flags a literal drive-Users path in any tracked
+    # file, and this is a test of a detector for exactly that shape.
+    forward = "C:" + "/Users/alice/.dream-studio/state/studio.db"
+    assert _users_named_in(forward) == {"alice"}
+    assert _users_named_in("/home/bob/.dream-studio/state/studio.db") == {"bob"}
+    assert _users_named_in("/Users/carol/.dream-studio/state/studio.db") == {"carol"}
+    assert _users_named_in(backslashed.format("Example User")) <= _PLACEHOLDER_USERS
+    assert not _users_named_in("~/.dream-studio/state/studio.db")

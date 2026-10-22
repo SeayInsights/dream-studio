@@ -33,6 +33,13 @@ environment, `-k` / `-m` / `--noconftest` / `--confcutdir` / `--pyargs` / `--imp
 `-p <plugin>` in `addopts` (each changes collection in a way that needs evaluating marks or
 importing, so a repo that sets one gets a configuration error rather than a guess), and a
 `collect_ignore` assigned through `globals()` or `setattr`.
+
+ONE `-m` IS EVALUATED: `-m "not <mark>"`, the declarative way to keep a class of tests out of a
+default run (`install_check`: facts about one machine). `CollectionRules.deselected_marks` names
+the mark and the node resolver applies it to the marks it can see on a node (a decorator, an
+enclosing class, a module `pytestmark`, a same-module helper that applies the mark). Every other
+marker expression is still a configuration error, and so is a conftest hook that does the same
+job imperatively -- which is why the repo says it in addopts and not in `conftest.py`.
 """
 
 from __future__ import annotations
@@ -42,6 +49,7 @@ import configparser
 import fnmatch
 import glob
 import os
+import re
 import shlex
 import sys
 import tomllib
@@ -207,6 +215,15 @@ class _Addopts:
     ignore_glob: tuple[str, ...] = ()
     deselect: tuple[str, ...] = ()
     collect_in_virtualenv: bool = False
+    #: The mark a `-m "not <mark>"` in addopts keeps out of a default run. pytest takes the LAST
+    #: `-m`, so this is the last one read.
+    deselected_marks: tuple[str, ...] = ()
+
+
+#: The one marker expression the gate can evaluate: "not" and a single mark name. Anything
+#: richer (`and`, `or`, parentheses, a bare mark that SELECTS) needs the mark expression
+#: language and stays refused.
+_NOT_MARK = re.compile(r"not\s+([A-Za-z_][A-Za-z0-9_]*)")
 
 
 def _parse_addopts(tokens: tuple[str, ...], source: str) -> _Addopts:
@@ -233,6 +250,13 @@ def _parse_addopts(tokens: tuple[str, ...], source: str) -> _Addopts:
                 raise CollectionConfigError(f"addopts in {source} has `{token}` with no value")
         elif token == "--collect-in-virtualenv":
             parsed.collect_in_virtualenv = True
+        elif (
+            token == "-m"
+            and index + 1 < len(tokens)
+            and (excluded := _NOT_MARK.fullmatch(tokens[index + 1].strip()))
+        ):
+            parsed.deselected_marks = (excluded.group(1),)
+            index += 1
         elif name in _UNMODELLED_OPTIONS:
             raise refuse(name)
         elif not token.startswith("--") and token[:2] in ("-k", "-m") and len(token) > 2:
@@ -457,6 +481,7 @@ class CollectionRules:
         self.ignore_glob = addopts.ignore_glob
         self.deselect = addopts.deselect
         self.collect_in_virtualenv = addopts.collect_in_virtualenv
+        self.deselected_marks = addopts.deselected_marks
         self._conftests: dict[Path, _Conftest | None] = {}
         self._roots: list[Path] | None = None
 

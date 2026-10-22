@@ -640,15 +640,16 @@ class TestLocalFirst:
         assert not result.success
         assert result.signal_deferred
 
-    def test_variance_if_claude_available(self, compiler, full_conn):
-        """If claude is available, document variance. Acceptable tolerance < 0.2 (docs are subjective)."""
+    @pytest.mark.install_check
+    def test_live_variance(self, compiler, full_conn):
+        """Run 3 times against the real ``claude`` CLI and document variance (docs are subjective).
+
+        An install check: it spends tokens on a live model, so its answer is a fact about
+        this machine. Run it deliberately: ``py -m pytest -m install_check tests``.
+        """
         import shutil
 
-        if shutil.which("claude") is None:
-            pytest.skip(
-                "claude CLI not available — variance test skipped. "
-                "Prompt determinism verified above."
-            )
+        assert shutil.which("claude"), "the live variance check needs the claude CLI on PATH"
         # Run same signal 3 times, check structural consistency
         results = []
         for _ in range(3):
@@ -666,8 +667,7 @@ class TestLocalFirst:
             )
             full_conn.commit()
 
-        if not results:
-            pytest.skip("No successful compilations")
+        assert results, "no successful compilations -- the claude CLI returned no results"
 
         # Variance in doc length (proxy for content variance)
         length_variance = (max(results) - min(results)) / max(results) if max(results) > 0 else 0

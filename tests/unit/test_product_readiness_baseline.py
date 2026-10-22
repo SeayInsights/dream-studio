@@ -3,15 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ENTERPRISE_ROOT = REPO_ROOT.parent / "dream-studio-enterprise"
-AUDIT_ROOT = Path.home() / ".dream-studio" / "meta" / "audit"
 
 CONTRACT_DOCS = [
     "event-contract.md",
@@ -254,51 +249,6 @@ def test_docker_and_enterprise_remain_non_authoritative_and_excluded():
     assert "enterprise remains adjacent" in readiness_doc
     assert "dream-studio-enterprise" not in dev_script
     assert "tests/test_ml.py" not in dev_script.replace("\\", "/")
-
-
-def test_adjacent_enterprise_static_boundaries_remain_clean():
-    if not ENTERPRISE_ROOT.exists():
-        pytest.skip("Adjacent enterprise repo is not present in this workspace")
-
-    checks = [
-        (
-            ["api", "ml", "org_intelligence", "tests", "README.md", "pyproject.toml"],
-            re.compile(r"~/\.dream-studio|studio\.db"),
-            "live native DB reference",
-        ),
-        (
-            ["api", "ml", "org_intelligence", "tests", "generate_org_intelligence.py"],
-            re.compile(
-                r"from projections|import projections|from core|import core|sys\.path\.insert"
-            ),
-            "main internal import",
-        ),
-        (
-            ["tests", "api", "ml", "org_intelligence", "README.md"],
-            re.compile(re.escape("dream-" "studio:") + r'|"' + re.escape("d" "s:")),
-            "legacy skill identifier",
-        ),
-    ]
-
-    offenders: list[str] = []
-    for roots, pattern, label in checks:
-        for raw in roots:
-            root = ENTERPRISE_ROOT / raw
-            if root.is_file():
-                paths = [root]
-            elif root.is_dir():
-                paths = [
-                    path
-                    for path in root.rglob("*")
-                    if path.is_file() and "__pycache__" not in path.parts
-                ]
-            else:
-                paths = []
-            for path in paths:
-                if pattern.search(_read(path)):
-                    offenders.append(f"{label}: {path.relative_to(ENTERPRISE_ROOT).as_posix()}")
-
-    assert offenders == []
 
 
 def test_phase15_readiness_risks_are_documented_not_implemented():

@@ -40,6 +40,7 @@ from control.analysis.security_patterns import (
 )
 from core.gates import security_scan
 from core.gates.security_scan import changed_scannable_files, offenders_in_text
+from tests.helpers.git_repo import requires_git
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -83,25 +84,45 @@ def test_the_keyword_line_is_reported_not_the_call_line():
     assert found == [(4, "shell=True", "subprocess.run")], found
 
 
+#: Lines 570-588 of ``control/execution/workflow/runner.py`` as it stood at ``c9e81457~1``,
+#: the revision before the fix, verbatim (wrapped in a class only so that it parses). Recover
+#: it with ``git show c9e81457~1:control/execution/workflow/runner.py``.
+_PRE_FIX_RUNNER_EXCERPT = """\
+class Runner:
+    def _verify(self, check):
+        try:
+            proc = subprocess.run(
+                check,
+                shell=True,
+                cwd=str(Path(__file__).resolve().parents[3]),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=_COMPLETION_CHECK_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired:
+            return (
+                "blocked",
+                f"completion_check timed out after {_COMPLETION_CHECK_TIMEOUT}s: {check}",
+            )
+        except OSError as exc:
+            return "blocked", f"completion_check could not run ({type(exc).__name__}): {check}"
+
+"""
+
+
 def test_the_vulnerable_file_that_was_reported_clean_is_now_found():
     """THE REGRESSION THIS EXISTS FOR, against the real historical content.
 
-    Reads the pre-fix ``runner.py`` out of git rather than a fixture, because the claim
-    being pinned is about THAT file: the detector returned [] on it while it held a proven,
-    exploitable shell injection. A fixture could drift away from the real shape; git cannot.
+    The claim being pinned is about THAT code: the detector returned [] on the pre-fix
+    ``runner.py`` while it held a proven, exploitable shell injection. The excerpt above is
+    those bytes, not a reconstruction, so it cannot drift away from the real shape. It used
+    to be read out of git (``git show c9e81457~1:...``) and the test skipped when the commit
+    was not reachable -- every shallow clone and every CI checkout -- so it could not fail
+    exactly where the detector is most likely to regress unnoticed.
     """
-    proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
-        ["git", "show", "c9e81457~1:control/execution/workflow/runner.py"],
-        cwd=str(REPO_ROOT),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=30,
-    )
-    if proc.returncode != 0:
-        pytest.skip("the pre-fix commit is not reachable in this checkout")
-    assert "shell=True" in scan_for_patterns(proc.stdout, "runner.py")
+    assert "shell=True" in scan_for_patterns(_PRE_FIX_RUNNER_EXCERPT, "runner.py")
 
 
 def test_the_fixed_file_is_clean():
@@ -295,7 +316,7 @@ def test_an_unrelated_comment_is_not_an_exemption():
 # ── the gate sees new files, which is where a security gate is most needed ──
 
 
-def test_the_gate_looks_at_untracked_files_too():
+def test_the_gate_looks_at_untracked_files_too(tmp_path):
     """`git diff` never reports an untracked file, and a brand-new file is exactly the case
     a security gate most needs to see -- the `gitignore-phantom` gate was written after that
     same blind spot.
@@ -306,36 +327,37 @@ def test_the_gate_looks_at_untracked_files_too():
     verifiably broken at runtime. Reading source text where you could drive the real thing
     is the exact substitution `core/gates/deterministic_evidence.py` exists to report.
 
-    The file is written inside the repo because that is the only place the function looks,
-    and removed in a finally so a failure cannot leave the tree dirty.
+    The file is written into a repository of this test's own. It used to be written into
+    THIS checkout (and removed in a finally), which made the test depend on the working
+    tree it ran in and dirtied it for any other process looking at it meanwhile.
     """
-    probe = REPO_ROOT / "_security_scan_untracked_probe.py"
-    probe.write_text("x = 1\n", encoding="utf-8")
-    try:
-        returned = changed_scannable_files()
-        assert probe.name in {Path(rel).name for rel in returned}, (
-            f"an untracked file was not returned; the gate cannot see a new file. got"
-            f" {returned}"
-        )
-    finally:
-        probe.unlink(missing_ok=True)
+    probe = "_security_scan_untracked_probe.py"
+    repo = _git_repo_with_untracked_file(tmp_path, probe, "x = 1\n")
+
+    returned = changed_scannable_files(repo_root=repo)
+
+    assert (
+        probe in returned
+    ), f"an untracked file was not returned; the gate cannot see a new file. got {returned}"
 
 
-def test_changed_scannable_files_returns_only_scannable_paths():
-    """Driven against the real repository: whatever the current diff is, every path this
-    returns must be one the scanner accepts, or the gate would try to parse a PNG."""
-    for rel in changed_scannable_files():
-        assert Path(rel).suffix.lower() in {
-            ".py",
-            ".ts",
-            ".js",
-            ".tsx",
-            ".jsx",
-            ".sh",
-            ".yaml",
-            ".yml",
-            ".env",
-        }, rel
+@requires_git
+def test_changed_scannable_files_returns_only_scannable_paths(tmp_path):
+    """Every path this returns must be one the scanner accepts, or the gate would try to
+    parse a PNG. Driven against a repository holding one file of each kind, so the answer
+    is the filter's and not whatever the current diff of a checkout happens to be."""
+    scannable = {".py", ".ts", ".js", ".tsx", ".jsx", ".sh", ".yaml", ".yml", ".env"}
+    repo = _git_repo_with_untracked_file(tmp_path, "keep.py", "x = 1\n")
+    for name in ("logo.png", "notes.md", "data.bin", "settings.yaml", "run.sh", "page.tsx"):
+        (repo / name).write_bytes(b"x\n")
+
+    returned = changed_scannable_files(repo_root=repo)
+
+    assert returned, "the repository holds scannable files and none were returned"
+    for rel in returned:
+        assert Path(rel).suffix.lower() in scannable, rel
+    assert {"keep.py", "settings.yaml", "run.sh", "page.tsx"} <= set(returned)
+    assert not {"logo.png", "notes.md", "data.bin"} & set(returned)
 
 
 # ── the hook, which is the fast tier and cannot block ───────────────────────
@@ -774,8 +796,7 @@ def test_the_two_real_template_files_stay_exempted():
         "templates/security/mitigations/secrets-fixes.yaml",
     ):
         path = REPO_ROOT / rel
-        if not path.is_file():
-            pytest.skip(f"{rel} is absent from this checkout")
+        assert path.is_file(), f"{rel} is tracked and must exist in every checkout"
         content = path.read_text(encoding="utf-8")
         raw = findings_with_lines(content, rel)
         assert raw, f"{rel} produced no findings at all; the scanner is not looking"
@@ -814,9 +835,20 @@ def test_repo_root_scans_the_tree_it_is_given_not_this_one(tmp_path):
 
 def test_repo_root_defaults_to_this_repository():
     """Calling with no repo_root at all must still behave exactly as before this parameter
-    existed -- the default keeps pointing at the module's own tree."""
-    result = security_scan.run(base_ref="origin/main")
-    assert result["files_checked"] == changed_scannable_files("origin/main")
+    existed -- the default keeps pointing at the module's own tree.
+
+    Asserted on the default itself. This used to call ``run(base_ref="origin/main")`` and
+    compare its answer with ``changed_scannable_files("origin/main")``: two calls into the
+    same function over whatever commits sat above ``origin/main`` in the checkout running
+    it, so the result depended on the clone (no such ref in a ``--no-tags`` clone or a CI
+    checkout) and the comparison could not fail for the reason it was written for."""
+    import inspect
+
+    own_tree = Path(security_scan.__file__).resolve().parents[2]
+    for func in (security_scan.run, changed_scannable_files, security_scan._offenders_in):
+        default = inspect.signature(func).parameters["repo_root"].default
+        assert default == own_tree == security_scan.REPO_ROOT, func.__name__
+    assert (own_tree / "core" / "gates" / "security_scan.py").is_file()
 
 
 def test_cli_flag_threads_repo_root_through_main(tmp_path, capsys):

@@ -63,8 +63,7 @@ def _resolvable(module_path: pathlib.Path, name: str):
 @pytest.mark.parametrize("rel", _DISPATCH_MODULES)
 def test_every_keyword_a_dispatch_passes_is_one_its_target_accepts(rel):
     path = REPO_ROOT / rel
-    if not path.is_file():
-        pytest.skip(f"{rel} does not exist in this tree")
+    assert path.is_file(), f"{rel} does not exist in this tree"
 
     offenders: list[str] = []
     for name, kws, lineno in _calls_with_keywords(path):

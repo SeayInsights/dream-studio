@@ -191,11 +191,59 @@ def _repo_git_dir() -> Path | None:
     return None
 
 
+#: The settings in ``[core]`` that the escape this guard exists for changes. ``bare`` is the one
+#: it flipped; ``worktree`` is the one that would point the checkout somewhere else.
+_GUARDED_CORE_SETTINGS = ("bare", "worktree")
+
+
+def _core_settings(config: bytes) -> bytes:
+    """The guarded ``[core]`` settings of a git config, normalised, and nothing else.
+
+    THE FIRST VERSION FINGERPRINTED THE WHOLE CONFIG FILE, and the file is shared by every
+    worktree and every session on the machine. Anything that touches it -- `git checkout -b x
+    origin/main` (writes branch.x.remote and branch.x.merge), `git worktree add`, `git remote
+    add`, `git config user.name` -- changed the fingerprint, and the guard then aborted a clean
+    run naming whichever test was executing: measured on tests/unit/test_audit_dispatcher.py,
+    which passes alone. The escape this watches turned ``core.bare`` on, so that, and
+    ``core.worktree``, are what is compared.
+
+    A hand-rolled reader rather than ``git config``: this runs before and after every test and
+    a subprocess per test would cost minutes. Section and key names are case-insensitive, a key
+    with no ``=`` means true, and both ``[core]`` followed by lines and ``[core] bare = true`` on
+    one line are read. Anything else in the file is ignored.
+    """
+    found: dict[str, str] = {}
+    in_core = False
+    for raw in config.decode("utf-8", "replace").splitlines():
+        line = raw.strip()
+        if not line or line[0] in "#;":
+            continue
+        if line.startswith("["):
+            end = line.find("]")
+            header = line[1:end].strip().lower() if end > 0 else ""
+            in_core = header == "core"
+            after = end + 1
+            line = line[after:].strip() if end > 0 else ""
+            if not (in_core and line):
+                continue
+        if not in_core:
+            continue
+        key, eq, value = line.partition("=")
+        key = key.strip().lower()
+        if key in _GUARDED_CORE_SETTINGS:
+            found[key] = value.strip().strip('"').lower() if eq else "true"
+    return ";".join(f"{k}={found.get(k, '')}" for k in _GUARDED_CORE_SETTINGS).encode()
+
+
 def _real_repo_fingerprint() -> tuple[bytes, ...] | None:
     """What the escape changed: `core.bare` in the config, HEAD, and the branch tip.
 
     File reads only, no subprocess -- this runs before and after EVERY test, and a `git`
     invocation per test would cost minutes across the suite.
+
+    Only the guarded ``[core]`` settings of the config are compared (see ``_core_settings``):
+    the config is shared with every other session on the machine, and a rewrite that does not
+    touch them is not damage.
 
     Returns None when anything is unreadable, which disables the check rather than failing
     the run: a guard that aborts a session because it could not read a file is worse than
@@ -217,6 +265,7 @@ def _real_repo_fingerprint() -> tuple[bytes, ...] | None:
             parts.append(candidate.read_bytes())
         except OSError:
             return None
+    parts[0] = _core_settings(parts[0])
     head = parts[-1].decode("utf-8", "replace").strip()
     if head.startswith("ref:"):
         ref = head.split(":", 1)[1].strip()
@@ -326,6 +375,100 @@ def _targets_guarded_repo(argv: list, cwd: object) -> bool:
     return False
 
 
+#: Git subcommands that cannot move HEAD, the branch tip, or ``core.bare`` -- the three things this
+#: guard compares. A POSITIVE list, deliberately: a subcommand not named here (`commit`, `checkout`,
+#: `reset`, `config`, `init`, `branch`, `symbolic-ref`, a verb git adds next year) still counts as
+#: able to have done it, so the list rotting makes the guard blame too much, never too little.
+#: `tag`, `remote` and `fetch` are absent from that effect: they write refs and config the
+#: fingerprint does not look at -- except a `fetch` allowed to overwrite the checked-out branch
+#: (`--update-head-ok`), which `_could_move_the_guarded_state` still counts.
+_READ_ONLY_GIT_VERBS = frozenset(
+    {
+        "blame",
+        "cat-file",
+        "check-attr",
+        "check-ignore",
+        "count-objects",
+        "describe",
+        "diff",
+        "diff-index",
+        "diff-tree",
+        "fetch",
+        "for-each-ref",
+        "grep",
+        "log",
+        "ls-files",
+        "ls-tree",
+        "merge-base",
+        "name-rev",
+        "remote",
+        "rev-list",
+        "rev-parse",
+        "shortlog",
+        "show",
+        "show-ref",
+        "status",
+        "tag",
+        "var",
+        "version",
+    }
+)
+
+
+def _git_verb(argv: list) -> str:
+    """The subcommand of a git argv, skipping global options (``-C <dir>``, ``-c k=v``,
+    ``--git-dir=...``, ``--no-pager``). Empty when there is none."""
+    tokens = [str(x) for x in argv][1:]
+    skip = False
+    for token in tokens:
+        if skip:
+            skip = False
+        elif token in {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}:
+            skip = True
+        elif token.startswith("-"):
+            continue
+        else:
+            return token
+    return ""
+
+
+def _could_move_the_guarded_state(argv: list) -> bool:
+    """Might this git invocation have changed HEAD, the branch tip or ``core.bare``?
+
+    False only for a subcommand named in ``_READ_ONLY_GIT_VERBS``; everything else, including a
+    verb this file has never heard of, is assumed able to. `git tag v1` and `git -C <repo> log`
+    cannot alter the fingerprint, so a test that ran only those must not be named as the culprit
+    when an operator's commit lands in another window -- which it was, on every run of
+    tests/unit/test_audit_dispatcher.py, because the audit asks the checkout for its tags.
+    """
+    verb = _git_verb(argv)
+    if verb == "fetch" and _fetch_may_update_the_current_branch(argv):
+        return True
+    return verb not in _READ_ONLY_GIT_VERBS
+
+
+def _fetch_may_update_the_current_branch(argv: list) -> bool:
+    """``git fetch`` writes only remote-tracking refs -- unless it is told it may overwrite the
+    branch that is checked out.
+
+    ``git fetch --update-head-ok origin +main:<current branch>`` moves the tip of the checked-out
+    branch, which is exactly what the fingerprint compares, and without the flag git refuses to.
+    So the flag is what separates the fetch that is a read from the one that is a write. It is
+    spelled ``-u``, alone or inside a cluster of short options such as ``-pu``, or
+    ``--update-head-ok`` -- or any unique abbreviation of it: git takes ``--update-head``, and
+    ``--update-h`` is the shortest that is not ``--update-shallow``. A fetch that names it
+    counts, as any other verb that could have moved the state does.
+    """
+    long_form = "--update-head-ok"
+    for token in (str(x) for x in argv[1:]):
+        if token.startswith("--"):
+            if token.startswith("--update-h") and long_form.startswith(token):
+                return True
+        elif token.startswith("-") and "u" in token[1:]:
+            return True
+    return False
+
+
 class _GitCallRecorder:
     """Whether THIS test ran a git command that could have moved the real repo.
 
@@ -355,7 +498,9 @@ class _GitCallRecorder:
                     argv = args if isinstance(args, (list, tuple)) else [args]
                     program = str(argv[0]) if argv else ""
                     if "git" in _os.path.basename(program).lower():
-                        if _targets_guarded_repo(argv, kw.get("cwd")):
+                        if _targets_guarded_repo(argv, kw.get("cwd")) and (
+                            _could_move_the_guarded_state(argv)
+                        ):
                             recorder.calls.append(" ".join(str(x) for x in argv)[:200])
                 except Exception:
                     pass
@@ -383,6 +528,30 @@ def pytest_configure(config):
         _signal.signal(_signal.SIGINT, _conftest_sigint_handler)
 
 
+# ``install_check`` tests are left out of a default run -- not skipped, not collected -- by
+# ``addopts = "... -m 'not install_check'"`` in pyproject.toml, not by a hook here.
+#
+# An install check asserts something about THIS machine (the operator's ~/.claude, a sibling
+# repository checked out beside this one). Its answer is a fact about a computer, not about the
+# code, so it has no place in the suite that gates a push, and it must not appear there as a
+# skip either: a test that skips when the thing it checks is absent cannot fail, and a suite full
+# of them reports green for whatever is missing.
+#
+# Run them deliberately, on the machine you mean to check (the later ``-m`` wins over addopts)::
+#
+#     py -m pytest -m install_check tests
+#
+# When selected they FAIL on an absent install instead of skipping, because the person who asked
+# for the check wants to hear that the install is not there.
+#
+# WHY NOT A ``pytest_collection_modifyitems`` HOOK, which this file had: the rule-enforcement
+# gate resolves the tests a rule names the way a directory run of pytest would collect them, and
+# it refuses to answer under a conftest whose hook can change collection -- so one hook here made
+# every enforcement claim in canonical/rules.yml unresolvable. ``-m 'not <mark>'`` in addopts is
+# the declarative spelling of the same exclusion, and the resolver reads it (core/gates/
+# pytest_collection_rules.py) and applies it to the marks it finds on a node.
+
+
 @pytest.fixture
 def handler() -> Any:
     return load_handler
@@ -401,6 +570,125 @@ def isolated_home(tmp_path, monkeypatch):
 
 
 import warnings  # noqa: E402
+
+#: The variables that keep a test off the operator's machine. Each is set for the session at the
+#: top of this file (or per test by `guard_real_homedir`); a test that leaves one different from
+#: how it found it has changed what every later test in the process reads.
+_ISOLATION_ENV = (
+    "DREAM_STUDIO_HOME",
+    "DREAM_STUDIO_DB_PATH",
+    "DS_SPOOL_ROOT",
+    "DREAM_STUDIO_TEST_SESSION_HOME",
+    "HOME",
+    "USERPROFILE",
+    "CLAUDE_CONFIG_DIR",
+)
+
+
+_ENV_BEFORE = pytest.StashKey[dict]()
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    """Record the isolation environment before any fixture of this test runs."""
+    item.stash[_ENV_BEFORE] = {key: _os.environ.get(key) for key in _ISOLATION_ENV}
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_runtest_teardown(item, nextitem):
+    """A test may not leave the isolation environment changed for the tests after it.
+
+    THE DEFECT. Six tests in ``test_readmodel_wiring.py`` set ``os.environ["DREAM_STUDIO_HOME"]``
+    directly and removed it in ``finally``. Removing is not restoring: the session home this
+    file created was gone for the REST OF THE PROCESS, so every later test that resolved the
+    Dream Studio home fell back to ``Path.home() / ".dream-studio"`` -- the operator's real one.
+    No test failed at the time. A neighbour failed (or, worse, read the operator's live data)
+    only in a large run, passed alone, and the symptom pointed at the victim.
+
+    ``monkeypatch.setenv`` restores on teardown; a raw assignment does not. This compares the
+    isolation variables with how they were before the test and, if any differ, puts them back
+    (so one leaker cannot corrupt the rest of the run) and fails THAT test by name.
+
+    A hook, not an autouse fixture, because it has to run AFTER every fixture has been
+    finalized: pytest orders autouse fixtures alphabetically, and a fixture of this kind
+    tears down before ``monkeypatch`` undoes the test's legitimate changes, which reads as
+    a leak on every test that uses it.
+    """
+    before = item.stash.get(_ENV_BEFORE, None)
+    if before is None:
+        return
+    leaked = {
+        key: (before[key], _os.environ.get(key))
+        for key in _ISOLATION_ENV
+        if _os.environ.get(key) != before[key]
+    }
+    if not leaked:
+        return
+    for key, (was, _now) in leaked.items():
+        if was is None:
+            _os.environ.pop(key, None)
+        else:
+            _os.environ[key] = was
+    detail = "; ".join(f"{key}: {was!r} -> {now!r}" for key, (was, now) in leaked.items())
+    pytest.fail(
+        f"{item.nodeid} left the isolation environment changed ({detail}). The value was"
+        " restored, but every test after it would have read the operator's real home. Set"
+        " environment variables with monkeypatch.setenv/delenv, never os.environ[...] = / .pop.",
+        pytrace=False,
+    )
+
+
+@pytest.fixture(autouse=True)
+def installer_does_not_edit_the_real_shell_profile(monkeypatch):
+    """No test appends a PATH line to the operator's PowerShell, zsh or bash profile.
+
+    ``_write_global_launcher`` (run by every ``ClaudeCodeInstaller.install("execute")`` from a
+    source checkout) ends in ``_write_path_to_profile``, which on Windows asks ``powershell
+    -Command $PROFILE`` where the profile is. That answer comes from the registry's Documents
+    folder, NOT from HOME or USERPROFILE -- measured: with both pointed at an empty directory it
+    still names ``C:\\Users\\<operator>\\...\\WindowsPowerShell\\Microsoft.PowerShell_profile.ps1``
+    -- so redirecting the home protects nothing. 77 tests across 26 files reached it; the first
+    run on a machine without the marker appended to the operator's real profile, and every
+    later run read it.
+
+    The stub replaces the module-level name the launcher looks up at call time. A test that
+    exercises the real function imports it by name from the installer facade (bound at
+    collection, so unaffected), and a test that patches it itself replaces this stub for its
+    own duration.
+    """
+    try:
+        from integrations.installer import claude_code_launcher as launcher
+    except ImportError:
+        # A copy of this conftest run outside the repository (the guard tests do that) has no
+        # installer to protect the profile from.
+        return
+
+    def _no_profile_edit(bin_dir):
+        return {
+            "profile": str(bin_dir),
+            "action": "skipped",
+            "reason": "tests never edit the operator's shell profile",
+        }
+
+    monkeypatch.setattr(launcher, "_write_path_to_profile", _no_profile_edit)
+
+
+@pytest.fixture(autouse=True)
+def tests_run_from_the_repository_root(monkeypatch):
+    """Every test starts in the repository root, whichever directory pytest was launched from.
+
+    About fifty test files read repo-relative paths (``Path("core/work_orders/close_main.py")``,
+    ``Path("docs/contracts/...")``) and a dozen start ``python -m interfaces.cli.ds`` or hand a
+    ``TEST-CHECK`` path to the admission gate with no ``cwd=``. All of them silently assumed the
+    process was started in the checkout, so ``pytest --rootdir <repo> <abs paths>`` from any
+    other directory failed 15 tests with ``No module named 'interfaces'`` and ``TEST-CHECK names
+    'tests/unit/test_admission.py', which is not a file``. The working directory is machine state
+    like any other; pinning it is the same move as pinning the home.
+
+    A test that wants another directory still says so with ``monkeypatch.chdir``, which restores
+    to the root afterwards; one that ``os.chdir``s and forgets is undone here.
+    """
+    monkeypatch.chdir(_PLUGIN_ROOT)
 
 
 @pytest.fixture(autouse=True)
@@ -557,6 +845,29 @@ def guard_real_homedir(tmp_path, monkeypatch, request):
         guard_diag_dir.mkdir()
         monkeypatch.setenv("DS_DIAGNOSTICS_DIR", str(guard_diag_dir))
 
+    # AMBIENT CLAUDE CODE IDENTITY. These name where Claude Code keeps its config, plugins and
+    # transcripts, and a shell that runs a second identity (the reason CLAUDE_CONFIG_DIR exists)
+    # or a pytest started from inside a Claude Code session (CLAUDE_PLUGIN_ROOT) carries them into
+    # every test. Code that resolves the Claude config root then answers for THAT identity, not
+    # for the temporary home the test built: test_detector and test_lib_paths both failed on it.
+    # A test that means to exercise one sets it with monkeypatch.setenv, which still works.
+    #
+    # EXCEPT AN install_check. Those tests ask whether the install on THIS machine is right,
+    # and the install they check is the one the operator's shell points at: with CLAUDE_CONFIG_DIR
+    # scrubbed they would check ~/.claude whatever the shell said, and report a second identity
+    # healthy because the first one is (a decoy root that said "nothing here" still passed).
+    # They are never collected by default, so exempting them leaves every other test scrubbed.
+    #
+    # ONLY THE CONFIG ROOT is exempt: it is the one variable an install check reads
+    # (claude_config_root()). The plugin root and the transcripts directory name where a
+    # running Claude Code session keeps its plugin and its history, which no install check asks
+    # about, so they are scrubbed for every test.
+    _scrubbed = ("CLAUDE_PLUGIN_ROOT", "CLAUDE_PROJECTS_DIR")
+    if request.node.get_closest_marker("install_check") is None:
+        _scrubbed = ("CLAUDE_CONFIG_DIR", *_scrubbed)
+    for _ambient in _scrubbed:
+        monkeypatch.delenv(_ambient, raising=False)
+
     # Reset machine_id process-level cache so each test gets a fresh hermetic ID.
     try:
         import core.telemetry.machine_id as _mid_mod
@@ -674,7 +985,13 @@ def guard_real_homedir(tmp_path, monkeypatch, request):
             if _git_calls.calls:
                 _by = f" It ran: {_git_calls.calls[0]}"
             elif _config_changed:
-                _by = " Its config changed, which is damage rather than an ordinary commit."
+                _now = _after_repo[0].decode() if _after_repo else "unreadable"
+                _by = (
+                    f" The repository's guarded config settings changed"
+                    f" ({_before_repo[0].decode()} -> {_now}), which is damage rather than an"
+                    " ordinary commit. Only [core] bare/worktree are compared: a rewrite of any"
+                    " other part of the shared .git/config by another session does not trip this."
+                )
             else:
                 _by = (
                     " Nothing was written to the reflog, so the refs were changed without"

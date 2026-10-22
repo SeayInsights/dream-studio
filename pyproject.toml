@@ -81,13 +81,14 @@ line-length = 100
 [tool.pytest.ini_options]
 testpaths = ["tests", "analytics/tests"]
 asyncio_mode = "auto"
-addopts = "-v --color=no"
+addopts = "-v --color=no -m 'not install_check'"
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
 ]
 markers = [
     "runtime_reliability: Phase 5 runtime reliability gate — core contracts that must always pass",
+    "install_check: asserts a fact about THIS machine or calls something outside the repository (an install under ~/.claude, a sibling checkout, a live model through the claude CLI), not about the code; never collected by default, run with `py -m pytest -m install_check tests` and fails (never skips) when the thing it checks is absent",
 ]
 
 [tool.coverage.run]

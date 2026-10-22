@@ -907,6 +907,67 @@ rules:
       reached main on a green subset. Path.home stays deliberately exempt: it is the
       mechanism that keeps ~100 tests off live state.
 
+  - id: a-test-may-not-read-the-machine-it-runs-on
+    statement: >
+      A test may not read the operator's home, ~/.claude, the Claude Code config root, a sibling
+      checkout, or this clone's git refs unless a scope in the test redirects the home first; a
+      check that is really about one machine is marked install_check and is never collected by
+      default.
+    source: core/gates/machine_reads.py
+    enforced_by:
+      - core.gates.test_isolation
+      - core.gates.machine_reads
+      - tests/unit/test_machine_reads_gate.py::test_a_machine_read_with_nothing_redirecting_it_fails
+      - tests/unit/test_machine_reads_gate.py::test_a_redirected_or_self_contained_read_stays_allowed
+      - tests/unit/test_machine_reads_gate.py::test_reintroducing_the_installed_hook_read_fails_the_gate
+      - tests/unit/test_machine_reads_gate.py::test_an_allowlist_entry_that_matches_nothing_fails
+      - tests/unit/test_install_check_is_opt_in.py::test_a_default_run_does_not_collect_install_checks
+    note: >
+      Issue #911 (after #904). Tests read ~/.claude/hooks, ~/.claude/skills and CLAUDE.md,
+      ~/builds/dreamysuite, a sibling dream-studio-enterprise, origin/main and CLAUDE_CONFIG_DIR.
+      Each passed where it was written, skipped on CI -- a test that skips when its subject is
+      absent cannot fail -- and failed on a machine whose install was behind for a reason no
+      commit caused. The allow-list is a debt: an entry that matches nothing fails the gate, so
+      it can only shrink.
+  - id: a-test-may-not-leave-the-isolation-environment-changed
+    statement: >
+      A test leaves DREAM_STUDIO_HOME, DREAM_STUDIO_DB_PATH, DS_SPOOL_ROOT, HOME, USERPROFILE and
+      CLAUDE_CONFIG_DIR as it found them; one that does not is failed by name and the value is
+      restored.
+    source: tests/conftest.py
+    enforced_by:
+      - tests/unit/test_isolation_environment_guard.py::test_a_test_that_unsets_the_session_home_is_failed_by_name_and_the_next_is_protected
+      - tests/unit/test_isolation_environment_guard.py::test_monkeypatch_is_not_a_leak
+    note: >
+      Six tests in test_readmodel_wiring assigned os.environ["DREAM_STUDIO_HOME"] and popped it
+      in finally. Popping is not restoring: the session home was gone for the rest of the
+      process, so a LATER test reached the operator's real ~/.dream-studio. The leaker passed;
+      its neighbour failed only in a large run.
+  - id: a-test-starts-in-the-repository-root-wherever-pytest-was-launched
+    statement: >
+      Every test starts with the repository root as its working directory, so the suite gives
+      the same answer from any launch directory.
+    source: tests/conftest.py
+    enforced_by:
+      - tests/unit/test_tests_run_from_the_repository_root.py::test_the_files_that_failed_from_another_directory_pass_from_one
+    note: >
+      From a temporary directory, with --rootdir pointing at the repository, 15 tests failed
+      and 2 errored: repo-relative Path reads, `python -m interfaces.cli.ds` subprocesses with
+      no cwd=, TEST-CHECK paths resolved against the working directory.
+  - id: the-repo-guard-compares-what-the-escape-changed-not-the-shared-config
+    statement: >
+      The git-repository guard compares core.bare, core.worktree, HEAD and the branch tip, and
+      blames a test only for a git call that could have moved them.
+    source: tests/conftest.py
+    enforced_by:
+      - tests/unit/test_test_suite_cannot_reach_the_real_repo.py::test_a_rewrite_of_the_shared_config_that_leaves_core_alone_is_not_damage
+      - tests/unit/test_test_suite_cannot_reach_the_real_repo.py::test_a_read_only_git_call_and_a_config_rewrite_elsewhere_do_not_abort_a_clean_run
+      - tests/unit/test_test_suite_cannot_reach_the_real_repo.py::test_a_bare_flip_is_still_named_with_the_setting_that_changed
+    note: >
+      The whole-file config comparison aborted a clean run when another session ran `git
+      checkout -b x origin/main`, `git worktree add` or `git config` against the shared
+      .git/config, and named whichever test was executing (test_audit_dispatcher, which asks
+      the checkout for its tags). The escape the guard exists for flips core.bare.
   - id: a-fixture-may-not-invent-a-column
     statement: >
       A test fixture may not give an authority table a column a fresh database does not

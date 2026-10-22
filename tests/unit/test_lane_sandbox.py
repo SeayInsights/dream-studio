@@ -4,7 +4,10 @@ Lanes replaced hardcoded seats because a seat could claim something was wrong wi
 testing it (operator, 2026-09-23). The recording door's re-run is what makes that
 enforceable rather than hoped for, so its rule is tested here without an engine, and the
 container's own properties -- exit codes propagate, no network, nothing persists -- are
-tested against a real engine wherever one is running.
+install checks against a real engine (``py -m pytest -m install_check tests``): they are
+never collected by default and fail, rather than skip, when no engine is running.
+CI runs them on purpose: a step in full-ci.yml (ubuntu, where GitHub's runners have Docker).
+pr-smoke cannot, because ci.yml may not name tests of its own (test_impact_tests_gate.py).
 """
 
 from __future__ import annotations
@@ -82,21 +85,32 @@ def test_docker_unavailable_says_so_rather_than_raising(monkeypatch):
 
 # ── against a real engine ───────────────────────────────────────────────────
 
-_ENGINE, _WHY = lane_sandbox.docker_available() if shutil.which("docker") else (False, "no docker")
 _IMAGE = "python:3.12-slim"
 
 
-def _have_image() -> bool:
-    if not _ENGINE:
-        return False
-    if subprocess.run(["docker", "image", "inspect", _IMAGE], capture_output=True).returncode == 0:
-        return True
-    return subprocess.run(["docker", "pull", "-q", _IMAGE], capture_output=True).returncode == 0
+@pytest.fixture(scope="module")
+def docker_engine():
+    """A running Docker engine with the lane image, or a FAILURE saying which is missing.
+
+    These tests used to compute ``_have_image()`` at IMPORT time -- which ran ``docker image
+    inspect`` and, when the image was absent, ``docker pull`` over the network during
+    COLLECTION, for every run of the suite including ones that never reach this file -- and
+    then skipped when there was no engine. So the default suite touched the operator's Docker
+    daemon and the network on one machine and tested nothing on the rest. They are install
+    checks now: never collected by default, and a missing engine is a failure.
+    """
+    assert shutil.which("docker"), "needs the docker CLI on PATH"
+    ok, why = lane_sandbox.docker_available()
+    assert ok, f"needs a running Docker engine: {why}"
+    have = subprocess.run(["docker", "image", "inspect", _IMAGE], capture_output=True)
+    if have.returncode != 0:
+        pulled = subprocess.run(["docker", "pull", "-q", _IMAGE], capture_output=True)
+        assert pulled.returncode == 0, f"could not pull {_IMAGE}"
 
 
-real_engine = pytest.mark.skipif(
-    not _have_image(), reason=f"needs a running Docker engine and {_IMAGE}: {_WHY}"
-)
+def real_engine(fn):
+    """Mark a test as one that drives a real container engine (an install check)."""
+    return pytest.mark.install_check(pytest.mark.usefixtures("docker_engine")(fn))
 
 
 @real_engine

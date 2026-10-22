@@ -8,19 +8,17 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import pytest
-
 from core.skills.dispatcher import (
     AuditFinding,
     AuditResult,
     SkillAuditStats,
     SkillDispatcher,
 )
+from tests.helpers.fixture_projects import consumer_service
 
 # ── Constants ──────────────────────────────────────────────────────────────
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DREAMYSUITE_PATH = Path.home() / "builds" / "dreamysuite"
 
 
 # ── AuditResult unit tests ────────────────────────────────────────────────
@@ -355,29 +353,43 @@ class TestSkillDispatcherAudit:
         ), "_SEVERITY_TO_TIER must be module-level for .launch() to use it without refactoring"
 
 
-# ── DreamySuite tests (conditional — only run if path exists) ─────────────
+# ── Consumer-service tests (a fixture project, not a sibling repository) ──
+#
+# These used to audit ``~/builds/dreamysuite`` and skip when it was absent. That asserted
+# what a different project looked like on one machine, so the rules they name (pl-001 and
+# pl-002, which fire on a consumer service with no terms or privacy policy) were untested
+# anywhere else and the test result changed whenever that project did.
 
 
-@pytest.mark.skipif(
-    not DREAMYSUITE_PATH.exists(),
-    reason="DreamySuite repo not present at ~/builds/dreamysuite",
-)
-class TestDreamySuiteAudit:
-    def test_audit_dreamysuite_pl001_fires(self):
-        """pl-001 (Terms of Service) fires on DreamySuite (consumer service)."""
-        result = SkillDispatcher.audit(DREAMYSUITE_PATH, skill_filter=["pre-launch"])
+class TestConsumerServiceAudit:
+    def test_audit_consumer_service_pl001_fires(self, tmp_path):
+        """pl-001 (Terms of Service) fires on a consumer service with none."""
+        project = consumer_service(tmp_path / "svc")
+        result = SkillDispatcher.audit(project, skill_filter=["pre-launch"])
         pl001 = [f for f in result.findings if f.rule_id == "pl-001"]
-        assert pl001, "pl-001 should fire on DreamySuite — no Terms of Service found"
+        assert pl001, "pl-001 should fire on a consumer service — no Terms of Service found"
 
-    def test_audit_dreamysuite_pl002_fires(self):
-        """pl-002 (Privacy Policy) fires on DreamySuite (consumer with PII)."""
-        result = SkillDispatcher.audit(DREAMYSUITE_PATH, skill_filter=["pre-launch"])
+    def test_audit_consumer_service_pl002_fires(self, tmp_path):
+        """pl-002 (Privacy Policy) fires on a consumer service that stores PII."""
+        project = consumer_service(tmp_path / "svc")
+        result = SkillDispatcher.audit(project, skill_filter=["pre-launch"])
         pl002 = [f for f in result.findings if f.rule_id == "pl-002"]
-        assert pl002, "pl-002 should fire on DreamySuite — no Privacy Policy + PII schema"
+        assert pl002, "pl-002 should fire on a consumer service — no Privacy Policy + PII schema"
 
-    def test_audit_dreamysuite_verdict_not_pass(self):
-        """DreamySuite full audit should not be PASS (has known findings)."""
-        result = SkillDispatcher.audit(DREAMYSUITE_PATH)
+    def test_audit_consumer_service_with_legal_documents_does_not_fire(self, tmp_path):
+        """The control: the same service WITH both documents raises neither rule.
+
+        Without it the two tests above pass against a check that fires on everything.
+        """
+        project = consumer_service(tmp_path / "svc", legal_documents=True)
+        result = SkillDispatcher.audit(project, skill_filter=["pre-launch"])
+        fired = {f.rule_id for f in result.findings} & {"pl-001", "pl-002"}
+        assert not fired, f"legal documents are present, yet {sorted(fired)} fired"
+
+    def test_audit_consumer_service_verdict_not_pass(self, tmp_path):
+        """A consumer service with no legal documents must not audit as PASS."""
+        project = consumer_service(tmp_path / "svc")
+        result = SkillDispatcher.audit(project)
         assert (
             result.verdict != "PASS"
-        ), "DreamySuite has known findings — verdict should be WARNING or FAIL"
+        ), "a consumer service with no terms or privacy policy has findings — verdict should be WARNING or FAIL"

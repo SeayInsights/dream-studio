@@ -7,16 +7,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from core.skills.dispatcher import (
     AuditResult,
     LaunchResult,
     SkillDispatcher,
 )
+from tests.helpers.fixture_projects import consumer_service, developer_tool
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DREAMYSUITE_PATH = Path.home() / "builds" / "dreamysuite"
 
 
 # ── LaunchResult unit tests ───────────────────────────────────────────────
@@ -118,18 +116,39 @@ class TestSkillDispatcherLaunch:
             f"but appeared in blocking: {pl001_blocking}"
         )
 
-    def test_launch_dream_studio_clean_pl009_blocks(self):
-        """pl-009 (non-semver tags) must LAUNCH_BLOCKED on developer-tool."""
-        result = SkillDispatcher.launch(REPO_ROOT)
+    # pl-009 reads the release tags of the repository it is pointed at, so it is tested
+    # against repositories built here with the tags the case needs. These used to launch
+    # against THIS checkout and assert it "uses ph-X.Y.Z tags": whatever tags the clone
+    # held decided the result (a clone made with --no-tags, or one that later gained a
+    # semver tag, gave a different answer to the same code).
+
+    def test_launch_non_semver_tag_blocks(self, tmp_path):
+        """pl-009 (non-semver tags) must block a developer-tool."""
+        project = developer_tool(tmp_path / "tool", tags=("ph-1.2.3",))
+        result = SkillDispatcher.launch(project)
         pl009_blocking = [f for f in result.blocking_findings if f.rule_id == "pl-009"]
         assert pl009_blocking, (
-            "pl-009 should block: dream-studio-clean uses ph-X.Y.Z tags (not semver). "
+            "pl-009 should block a project whose newest tag is ph-X.Y.Z (not semver). "
             f"blocking_findings has: {[f.rule_id for f in result.blocking_findings]}"
         )
+        assert "ph-1.2.3" in pl009_blocking[0].excerpt
 
-    def test_launch_dream_studio_clean_is_blocked(self):
-        """dream-studio-clean should be LAUNCH_BLOCKED (pl-009 non-semver tags)."""
-        result = SkillDispatcher.launch(REPO_ROOT)
+    def test_launch_no_tags_blocks(self, tmp_path):
+        """pl-009 also fires when there are no tags: no versioning is established."""
+        project = developer_tool(tmp_path / "tool")
+        result = SkillDispatcher.launch(project)
+        assert [f for f in result.blocking_findings if f.rule_id == "pl-009"]
+
+    def test_launch_semver_tag_does_not_block_on_pl009(self, tmp_path):
+        """The control: a vX.Y.Z tag clears pl-009, so the two cases above can fail."""
+        project = developer_tool(tmp_path / "tool", tags=("v1.2.3",))
+        result = SkillDispatcher.launch(project)
+        assert not [f for f in result.blocking_findings if f.rule_id == "pl-009"]
+
+    def test_launch_non_semver_tag_is_blocked(self, tmp_path):
+        """A developer-tool with only a non-semver tag is LAUNCH_BLOCKED on pl-009."""
+        project = developer_tool(tmp_path / "tool", tags=("ph-1.2.3",))
+        result = SkillDispatcher.launch(project)
         assert (
             result.verdict == "LAUNCH_BLOCKED"
         ), f"Expected LAUNCH_BLOCKED (pl-009), got {result.verdict}"
@@ -193,11 +212,10 @@ class TestSkillDispatcherLaunch:
         # No T1 blocking findings — that WOULD be a regression
         assert not result.t1_blocking, f"Unexpected T1 findings on clean code: {result.t1_blocking}"
 
-    def test_launch_library_override_pl001_becomes_silent(self):
-        """Override DreamySuite as library → pl-001/002 become silent."""
-        if not DREAMYSUITE_PATH.exists():
-            pytest.skip("DreamySuite not found")
-        result = SkillDispatcher.launch(DREAMYSUITE_PATH, service_type="library")
+    def test_launch_library_override_pl001_becomes_silent(self, tmp_path):
+        """Override a consumer service as library → pl-001/002 become silent."""
+        project = consumer_service(tmp_path / "svc")
+        result = SkillDispatcher.launch(project, service_type="library")
         pl001_blocking = [f for f in result.blocking_findings if f.rule_id == "pl-001"]
         pl002_blocking = [f for f in result.blocking_findings if f.rule_id == "pl-002"]
         assert (
@@ -207,12 +225,14 @@ class TestSkillDispatcherLaunch:
             not pl002_blocking
         ), "With service_type=library, pl-002 should be SILENT (in silent_rules)"
 
-    def test_launch_library_override_pl009_still_blocks(self):
-        """Override as library → pl-009 (semver) still blocks."""
-        if not DREAMYSUITE_PATH.exists():
-            pytest.skip("DreamySuite not found")
-        # Use dream-studio-clean (has non-semver tags) with library override
-        result = SkillDispatcher.launch(REPO_ROOT, service_type="library")
+    def test_launch_library_override_pl009_still_blocks(self, tmp_path):
+        """Override as library → pl-009 (semver) still blocks.
+
+        Built from a repository with no semver tag, not from "this checkout has none": the
+        test used to depend on the clone's tag list and on a sibling repository existing.
+        """
+        project = developer_tool(tmp_path / "tool", tags=("ph-1.2.3",))
+        result = SkillDispatcher.launch(project, service_type="library")
         pl009_blocking = [f for f in result.blocking_findings if f.rule_id == "pl-009"]
         assert pl009_blocking, (
             "pl-009 should still block with service_type=library: "
@@ -220,36 +240,57 @@ class TestSkillDispatcherLaunch:
         )
 
 
-# ── DreamySuite tests (conditional) ──────────────────────────────────────
+# ── Consumer-service tests (a fixture project, not a sibling repository) ──
+#
+# These used to launch against ``~/builds/dreamysuite`` and skip when it was absent, so the
+# consumer-service blocking rules were untested on every machine but one and the result
+# changed whenever that project did.
 
 
-@pytest.mark.skipif(
-    not DREAMYSUITE_PATH.exists(),
-    reason="DreamySuite not present at ~/builds/dreamysuite",
-)
-class TestDreamySuiteLaunch:
-    def test_launch_dreamysuite_is_consumer(self):
-        result = SkillDispatcher.launch(DREAMYSUITE_PATH)
+class TestConsumerServiceLaunch:
+    def test_launch_consumer_service_is_consumer(self, tmp_path):
+        result = SkillDispatcher.launch(consumer_service(tmp_path / "svc"))
         assert result.service_type == "consumer"
 
-    def test_launch_dreamysuite_is_blocked(self):
-        result = SkillDispatcher.launch(DREAMYSUITE_PATH)
+    def test_a_schema_that_stores_an_email_alone_makes_a_consumer_service(self, tmp_path):
+        project = consumer_service(tmp_path / "svc", web_ui=False)
+        assert SkillDispatcher.launch(project).service_type == "consumer"
+
+    def test_a_web_ui_alone_makes_a_consumer_service(self, tmp_path):
+        project = consumer_service(tmp_path / "svc", stores_email=False)
+        assert SkillDispatcher.launch(project).service_type == "consumer"
+
+    def test_neither_signal_is_not_a_consumer_service(self, tmp_path):
+        """The control for the two above: with no web UI and no personal data in the schema the
+        project is not inferred to be a consumer service, so they are not vacuous."""
+        project = consumer_service(tmp_path / "svc", web_ui=False, stores_email=False)
+        assert SkillDispatcher.launch(project).service_type != "consumer"
+
+    def test_launch_consumer_service_is_blocked(self, tmp_path):
+        result = SkillDispatcher.launch(consumer_service(tmp_path / "svc"))
         assert result.verdict == "LAUNCH_BLOCKED"
 
-    def test_launch_dreamysuite_pl001_blocks(self):
-        result = SkillDispatcher.launch(DREAMYSUITE_PATH)
+    def test_launch_consumer_service_pl001_blocks(self, tmp_path):
+        result = SkillDispatcher.launch(consumer_service(tmp_path / "svc"))
         pl001 = [f for f in result.blocking_findings if f.rule_id == "pl-001"]
-        assert pl001, "pl-001 (ToS) should block on DreamySuite consumer service"
+        assert pl001, "pl-001 (ToS) should block a consumer service with no terms"
 
-    def test_launch_dreamysuite_pl002_blocks(self):
-        result = SkillDispatcher.launch(DREAMYSUITE_PATH)
+    def test_launch_consumer_service_pl002_blocks(self, tmp_path):
+        result = SkillDispatcher.launch(consumer_service(tmp_path / "svc"))
         pl002 = [f for f in result.blocking_findings if f.rule_id == "pl-002"]
-        assert pl002, "pl-002 (Privacy Policy) should block on DreamySuite consumer service"
+        assert pl002, "pl-002 (Privacy Policy) should block a consumer service with no policy"
 
-    def test_launch_dreamysuite_library_override_removes_legal_blocks(self):
-        """Overriding DreamySuite as library removes pl-001/002 from blocking."""
-        result_consumer = SkillDispatcher.launch(DREAMYSUITE_PATH, service_type="consumer")
-        result_library = SkillDispatcher.launch(DREAMYSUITE_PATH, service_type="library")
+    def test_launch_consumer_service_with_legal_documents_does_not_block_on_them(self, tmp_path):
+        """The control: with both documents present neither legal rule blocks."""
+        result = SkillDispatcher.launch(consumer_service(tmp_path / "svc", legal_documents=True))
+        blocking = {f.rule_id for f in result.blocking_findings}
+        assert not blocking & {"pl-001", "pl-002"}, sorted(blocking)
+
+    def test_launch_consumer_service_library_override_removes_legal_blocks(self, tmp_path):
+        """Overriding a consumer service as library removes pl-001/002 from blocking."""
+        project = consumer_service(tmp_path / "svc")
+        result_consumer = SkillDispatcher.launch(project, service_type="consumer")
+        result_library = SkillDispatcher.launch(project, service_type="library")
         consumer_pl001 = [f for f in result_consumer.blocking_findings if f.rule_id == "pl-001"]
         library_pl001 = [f for f in result_library.blocking_findings if f.rule_id == "pl-001"]
         assert consumer_pl001, "pl-001 should block as consumer"

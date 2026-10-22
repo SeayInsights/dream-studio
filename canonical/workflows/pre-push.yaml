@@ -180,6 +180,8 @@ gates:
       tests/unit/test_work_order_boundary_is_declarable.py,
       tests/unit/test_fail_open_probe_gate.py,
       tests/unit/test_test_isolation_gate.py,
+      tests/unit/test_machine_reads_gate.py,
+      tests/unit/test_isolation_environment_guard.py,
       tests/unit/test_fixture_schema_parity_gate.py,
       tests/unit/test_seam_payload_to_projection.py,
       tests/unit/test_task_status_vocabulary.py,
@@ -444,10 +446,21 @@ gates:
       the process and stays installed through teardown, where autouse guards run —
       the shape that made the spool guard see writes into the operator's real
       ~/.dream-studio and abort the suite FATAL while the test itself passed.
+      It also may not read the machine it runs on: the operator's home, ~/.claude,
+      CLAUDE_CONFIG_DIR, a sibling checkout, or this clone's git refs (origin/main)
+      without redirecting the home first (GitHub issue #911). Such a test passes
+      where it was written, skips on CI so it cannot fail there, and fails on a
+      machine whose install is out of date for a reason no commit caused. A check
+      that is really about one machine is marked install_check and is never
+      collected by default. The allow-list in core/gates/machine_reads.py may only
+      shrink: an entry that matches nothing fails.
     command: [py, -m, core.gates.test_isolation]
     fail_hint: >
       Replace the lambda/mock with a named function that delegates to the real
-      implementation for anything but the object under test.
+      implementation for anything but the object under test. For a machine read,
+      build a temporary home (the isolated_home fixture) and a temporary git
+      repository (tests/helpers/git_repo.py), or move the check to
+      tests/install_checks under the install_check marker.
 
   - id: fixture-schema-parity
     tier: blocking

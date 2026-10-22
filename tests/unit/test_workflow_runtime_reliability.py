@@ -106,8 +106,7 @@ class TestRepresentativeWorkflowValidation:
     @pytest.mark.parametrize("name", REPRESENTATIVE)
     def test_workflow_validates(self, name):
         path = WORKFLOWS_DIR / name
-        if not path.is_file():
-            pytest.skip(f"{name} not found")
+        assert path.is_file(), f"{name} not found"
         data = self.mod.parse_workflow(str(path))
         errors = self.mod.validate(data, REPO_ROOT)
         blocking = [
@@ -295,8 +294,7 @@ class TestDashboardDependency:
     @pytest.mark.parametrize("name", DASHBOARD_WORKFLOWS)
     def test_dashboard_workflow_exists(self, name):
         f = WORKFLOWS_DIR / name
-        if not f.is_file():
-            pytest.skip(f"{name} not found")
+        assert f.is_file(), f"{name} not found"
         text = f.read_text(encoding="utf-8")
         assert "dashboard" in text.lower() or "localhost" in text or "api" in text.lower()
 

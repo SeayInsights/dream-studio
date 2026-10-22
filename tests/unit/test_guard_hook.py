@@ -66,8 +66,7 @@ class TestStaticPatterns:
         """Each static-fire positive fixture must produce at least 1 static finding."""
         for fixture_path in POSITIVE_STATIC_FIXTURES:
             path = REPO_ROOT / fixture_path
-            if not path.exists():
-                pytest.skip(f"Fixture not found: {fixture_path}")
+            assert path.exists(), f"Fixture not found: {fixture_path}"
             content = path.read_text(encoding="utf-8")
             findings = apply_static_patterns(content, rules)
             assert len(findings) >= 1, (
@@ -79,8 +78,7 @@ class TestStaticPatterns:
         """Each llm_confirm positive fixture must produce at least 1 LLM candidate."""
         for fixture_path in POSITIVE_LLM_FIXTURES:
             path = REPO_ROOT / fixture_path
-            if not path.exists():
-                pytest.skip(f"Fixture not found: {fixture_path}")
+            assert path.exists(), f"Fixture not found: {fixture_path}"
             content = path.read_text(encoding="utf-8")
             candidates = apply_llm_candidate_patterns(content, rules)
             assert len(candidates) >= 1, (
@@ -92,8 +90,7 @@ class TestStaticPatterns:
         """Each non-suppressed negative fixture must produce 0 static findings."""
         for fixture_path in NEGATIVE_FIXTURES:
             path = REPO_ROOT / fixture_path
-            if not path.exists():
-                pytest.skip(f"Fixture not found: {fixture_path}")
+            assert path.exists(), f"Fixture not found: {fixture_path}"
             content = path.read_text(encoding="utf-8")
             findings = apply_static_patterns(content, rules)
             assert len(findings) == 0, (
@@ -105,8 +102,7 @@ class TestStaticPatterns:
         """Markdown files should never trigger static-fire rules."""
         # OWASP doc quote — static patterns appear but we simulate md handling
         md_fixture = REPO_ROOT / "tests/fixtures/guard/negative/owasp-doc.md"
-        if not md_fixture.exists():
-            pytest.skip("MD fixture not found")
+        assert md_fixture.exists(), "MD fixture not found"
         content = md_fixture.read_text(encoding="utf-8")
         # Static patterns may match in content, but the hook skips static for .md
         # Here we test that if the hook applies static to .md content it still finds

@@ -50,8 +50,7 @@ class TestSeverityEnumFix:
 
         taxonomy = "docs/canonical/event_taxonomy_v1.json"
         schema = "docs/canonical/canonical_event_v1_schema.json"
-        if not Path(taxonomy).exists() or not Path(schema).exists():
-            pytest.skip("Canonical files not found")
+        assert Path(taxonomy).exists() and Path(schema).exists(), "Canonical files not found"
         return EventValidator(taxonomy, schema)
 
     def _make_event(self, severity: str) -> dict:
@@ -243,8 +242,7 @@ class TestTaxonomySecurityTypes:
     @pytest.fixture()
     def taxonomy(self):
         path = Path("docs/canonical/event_taxonomy_v1.json")
-        if not path.exists():
-            pytest.skip("Taxonomy not found")
+        assert path.exists(), "Taxonomy not found"
         with open(path) as f:
             return json.load(f)
 
@@ -277,8 +275,7 @@ class TestSchemaIncludesInfo:
 
     def test_schema_enum_includes_info(self):
         path = Path("docs/canonical/canonical_event_v1_schema.json")
-        if not path.exists():
-            pytest.skip("Schema not found")
+        assert path.exists(), "Schema not found"
         with open(path) as f:
             schema = json.load(f)
         allowed = schema["properties"]["severity"]["enum"]

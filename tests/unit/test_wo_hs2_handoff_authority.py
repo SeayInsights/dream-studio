@@ -109,8 +109,7 @@ def test_write_handoff_packet_returns_none_on_failure(tmp_path: Path) -> None:
 def test_handoff_band_dispatches_to_handle_handoff(tmp_path: Path) -> None:
     """on-context-threshold calls handle_handoff (not compact_warning) for band=='handoff'."""
     path = _hook_path("on-context-threshold.py")
-    if not path.is_file():
-        pytest.skip("hook not found")
+    assert path.is_file(), "hook not found"
 
     from control.execution.dispatch_helpers import load_module
 
@@ -134,8 +133,7 @@ def test_handoff_band_dispatches_to_handle_handoff(tmp_path: Path) -> None:
 def test_compact_band_dispatches_to_compact_warning(tmp_path: Path) -> None:
     """on-context-threshold calls handle_compact_warning (not handle_handoff) for band=='compact'."""
     path = _hook_path("on-context-threshold.py")
-    if not path.is_file():
-        pytest.skip("hook not found")
+    assert path.is_file(), "hook not found"
 
     from control.execution.dispatch_helpers import load_module
 
@@ -161,8 +159,7 @@ def test_compact_band_dispatches_to_compact_warning(tmp_path: Path) -> None:
 
 def _load_dispatch_mod(suffix: str) -> object:
     path = _hook_path("on-stop-dispatch.py")
-    if not path.is_file():
-        pytest.skip("hook not found")
+    assert path.is_file(), "hook not found"
     from control.execution.dispatch_helpers import load_module
 
     return load_module(f"_on_stop_dispatch_{suffix}", path)

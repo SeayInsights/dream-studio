@@ -124,6 +124,29 @@ from core.gates.pytest_collection_rules import (
     string_lists,
 )
 
+
+def _applies_mark(expr: ast.AST, mark: str) -> bool:
+    """Does this expression name `<something>.mark.<mark>` (``pytest.mark.x``, ``mark.x``)?"""
+    return any(
+        isinstance(node, ast.Attribute)
+        and node.attr == mark
+        and ast.unparse(node.value).split(".")[-1] == "mark"
+        for node in ast.walk(expr)
+    )
+
+
+def _applies_mark_through_helper(
+    expr: ast.AST, mark: str, helpers: dict[str, ast.FunctionDef | ast.AsyncFunctionDef]
+) -> bool:
+    """A decorator that is, or calls, a function defined in this module whose body applies the
+    mark: `real_engine` in tests/unit/test_lane_sandbox.py."""
+    root = expr.func if isinstance(expr, ast.Call) else expr
+    while isinstance(root, (ast.Call, ast.Attribute)):
+        root = root.func if isinstance(root, ast.Call) else root.value
+    helper = helpers.get(root.id) if isinstance(root, ast.Name) else None
+    return helper is not None and _applies_mark(helper, mark)
+
+
 __all__ = [
     "DEFAULT_CLASSES",
     "DEFAULT_FILES",
@@ -1346,9 +1369,63 @@ class NodeResolver:
                     error = self._class_info(stmt, mod).error
                     if error:
                         return f"class `{stmt.name}` {error}; pytest collects nothing from the file"
-            return self._walk(mod, segments, file_part)
+            return self._walk(mod, segments, file_part) or self._mark_problem(mod, segments)
         except (RecursionError, MemoryError):
             return _TOO_DEEP
+
+    def _mark_problem(self, mod: _Module, segments: list[str]) -> str | None:
+        """Why `-m "not <mark>"` in addopts keeps the node out of a default run, else None.
+
+        Reads the marks pytest would put on the node from what is visible in the file: the
+        module's `pytestmark`, a `pytestmark` in an enclosing class, a decorator on the class or
+        function, and a decorator that is a function of this module whose body applies the mark
+        (`def real_engine(fn): return pytest.mark.install_check(fn)`). A mark that arrives any
+        other way -- a decorator imported from another module, a conftest hook, a dynamic
+        `pytestmark` -- is not seen, and the agreement test against a real `pytest
+        --collect-only` of the repository is what would show the miss.
+        """
+        deselected = self.rules.deselected_marks
+        if not deselected:
+            return None
+        chain: list[ast.AST] = []
+        body = mod.tree.body
+        for name in segments:
+            found = next(
+                (
+                    s
+                    for s in reversed(body)
+                    if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                    and s.name == name
+                ),
+                None,
+            )
+            if found is None:
+                break
+            chain.append(found)
+            body = found.body if isinstance(found, ast.ClassDef) else []
+        helpers = {
+            s.name: s
+            for s in mod.tree.body
+            if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        exprs: list[ast.AST] = []
+        for scope_body in [mod.tree.body] + [n.body for n in chain if isinstance(n, ast.ClassDef)]:
+            for stmt in scope_body:
+                if isinstance(stmt, ast.Assign) and any(
+                    isinstance(t, ast.Name) and t.id == "pytestmark" for t in stmt.targets
+                ):
+                    exprs.append(stmt.value)
+        for node in chain:
+            exprs.extend(getattr(node, "decorator_list", []))
+        for mark in deselected:
+            for expr in exprs:
+                if _applies_mark(expr, mark) or _applies_mark_through_helper(expr, mark, helpers):
+                    return (
+                        f"carries the `{mark}` mark, and addopts in "
+                        f"{self.rules.config_file or 'the pytest configuration'} runs "
+                        f"`-m 'not {mark}'`, so a default run deselects it"
+                    )
+        return None
 
     def _walk(self, mod: _Module, segments: list[str], file_part: str) -> str | None:
         module_flag = mod.scope.get("__test__")
