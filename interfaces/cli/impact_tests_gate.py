@@ -30,6 +30,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -117,6 +118,34 @@ def select_tests(changed_files: list[str], repo_root: Path | str = REPO_ROOT) ->
     }
 
 
+def run_pytest(tests: list[str], env: dict[str, str] | None = None) -> int:
+    """Run pytest on exactly ``tests`` and return its exit code.
+
+    THE SELECTION GOES THROUGH A FILE, NOT THE COMMAND LINE. Windows refuses a process whose
+    command line is longer than 32,767 characters (``WinError 206``) before pytest starts, and
+    a change to ``tests/conftest.py`` makes every test an impact test: 769 paths came to 33,123
+    characters, so ``windows-latest`` pr-smoke would have failed deterministically while Linux
+    and macOS (megabyte limits) passed. pytest reads ``@<file>`` as one argument per line, so
+    the selection, its order and the exit code are unchanged.
+    """
+    fd, name = tempfile.mkstemp(prefix="impact-tests-", suffix=".args")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            # No trailing newline: argparse would turn the empty last line into an empty argument.
+            handle.write("\n".join(tests))
+        return subprocess.run(
+            [sys.executable, "-m", "pytest", f"@{name}", "-q"],
+            cwd=REPO_ROOT,
+            env=env,
+            check=False,
+        ).returncode
+    finally:
+        try:
+            os.unlink(name)
+        except OSError:
+            pass
+
+
 def main() -> int:
     # The same resolution blast_radius uses, imported rather than restated: two gates that
     # disagree about what the diff is would report on two different pull requests.
@@ -160,13 +189,8 @@ def main() -> int:
         )
     sys.stdout.flush()
 
-    result = subprocess.run(
-        [sys.executable, "-m", "pytest", *selection["tests"], "-q"],
-        cwd=REPO_ROOT,
-        env=_isolated_test_env(),
-        check=False,
-    )
-    if result.returncode != 0:
+    returncode = run_pytest(selection["tests"], env=_isolated_test_env())
+    if returncode != 0:
         print()
         print("=" * 70)
         print("IMPACT-TESTS GATE: a test the blast-radius gate selected has failed")
@@ -174,7 +198,7 @@ def main() -> int:
         print("These are the tests this change set reaches. Until now pr-smoke printed")
         print("this list and ran a fixed ten files instead.")
         print("=" * 70)
-    return result.returncode
+    return returncode
 
 
 if __name__ == "__main__":
