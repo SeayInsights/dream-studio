@@ -359,7 +359,9 @@ def test_an_addopts_the_gate_cannot_evaluate_fails_the_gate_in_one_line(
 ):
     from core.gates import rule_enforcement
 
-    (tmp_path / "pytest.ini").write_text('[pytest]\naddopts = -m "slow or fast"\n', encoding="utf-8")
+    (tmp_path / "pytest.ini").write_text(
+        '[pytest]\naddopts = -m "slow or fast"\n', encoding="utf-8"
+    )
     registry = _registry(
         tmp_path,
         """\
