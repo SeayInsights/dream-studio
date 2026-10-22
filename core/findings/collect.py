@@ -18,7 +18,7 @@ from typing import Any, Iterable
 
 from core.gates.security_verdict import is_security_blocked
 
-from .model import Finding, normalize_severity
+from .model import Finding, decode_limitations, normalize_severity
 
 # A finding line inside an audit/harden markdown artifact, e.g.
 #   - **BLOCKED — secrets in the repo.** ...
@@ -97,6 +97,11 @@ def from_security_events(db_path: Path, project_id: str | None = None) -> list[F
                 project_id=r["project_id"] if "project_id" in keys else None,
                 created_at=r["created_at"] if "created_at" in keys else None,
                 blocking=sev in ("critical", "high"),
+                # NULL, or a database that predates migration 161, is unknown: Finding
+                # normalises both to "unknown", never to high or complete.
+                confidence=r["confidence"] if "confidence" in keys else None,
+                coverage=r["coverage"] if "coverage" in keys else None,
+                limitations=decode_limitations(r["limitations"] if "limitations" in keys else None),
                 extra={
                     k: r[k]
                     for k in ("cwe_id", "owasp_category", "cve_id", "vuln_class", "scanner_type")
