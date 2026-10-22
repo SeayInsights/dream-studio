@@ -150,7 +150,11 @@ def verify_file_hashes(manifest: dict[str, Any]) -> list[str]:
         if not path.exists():
             drifted.append(f"missing: {path}")
             continue
-        actual_hash = compute_hash(path.read_text(encoding="utf-8"))
-        if actual_hash != expected_hash:
+        # The file as written, or its text with newlines folded: an install writes LF on every
+        # OS now (and copies .cmd/.bat as bytes), and an earlier one wrote platform newlines,
+        # which a manifest of the same era hashed folded. A CRLF save of the same text is not
+        # drift; a changed character is.
+        raw = path.read_bytes()
+        if expected_hash not in (compute_hash(raw), compute_hash(raw.replace(b"\r\n", b"\n"))):
             drifted.append(f"hash_mismatch: {path}")
     return drifted

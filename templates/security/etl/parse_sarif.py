@@ -5,8 +5,19 @@ Reads scan results from ~/.dream-studio/security/scans/{client}/
 Supports: Semgrep SARIF, Bandit JSON, TruffleHog JSON, pip-audit JSON
 Outputs: normalized flat findings list as JSON (stdout or file)
 
+Every finding carries `coverage` (complete | partial | unknown) and `limitations` (see
+scan_coverage.py). `complete` needs the run record in the scan directory's scan-meta.json
+(`steps`: one entry per planned scanner, and `run.conclusion`) to say every planned scanner
+ran and the workflow run concluded `success`, AND this parser to have read a result for
+each scanner. A run that did not succeed, a scanner that failed or was skipped, a result
+that is missing or unreadable (or one this parser has no reader for) makes the scan
+partial and is named; a scan directory with no usable run record (a local-file ingest) is
+unknown, never complete. `--coverage-output` writes the same facts per scan directory,
+and writes them before any non-zero exit.
+
 Usage:
     py -3.12 parse_sarif.py --client <name> [--scans-dir <path>] [--output <path>]
+                            [--coverage-output <path>]
     py -3.12 parse_sarif.py --sample --client <name>
 """
 
@@ -16,14 +27,21 @@ import json
 import sys
 from pathlib import Path
 
-# This script runs in place from the repo (`py -3.12 templates/security/etl/...py`,
-# see templates/security/README.md), which puts its own directory on sys.path, not
-# the repo root -- the resolver import below needs a manual add.
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+# scan_coverage.py is a sibling of this script (shared with the other parse_* scripts).
+_ETL_DIR = Path(__file__).resolve().parent
+if str(_ETL_DIR) not in sys.path:
+    sys.path.insert(0, str(_ETL_DIR))
 
-from core.config.paths import home_dir  # noqa: E402
+import scan_coverage  # noqa: E402
+from etl_home import home_dir  # noqa: E402
+
+#: The scanners the security-scan workflow can run, as the step names of the run record
+#: `scan ingest` writes into scan-meta.json (one per job: semgrep always, the rest from the
+#: client profile's `scan.extra_scanners`). The steps a scan plans are the ones its own
+#: scan-meta.json lists (`planned_steps`, plus any step it records), with semgrep as the
+#: floor. A scanner whose output this parser has no reader for (npm-audit) is recorded as
+#: ran and read as unread: its findings never reach the dataset, and that is said.
+DEFAULT_STEPS = ("semgrep",)
 
 # ── Severity ranking for deduplication (higher index = higher severity) ───────
 SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
@@ -173,7 +191,9 @@ def _repo_from_path(scan_file_stem: str) -> str:
 
 def parse_semgrep_sarif(data: dict, repo: str) -> list[dict]:
     findings = []
-    for run in data.get("runs", []):
+    runs = data.get("runs", [])
+    # a `runs` that is not a list of objects holds no run; read_result_file says so
+    for run in [r for r in (runs if isinstance(runs, list) else []) if isinstance(r, dict)]:
         rules_meta = {}
         for rule in run.get("tool", {}).get("driver", {}).get("rules", []):
             rid = rule.get("id", "")
@@ -271,36 +291,58 @@ def parse_bandit(data: dict, repo: str) -> list[dict]:
 # ── Parser: TruffleHog JSON ───────────────────────────────────────────────────
 
 
+def _trufflehog_location(result: dict) -> tuple[str, int | None]:
+    """(file, line) from a trufflehog result's SourceMetadata, whatever the source type
+    (Git, Filesystem, Github, ...): the first source object that names a file."""
+    meta = result.get("SourceMetadata")
+    data = meta.get("Data") if isinstance(meta, dict) else None
+    if not isinstance(data, dict):
+        return "", None
+    for source in data.values():
+        if isinstance(source, dict) and isinstance(source.get("file"), str):
+            line = source.get("line")
+            return source["file"], (
+                line if isinstance(line, int) and not isinstance(line, bool) else None
+            )
+    return "", None
+
+
 def parse_trufflehog(data_list: list, repo: str) -> list[dict]:
+    """Findings from trufflehog results. A secret is high severity.
+
+    A finding carries the detector name, the file, the line and whether trufflehog verified the
+    secret live, and NOTHING of the secret: `Raw`, `RawV2` and the partly masked `Redacted`
+    are never read, and neither is the commit author. The old finding put `Raw[:80]` in its
+    message, which reached the findings JSON, the CSV and the dashboard.
+    """
     findings = []
     if isinstance(data_list, dict):
         data_list = data_list.get("results", [data_list])
-    for r in data_list:
-        detector = r.get("DetectorName", "secret")
-        raw = r.get("Raw", "")[:80]  # truncate sensitive raw value
-        meta = r.get("SourceMetadata", {}).get("Data", {})
-        # TruffleHog metadata varies by source type; try common keys
-        filename = (
-            meta.get("Filesystem", {}).get("file")
-            or meta.get("Git", {}).get("file")
-            or meta.get("file", "")
+    for r in data_list if isinstance(data_list, list) else []:
+        if not isinstance(r, dict):
+            continue
+        detector = r.get("DetectorName")
+        detector = (
+            scan_coverage.short(detector) if isinstance(detector, str) and detector else "secret"
         )
-        line = meta.get("Filesystem", {}).get("line") or meta.get("Git", {}).get("line")
+        filename, line = _trufflehog_location(r)
+        verified = r.get("Verified") is True
         rule_id = f"TH-{detector}"
-        fp = _fingerprint(repo, filename or "", line, rule_id)
+        fp = _fingerprint(repo, filename, line, rule_id)
+        state = "verified by trufflehog" if verified else "unverified"
         findings.append(
             {
                 "id": fp,
                 "repo": repo,
-                "file": filename or "",
+                "file": scan_coverage.short(filename),
                 "line": line,
                 "rule_id": rule_id,
-                "severity": "critical",
-                "message": f"Secret detected by {detector}: {raw!r}",
+                "severity": "high",
+                "message": f"Secret detected by {detector} ({state}; value redacted)",
                 "cwe": "CWE-312",
                 "owasp": "A02:2021",
                 "scanner": "trufflehog",
-                "raw_severity": "CRITICAL",
+                "raw_severity": "HIGH",
                 "fingerprint": fp,
                 "target_type": "repo",
                 "target_name": "",
@@ -310,6 +352,58 @@ def parse_trufflehog(data_list: list, repo: str) -> list[dict]:
             }
         )
     return findings
+
+
+#: How many failing lines a limitation numbers; the rest are counted.
+_NAMED_LINES = 5
+
+
+def jsonl_lines(text: str) -> list[str]:
+    """The lines of a JSON Lines text: split on LF only, each stripped of spaces, tabs and CR.
+
+    Not str.splitlines(), which also splits on U+0085, U+2028, U+2029, form feed and the rest:
+    a result whose value holds one (JSON allows it raw) became two unreadable lines. A line of
+    nothing but such a character is a junk line, not a blank one. Blank lines read as ''.
+    """
+    return [line.strip(" \t\r") for line in text.split("\n")]
+
+
+def read_trufflehog_lines(text: str, name: str) -> tuple[list[dict], list[str], list[str]]:
+    """(findings, degraded, notes) from trufflehog JSON Lines (`--json`: one result per line).
+
+    The file may also hold trufflehog's own log lines (the old workflow merged stderr into it);
+    those are set aside with a note. A line that is neither a result nor a log line is skipped
+    and numbered in `degraded`, never quoted: it may be the secret.
+    """
+    results: list[dict] = []
+    logs = 0
+    bad: list[int] = []
+    for number, line in enumerate(jsonl_lines(text), 1):
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except (ValueError, RecursionError):
+            bad.append(number)
+            continue
+        if isinstance(obj, dict) and ("DetectorName" in obj or "SourceMetadata" in obj):
+            results.append(obj)
+        elif isinstance(obj, dict) and "level" in obj and "msg" in obj:
+            logs += 1
+        else:
+            bad.append(number)
+    degraded: list[str] = []
+    notes: list[str] = []
+    if bad:
+        shown = ", ".join(str(n) for n in bad[:_NAMED_LINES])
+        more = ", ..." if len(bad) > _NAMED_LINES else ""
+        degraded.append(
+            f"{len(bad)} line(s) of {name} could not be read as trufflehog results and were "
+            f"skipped (lines {shown}{more})"
+        )
+    if logs:
+        notes.append(f"{logs} trufflehog log line(s) in {name} were ignored: they are not results")
+    return parse_trufflehog(results, ""), degraded, notes
 
 
 # ── Parser: pip-audit JSON ────────────────────────────────────────────────────
@@ -361,55 +455,224 @@ def parse_pip_audit(data_list: list, repo: str) -> list[dict]:
 # ── Auto-detect scanner from file content ─────────────────────────────────────
 
 
-def detect_and_parse(data: object, filename: str, repo: str) -> list[dict]:
-    # SARIF: has $schema or runs[].results[]
+def detect_step(data: object) -> str | None:
+    """Which scanner a parsed result file is the output of; None if it is none we read.
+
+    Decided by content, not file name (the workflow's artifacts keep the scanner's own
+    names: semgrep-results.sarif, bandit-results.json, ...).
+    """
     if isinstance(data, dict):
         schema = data.get("$schema", "")
-        if "sarif" in schema.lower() or ("runs" in data and "results" in data.get("runs", [{}])[0]):
-            return parse_semgrep_sarif(data, repo)
+        runs = data.get("runs")
+        first_run = runs[0] if isinstance(runs, list) and runs else None
+        if (isinstance(schema, str) and "sarif" in schema.lower()) or (
+            isinstance(first_run, dict) and "results" in first_run
+        ):
+            return "semgrep"
 
-        # Bandit: has 'results' list with 'test_id' or 'issue_severity'
-        if "results" in data and isinstance(data["results"], list):
-            sample = data["results"][0] if data["results"] else {}
+        results = data.get("results")
+        if isinstance(results, list):
+            sample = results[0] if results and isinstance(results[0], dict) else {}
+            # Bandit: results with 'test_id' or 'issue_severity'. A run that found nothing
+            # has no result to look at, but still carries bandit's own envelope.
             if "test_id" in sample or "issue_severity" in sample:
-                return parse_bandit(data, repo)
+                return "bandit"
+            if not results and "metrics" in data and "generated_at" in data:
+                return "bandit"
             # TruffleHog dict wrapper
             if "DetectorName" in sample or "SourceMetadata" in sample:
-                return parse_trufflehog(data["results"], repo)
+                return "trufflehog"
 
         # pip-audit dict wrapper
-        if "dependencies" in data:
-            return parse_pip_audit(data["dependencies"], repo)
+        if isinstance(data.get("dependencies"), list):
+            return "pip-audit"
 
-    # pip-audit: top-level list of {name, version, vulns}
     if isinstance(data, list):
-        sample = data[0] if data else {}
+        sample = data[0] if data and isinstance(data[0], dict) else {}
+        # pip-audit: top-level list of {name, version, vulns}
         if "vulns" in sample:
-            return parse_pip_audit(data, repo)
+            return "pip-audit"
         # TruffleHog top-level list
         if "DetectorName" in sample or "SourceMetadata" in sample:
-            return parse_trufflehog(data, repo)
+            return "trufflehog"
+    return None
 
+
+def detect_and_parse(data: object, filename: str, repo: str) -> list[dict]:
+    step = detect_step(data)
+    if step == "semgrep":
+        return parse_semgrep_sarif(data, repo)
+    if step == "bandit":
+        return parse_bandit(data, repo)
+    if step == "trufflehog":
+        return parse_trufflehog(data["results"] if isinstance(data, dict) else data, repo)
+    if step == "pip-audit":
+        return parse_pip_audit(data["dependencies"] if isinstance(data, dict) else data, repo)
     print(f"  [warn] Could not detect scanner format for {filename}", file=sys.stderr)
     return []
+
+
+# ── Reading a scan directory, with coverage ──────────────────────────────────
+
+
+#: Files a scan directory holds that are never a scanner's result.
+NOT_RESULTS = frozenset({scan_coverage.META_NAME, "coverage.json", "hash.json"})
+
+
+def is_result_file(path: Path) -> bool:
+    """Candidate result files: .json / .sarif / .jsonl files, never scan-meta.json and its
+    siblings. (.jsonl: trufflehog's JSON Lines results.)"""
+    return (
+        path.suffix in (".json", ".sarif", ".jsonl")
+        and path.is_file()
+        and path.name not in NOT_RESULTS
+    )
+
+
+def planned_steps(meta: dict | None) -> tuple[str, ...]:
+    """The scanners one scan planned, from its scan-meta.json (see DEFAULT_STEPS)."""
+    names: list[str] = list(DEFAULT_STEPS)
+    if meta is not None:
+        listed = meta.get("planned_steps")
+        recorded = meta.get("steps")
+        for source in (listed, recorded):
+            if not isinstance(source, list):
+                continue
+            for item in source:
+                name = item.get("step") if isinstance(item, dict) else item
+                if isinstance(name, str) and name and name not in names:
+                    names.append(name)
+    return tuple(names)
+
+
+#: File-name fragments that say which scanner a result belongs to, for a file too corrupt to
+#: tell by its content. `pip-audit` and `pipaudit` are the two spellings the workflow's
+#: artifacts and the older doc used.
+SCANNER_NAME_HINTS = (
+    ("semgrep", "semgrep"),
+    ("bandit", "bandit"),
+    ("trufflehog", "trufflehog"),
+    ("pip-audit", "pip-audit"),
+    ("pipaudit", "pip-audit"),
+    ("npm-audit", "npm-audit"),
+)
+
+
+def scanner_from_name(name: str) -> str | None:
+    """The scanner a file name points at, or None. Names are free-form (the workflow keeps
+    each scanner's own), so this is a hint used only when the content cannot be read."""
+    low = name.lower()
+    return next((step for hint, step in SCANNER_NAME_HINTS if hint in low), None)
+
+
+def sarif_degradation(raw: object) -> str | None:
+    """Why a SARIF document is not evidence that semgrep ran to the end; None when it is.
+
+    semgrep always writes one run, with a `results` list (empty when it found nothing). A
+    document with no runs, or runs with no results list, is a schema stub or a truncated
+    write: it must not read as a clean complete scan with zero findings.
+    """
+    runs = raw.get("runs") if isinstance(raw, dict) else None
+    if not isinstance(runs, list) or not runs:
+        return "no runs in the SARIF: it holds no run, so it does not show the scan completed"
+    if not any(isinstance(r, dict) and isinstance(r.get("results"), list) for r in runs):
+        return "no results list in any run of the SARIF: it does not show the scan completed"
+    return None
+
+
+def _unreadable(path: Path, exc: Exception) -> scan_coverage.Read:
+    """A file that cannot be read: named, and when its name says which scanner it belongs to
+    that scanner is degraded (partial). A name that says nothing re-raises, so the caller
+    records the refusal."""
+    step = scanner_from_name(path.name)
+    if step is None:
+        raise exc
+    reason = f"{path.name} could not be read ({scan_coverage.short(exc)})"
+    return scan_coverage.Read(
+        None,
+        [],
+        [],
+        [],
+        [f"{path.name} could not be read: {scan_coverage.short(exc)}"],
+        ((step, f"{reason}, so {step}'s output may be incomplete"),),
+    )
+
+
+def _read_trufflehog_file(path, decoded, hinted, repo) -> scan_coverage.Read:
+    findings, degraded, notes = read_trufflehog_lines(decoded.text, path.name)
+    for finding in findings:  # the lines were parsed without a repo; stamp it now
+        finding["repo"] = repo
+        finding["fingerprint"] = finding["id"] = _fingerprint(
+            repo, finding["file"], finding["line"], finding["rule_id"]
+        )
+    nonblank = any(jsonl_lines(decoded.text))
+    is_trufflehog = (
+        bool(findings)
+        or any("log line(s)" in n for n in notes)
+        or (hinted == "trufflehog" and (not nonblank or degraded))
+    )
+    all_notes = list(decoded.notes) + notes
+    if not is_trufflehog:
+        refusal = f"{path.name} is not the output of a scanner this parser reads"
+        return scan_coverage.Read(None, [], [], all_notes, [refusal])
+    return scan_coverage.Read("trufflehog", findings, list(decoded.degraded) + degraded, all_notes)
+
+
+def read_result_file(path: Path, target_name: str) -> scan_coverage.Read:
+    """Parse one scanner result into a scan_coverage.Read.
+
+    The scanner (the planned step the file is the output of) is decided by content. A file
+    that is JSON but no scanner's output reads as no step and is named. One that cannot be
+    read is named too, and when its name says which scanner it belongs to that scanner is
+    degraded (partial): a corrupt second semgrep file must not hide behind a good first.
+    """
+    try:
+        decoded = scan_coverage.decode_text(path.read_bytes(), path.name)
+    except (OSError, ValueError, RecursionError) as exc:
+        return _unreadable(path, exc)
+    hinted = scanner_from_name(path.name)
+    raw: object = None
+    is_document = False
+    if path.suffix.lower() != ".jsonl":
+        try:
+            raw = json.loads(decoded.text)
+            is_document = True
+        except (ValueError, RecursionError) as exc:
+            if hinted != "trufflehog":
+                return _unreadable(path, exc)
+    if not is_document:
+        # JSON Lines: trufflehog's `--json` output, or the merged stream the old workflow wrote
+        # into trufflehog-results.json (not a document, so read by its name).
+        return _read_trufflehog_file(path, decoded, hinted, repo_for(path, target_name))
+    step = detect_step(raw)
+    notes = list(decoded.notes)
+    if step is None:
+        refusal = f"{path.name} is not the output of a scanner this parser reads"
+        return scan_coverage.Read(None, [], [], notes, [refusal])
+    degraded = list(decoded.degraded)
+    if step == "semgrep":
+        problem = sarif_degradation(raw)
+        if problem:
+            degraded.append(f"{path.name}: {problem}")
+    return scan_coverage.Read(
+        step, detect_and_parse(raw, path.name, repo_for(path, target_name)), degraded, notes
+    )
+
+
+def repo_for(path: Path, target_name: str) -> str:
+    """The repo a result belongs to: the file name's scanner-suffix prefix when it has one
+    (`vendor-portal-semgrep.sarif`), else the scan directory's repo (`{repo}/{date}/`)."""
+    named = _repo_from_path(path.stem)
+    return named if named != path.stem else target_name
 
 
 # ── Deduplication ─────────────────────────────────────────────────────────────
 
 
 def deduplicate(findings: list[dict]) -> list[dict]:
-    """Keep one finding per fingerprint; prefer highest severity."""
-    best: dict[str, dict] = {}
-    for f in findings:
-        fp = f["fingerprint"]
-        if fp not in best:
-            best[fp] = f
-        else:
-            existing_rank = SEVERITY_RANK.get(best[fp]["severity"], 0)
-            new_rank = SEVERITY_RANK.get(f["severity"], 0)
-            if new_rank > existing_rank:
-                best[fp] = f
-    return list(best.values())
+    """Keep one finding per fingerprint; prefer highest severity. Scans that disagree about
+    coverage leave the weaker one on the merged finding (see scan_coverage.deduplicate)."""
+    return scan_coverage.deduplicate(findings, SEVERITY_RANK)
 
 
 # ── Sample data generator ─────────────────────────────────────────────────────
@@ -597,50 +860,82 @@ def main() -> None:
     )
     parser.add_argument("--output", help="Output file path. Default: stdout")
     parser.add_argument(
+        "--coverage-output",
+        help="Write per-scan coverage (complete|partial|unknown, failed steps, the workflow "
+        "run's conclusion, limitations) to this JSON file. Needed to see coverage on a scan "
+        "that produced no findings.",
+    )
+    parser.add_argument(
         "--sample",
         action="store_true",
         help="Generate synthetic sample findings for pipeline testing",
     )
     args = parser.parse_args()
 
+    scan_reports: list[dict] = []
+
     if args.sample:
         findings = generate_sample()
+        sample = scan_coverage.unknown_report(None, "synthetic sample data; no scan was run")
+        scan_coverage.stamp(findings, sample)
+        scan_reports.append(sample)
         print(f"[parse_sarif] Generated {len(findings)} sample findings", file=sys.stderr)
+        scan_coverage.report("parse_sarif", scan_reports, args.coverage_output)
     else:
         scans_dir = (
             Path(args.scans_dir)
             if args.scans_dir
             else home_dir() / "security" / "scans" / args.client
-        )
+        ).resolve()
         if not scans_dir.exists():
+            scan_reports.append(
+                scan_coverage.unknown_report(
+                    str(scans_dir), f"scans directory not found: {scans_dir}"
+                )
+            )
             print(f"[parse_sarif] ERROR: scans directory not found: {scans_dir}", file=sys.stderr)
+            scan_coverage.report("parse_sarif", scan_reports, args.coverage_output)
             sys.exit(1)
 
-        scan_files = sorted(
-            f for f in scans_dir.iterdir() if f.suffix in (".json", ".sarif") and f.is_file()
-        )
-        if not scan_files:
-            print(f"[parse_sarif] No .json/.sarif files found in {scans_dir}", file=sys.stderr)
+        try:
+            candidates = sorted(f for f in scans_dir.iterdir() if is_result_file(f))
+            all_findings, reports, n_files = scan_coverage.collect(
+                "parse_sarif",
+                scans_dir,
+                candidates,
+                planned_steps,
+                read_result_file,
+                (),
+                (),
+            )
+        except Exception as exc:  # noqa: BLE001 - never exit without the coverage sidecar
+            print(f"[parse_sarif] ERROR: reading results failed: {exc}", file=sys.stderr)
+            scan_reports.append(
+                scan_coverage.unknown_report(
+                    str(scans_dir),
+                    f"unexpected failure while reading results: {scan_coverage.short(exc)}",
+                )
+            )
+            scan_coverage.report("parse_sarif", scan_reports, args.coverage_output)
             sys.exit(1)
+        scan_reports.extend(reports)
 
-        all_findings: list[dict] = []
-        for sf in scan_files:
-            repo = _repo_from_path(sf.stem)
-            print(f"[parse_sarif] Parsing {sf.name} → repo={repo}", file=sys.stderr)
-            try:
-                with open(sf, encoding="utf-8") as fh:
-                    raw = json.load(fh)
-                parsed = detect_and_parse(raw, sf.name, repo)
-                print(f"  → {len(parsed)} findings", file=sys.stderr)
-                all_findings.extend(parsed)
-            except Exception as exc:
-                print(f"  [error] Failed to parse {sf.name}: {exc}", file=sys.stderr)
+        if not n_files:
+            print(
+                f"[parse_sarif] No .json/.sarif/.jsonl files found in {scans_dir}. parse_sarif "
+                "reads the result files directly in --scans-dir and does not walk the client "
+                "tree: pass --scans-dir the scan directory (scans/{client}/{repo}/{date}).",
+                file=sys.stderr,
+            )
+            scan_coverage.report("parse_sarif", scan_reports, args.coverage_output)
+            sys.exit(1)
 
         findings = deduplicate(all_findings)
         print(
             f"[parse_sarif] Total: {len(all_findings)} raw → {len(findings)} after dedup",
             file=sys.stderr,
         )
+        scan_coverage.report("parse_sarif", scan_reports, args.coverage_output)
 
     output_json = json.dumps(findings, indent=2)
     if args.output:

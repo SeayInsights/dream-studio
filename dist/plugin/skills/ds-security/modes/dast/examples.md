@@ -6,7 +6,7 @@ Extracted from SKILL.md to reduce context injection size.
 See `docs/security-storage-layout.md`. See skill-specific paths in layout doc.
 
 ## Templates
-See `templates/security/README.md` for template registry.
+See `<skill-dir>/templates/security/README.md` for template registry.
 
 ## Client Profile
 See `docs/client-profile-schema.md`. Required fields vary by mode.
@@ -49,7 +49,7 @@ Extract from user input:
 
 For each web app target in `targets.web_apps`:
 
-1. Read `builds/dream-studio-clean/templates/security/dast/zap-config.yaml.j2`.
+1. Read `<skill-dir>/templates/security/dast/zap-config.yaml.j2`.
 2. Fill Jinja2 variables from the target entry and client profile.
 3. Write rendered file to `~/.dream-studio/security/dast/{client}/{target.name}/zap-config.yaml`.
 
@@ -68,7 +68,7 @@ For each web app target in `targets.web_apps`:
 
 For each web app target:
 
-1. Read `builds/dream-studio-clean/templates/security/dast/nuclei-config.yaml.j2`.
+1. Read `<skill-dir>/templates/security/dast/nuclei-config.yaml.j2`.
 2. Select template tags based on:
    - `scan_profile: full` → tags: `cve,misconfig,exposure,takeover,tech-detect`
    - `scan_profile: api-only` → tags: `cve,misconfig,exposure,api`
@@ -78,7 +78,7 @@ For each web app target:
 
 ### Step S4: Generate GitHub Actions DAST Workflow
 
-1. Read `builds/dream-studio-clean/templates/security/github-actions/dast-scan.yml.j2`.
+1. Read `<skill-dir>/templates/security/github-actions/dast-scan.yml.j2`.
 2. Fill variables from all web app targets.
 3. Write to `~/.dream-studio/security/actions/{client}/dast-scan.yml`.
 
@@ -108,9 +108,43 @@ Extract from user input:
 ### Step R2: Pre-flight Checks
 
 For each target:
-1. Confirm URL is reachable: `curl -s -o /dev/null -w "%{http_code}" {target.url}`. If not reachable: **warn** and skip.
-2. Confirm ZAP is installed: `which zap.sh || which zap-cli || docker images owasp/zap2docker-stable`. If missing: show install instructions and **stop**.
+1. Confirm URL is reachable: `curl -s -o /dev/null -w "%{http_code}" {target.url}`. If not reachable: **warn**, skip this target, and write its not-scanned record (below) with the reason, for example "target unreachable: curl returned 000".
+2. Confirm ZAP is installed: `which zap.sh || which zap-cli || docker images owasp/zap2docker-stable`. If missing: show install instructions, **stop** the run, and write the not-scanned record (below) for every target in scope that has not been scanned, with the reason "zap is not installed (run stopped)". The stop must leave a trace: without it `dast status` cannot tell a target nobody tried from one the run never reached.
 3. Confirm Nuclei is installed: `which nuclei`. If missing: show install instructions and continue with ZAP only. Remember that `nuclei` was skipped (reason: "nuclei is not installed"): Step R5 records it, and it is what makes the ingested result `partial`.
+
+#### Not-scanned record
+
+A target the run did not scan has no results, but it still gets a directory of its own,
+`~/.dream-studio/security/scans/{client}/{target}/{date}-not-scanned/`, holding only this
+`scan-meta.json` (no result files). It is never written into `{date}`: a scan taken the same
+day already has its `scan-meta.json` there, and writing this one would replace the real
+scan's run record. Writing the record again the same day just replaces the record.
+
+```json
+{
+  "schema_version": 1,
+  "client": "{client}",
+  "target": "{target}",
+  "target_type": "webapp",
+  "date": "{YYYY-MM-DD}",
+  "source": "local-run",
+  "outcome": "not_scanned",
+  "reason": "{why}",
+  "scanners": [],
+  "steps": [
+    {"step": "zap", "status": "skipped", "tool": "zap", "reason": "{why}"},
+    {"step": "nuclei", "status": "skipped", "tool": "nuclei", "reason": "{why}"}
+  ],
+  "url": "{target.url}",
+  "ingested_at": "{ISO-8601}"
+}
+```
+
+It is the same record every skipped scanner already uses, so `parse_dast.py` reads it as it
+is: `outcome: not_scanned` makes the directory `partial` with the limitation "the target was
+not scanned: {why}", whatever the steps say. There is one record per target and no separate
+run-level file: a run stopped by missing ZAP is these records for every target it did not
+reach.
 
 ### Step R3: Execute ZAP Scan
 
@@ -194,14 +228,14 @@ Extract from user input:
 ### Step I1: Locate Results
 
 1. If `--file` provided: use that file.
-2. Else: find most recent `~/.dream-studio/security/scans/{client}/{target}/{date}/` directory.
+2. Else: find most recent `~/.dream-studio/security/scans/{client}/{target}/{date}/` directory that holds results; skip a `{date}-not-scanned` directory (it is a record, not a scan).
 3. Look for `zap-report.json` and/or `nuclei-output.jsonl`.
 
 ### Step I2: Parse Results
 
 1. Run parse_dast.py:
    ```bash
-   py -3.12 templates/security/etl/parse_dast.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json
+   py -3.12 <skill-dir>/templates/security/etl/parse_dast.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json
    ```
 2. This normalizes ZAP + Nuclei outputs to unified findings with `target_type: webapp`.
    Each finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`,
@@ -236,8 +270,9 @@ Show: the coverage (when it is not `complete`, say so first and name the skipped
 ### Step T1: Inventory DAST Scan Store
 
 1. List all target directories under `~/.dream-studio/security/dast/{client}/`.
-2. For each target: find most recent scan, check staleness (>7 days = STALE).
-3. For targets in profile but not scanned: mark NO RESULTS.
+2. For each target: read `scan-meta.json` of its directories under `~/.dream-studio/security/scans/{client}/{target}/` (`{date}` scans and `{date}-not-scanned` records). The last scan that ran is the most recent one whose `outcome` is not `not_scanned`; check its staleness (>7 days = STALE).
+3. If the most recent directory is a not-scanned record (`outcome: not_scanned`, a `{date}-not-scanned` directory), mark the target **NOT SCANNED** with its `reason`, and show the date of the last scan that ran beside it: a stale or old scan must not read CURRENT when the latest attempt did not scan.
+4. For targets in profile but not scanned: mark NO RESULTS.
 
 ### Step T2: Render Coverage Report
 
@@ -248,8 +283,9 @@ Show: the coverage (when it is not `complete`, say so first and name the skipped
 |---------|-----|-------------|-----------|-----|----------|--------|
 | vendor-portal-web | https://vendor.plm... | full | 2026-04-20 | 2d | 12 | CURRENT |
 | pricing-api-web | https://api.plm... | api-only | — | — | — | NO RESULTS |
+| legacy-admin-web | https://admin.plm... | passive | 2026-04-02 | 20d | 4 | NOT SCANNED (target unreachable: curl returned 000; last scan that ran 2026-04-02) |
 
-**Summary:** {N} targets | {N} current | {N} stale | {N} no results
+**Summary:** {N} targets | {N} current | {N} stale | {N} not scanned | {N} no results
 ```
 
 ---

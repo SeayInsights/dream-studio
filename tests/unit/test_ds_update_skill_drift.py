@@ -71,6 +71,13 @@ def canonical_copy(tmp_path: Path) -> Path:
         tmp_path / "canonical",
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
+    # the support trees a skill ships inside its directory (SKILL_SUPPORT_TREES) are part of
+    # the source root the plan is built from
+    shutil.copytree(
+        REPO_ROOT / "templates" / "security",
+        tmp_path / "templates" / "security",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
     return tmp_path
 
 

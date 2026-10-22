@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from integrations.installer.base import FileOp
+from integrations.installer.base import FileOp, RefusalError
 
 from .claude_code_shared import _compute_file_hash_chunked, _python_cmd
 
@@ -345,21 +345,75 @@ _EXCLUDED_SKILL_SUFFIXES = frozenset({".pyc", ".pyo", ".pyd"})
 #: it straight back, one directory over. The audit trail stays in the repo.
 _EXCLUDED_SKILL_NAMES = frozenset({"REVIEWS.md"})
 
+#: Text files whose CRLF must survive the install: .gitattributes pins them (`*.cmd`, `*.bat`).
+_KEEP_BYTES_SUFFIXES = frozenset({".cmd", ".bat"})
+
+
+#: Files a skill's own modes EXECUTE or READ that live outside canonical/, shipped inside the
+#: skill's directory by BOTH channels (the plugin build and the installer): skill id ->
+#: ((source path under the repo root, path under the skill's directory), ...). ONE registry,
+#: so a channel cannot ship the tree while another leaves it out.
+#:
+#: WHY THIS EXISTS. The security modes tell the agent to run
+#: `py -3.12 <skill-dir>/templates/security/etl/parse_binary.py`, render
+#: `templates/security/**/*.j2` and read `templates/security/compliance/*.yaml`. None of that
+#: is under canonical/, so a channel that copied canonical/skills/<pack>/ only shipped the
+#: instructions and not the thing they run. The tree keeps its internal layout (etl/ beside
+#: compliance/ and mitigations/, which the scripts find by relative path).
+#:
+#: The source stays in templates/security/: the jinja templates, the scripts, the tests and
+#: the publication-readiness scans all address it there, and moving it is the pack extraction
+#: docs/contracts/pack-capability-contract.md describes. In an installed app the repo root is
+#: code_root(), and the wheel carries templates/** there (pyproject shipped-root-data).
+SKILL_SUPPORT_TREES: dict[str, tuple[tuple[str, str], ...]] = {
+    "ds-security": (("templates/security", "templates/security"),),
+}
+
+
+def _skill_source_files(
+    skill_dir: Path, skill_id: str, repo_root: Path | None
+) -> list[tuple[Path, Path]]:
+    """(source file, path relative to the skill directory) for everything a skill ships:
+    its canonical directory, then its registered support trees under `repo_root`.
+
+    A registered tree that is not under `repo_root` raises RefusalError (the installer's own
+    refusal, which every CLI entry point renders as one error line, not a traceback): shipping the instructions
+    without what they run is the failure this exists to prevent, and it must not be silent.
+    """
+    pairs = [(f, f.relative_to(skill_dir)) for f in sorted(skill_dir.rglob("*")) if f.is_file()]
+    if repo_root is not None:
+        for source_rel, dest_rel in SKILL_SUPPORT_TREES.get(skill_id, ()):
+            source_root = repo_root / source_rel
+            if not source_root.is_dir():
+                raise RefusalError(
+                    f"{skill_id} ships {source_rel}/ in its skill directory, and it is not "
+                    f"under {repo_root}: the skill would name scripts it does not carry. "
+                    "Point --source-root at a complete Dream Studio tree (canonical/ and "
+                    f"{source_rel}/ side by side)."
+                )
+            pairs.extend(
+                (f, Path(dest_rel) / f.relative_to(source_root))
+                for f in sorted(source_root.rglob("*"))
+                if f.is_file()
+            )
+    return pairs
+
 
 def _collect_skill_dir_ops(
     skill_dir: Path,
     target_dir: Path,
     skill_id: str,
     backup_base: Path,
+    repo_root: Path | None = None,
 ) -> list[FileOp]:
-    """Return one FileOp per file in skill_dir, preserving subdirectory structure."""
+    """Return one FileOp per file in skill_dir, preserving subdirectory structure.
+
+    With `repo_root`, also one per file of the skill's registered support trees
+    (SKILL_SUPPORT_TREES), under the skill directory."""
     from integrations.compiler.claude_code import synthesize_skill_frontmatter
 
     ops: list[FileOp] = []
-    for file_path in sorted(skill_dir.rglob("*")):
-        if not file_path.is_file():
-            continue
-        rel = file_path.relative_to(skill_dir)
+    for file_path, rel in _skill_source_files(skill_dir, skill_id, repo_root):
         # Bytecode and cache directories are build output, not skill content. rglob("*")
         # swept them into the projection: 20 __pycache__/*.pyc files were installed under
         # ~/.claude/skills/ and recorded in the manifest. Two harms -- the install ships
@@ -374,12 +428,24 @@ def _collect_skill_dir_ops(
             continue
         target = target_dir / rel
         file_hash = _compute_file_hash_chunked(file_path)
-        try:
-            source_content: str | None = file_path.read_text(encoding="utf-8")
-            source_path: Path | None = None
-        except (UnicodeDecodeError, ValueError):
-            source_content = None
-            source_path = file_path
+        if rel.suffix.lower() in _KEEP_BYTES_SUFFIXES:
+            # .gitattributes keeps these CRLF (`*.cmd`/`*.bat text eol=crlf`) because they
+            # do not run otherwise; reading them as text folds the CRLF, so they are copied.
+            source_content: str | None = None
+            source_path: Path | None = file_path
+        else:
+            try:
+                source_content = file_path.read_text(encoding="utf-8")
+                source_path = None
+            except (UnicodeDecodeError, ValueError):
+                source_content = None
+                source_path = file_path
+        if source_content is not None:
+            # The hash of what is WRITTEN (the newline-folded text, exactly as written), not
+            # of the working-tree file: a checkout's CRLF conversion of a .j2 or .mjs file
+            # made the recorded hash differ from the installed bytes on Windows, and every
+            # one of those files read as drift on a fresh install.
+            file_hash = hashlib.sha256(source_content.encode("utf-8")).hexdigest()
         # WO-AUTOACT-A: prepend synthesized description frontmatter to the
         # top-level SKILL.md so Claude Code's native skill auto-invoker has a
         # when-to-use description + trigger anchors to match. Canonical SKILL.md
