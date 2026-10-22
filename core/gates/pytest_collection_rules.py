@@ -459,6 +459,7 @@ class CollectionRules:
         self.collect_in_virtualenv = addopts.collect_in_virtualenv
         self._conftests: dict[Path, _Conftest | None] = {}
         self._roots: list[Path] | None = None
+        self._collected: list[Path] | None = None
 
     # -- conftest files ---------------------------------------------------
 
@@ -537,6 +538,30 @@ class CollectionRules:
                     found.append(Path(os.path.abspath(self.root / match)))
             self._roots = found or [self.root]
         return self._roots
+
+    def collected_files(self) -> list[Path]:
+        """Every file a bare run collects, in the order it collects them (pytest scans each
+        directory's entries sorted by name, files and directories together)."""
+        if self._collected is None:
+            found: list[Path] = []
+            for start in self.roots():
+                if start.is_file():
+                    found.append(start)
+                    continue
+                for directory, subdirs, names in os.walk(start):
+                    here = Path(directory)
+                    subdirs[:] = [d for d in subdirs if self._ignored(here / d, True) is None]
+                    for name in names:
+                        path = here / name
+                        if (
+                            name.endswith(".py")
+                            and any(fnmatch_ex(p, path) for p in self.python_files)
+                            and self._ignored(path, False) is None
+                        ):
+                            found.append(path)
+            found.sort(key=lambda p: p.relative_to(self.root).parts)
+            self._collected = found
+        return self._collected
 
     def under_a_root(self, path: Path) -> bool:
         """Whether a bare run starts at `path` or above it."""

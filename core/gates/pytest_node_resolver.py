@@ -216,10 +216,50 @@ def _skips_the_module(call: ast.expr) -> bool:
     )
 
 
+_PYTEST_RAISERS = frozenset({"skip", "xfail", "fail", "exit"})
+
+
+def _raising_call(expr: ast.expr, lookup: Any) -> str | None:
+    """What a top-level expression statement does that always raises while the module is
+    imported: `pytest.skip()` (with or without allow_module_level), `pytest.xfail()`,
+    `pytest.fail()`, `pytest.exit()`, `sys.exit()`, `exit()`, and a division by a literal zero."""
+    if (
+        isinstance(expr, ast.BinOp)
+        and isinstance(expr.op, (ast.Div, ast.FloorDiv, ast.Mod))
+        and isinstance(expr.right, ast.Constant)
+        and isinstance(expr.right.value, (int, float))
+        and not isinstance(expr.right.value, bool)
+        and expr.right.value == 0
+    ):
+        return "divides by zero"
+    if not isinstance(expr, ast.Call):
+        return None
+    func = expr.func
+    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+        root = lookup(func.value.id)
+        module = root.target[0] if root is not None and root.target else func.value.id
+        if module == "pytest" and func.attr in _PYTEST_RAISERS:
+            return f"calls `pytest.{func.attr}()`"
+        if module == "sys" and func.attr == "exit":
+            return "calls `sys.exit()`"
+    if isinstance(func, ast.Name):
+        bound = lookup(func.id)
+        if bound is not None and bound.kind == "import" and bound.target and not bound.target[1]:
+            module, name = bound.target[0], bound.target[2]
+            if module == "pytest" and name in _PYTEST_RAISERS:
+                return f"calls `pytest.{name}()`"
+            if module == "sys" and name == "exit":
+                return "calls `sys.exit()`"
+        if bound is None and func.id in ("exit", "quit"):
+            return f"calls `{func.id}()`"
+    return None
+
+
 class _Module:
-    def __init__(self, path: Path, tree: ast.Module) -> None:
+    def __init__(self, path: Path, tree: ast.Module, raw: bytes = b"") -> None:
         self.path = path
         self.tree = tree
+        self.raw = raw
         self.stars: list[tuple[str, int]] = []
         #: id(def or class node) -> the `__test__` assigned from outside its body
         self.flags: dict[int, Any] = {}
@@ -227,6 +267,12 @@ class _Module:
         self.befores: dict[int, _Seen] = {}
         #: why importing this file raises, so that pytest collects nothing from it
         self.poison: list[str] = []
+        #: whether the file makes names by globals(), exec and the like (read once)
+        self.dynamic: bool | None = None
+        #: how many `try` bodies with handlers the binding walk is inside
+        self.guard = 0
+        #: why importing the file provably raises, once worked out (None: nothing provable)
+        self.failure: Any = _ABSENT
         self._scope: dict[str, _Binding] | None = None
         self._exports: list[str] | Unevaluable | None | Any = _ABSENT
 
@@ -266,6 +312,24 @@ class _Module:
                         f"line {stmt.lineno} skips the module at import "
                         "(`pytest.skip(..., allow_module_level=True)`), so pytest collects "
                         "nothing from the file"
+                    )
+                elif isinstance(stmt, ast.Expr) and _raising_call(stmt.value, scope.get):
+                    self.poison.append(
+                        f"line {stmt.lineno} {_raising_call(stmt.value, scope.get)} at the top "
+                        "level, which always raises while importing, so pytest collects nothing "
+                        "from the file"
+                    )
+                elif (
+                    isinstance(stmt, ast.AugAssign)
+                    and isinstance(stmt.target, ast.Name)
+                    and stmt.target.id not in scope
+                    and not hasattr(builtins, stmt.target.id)
+                    and not self.stars
+                ):
+                    self.poison.append(
+                        f"line {stmt.lineno} augments `{stmt.target.id}` before it is defined, "
+                        "which raises NameError while importing, so pytest collects nothing "
+                        "from the file"
                     )
                 _bind_stmt(stmt, self, scope, False, None)
             for cls, base, line in late:
@@ -570,8 +634,15 @@ def _bind_stmt(
             if alias.name == "*":
                 mod.stars.append((module, stmt.level))
             else:
-                scope[alias.asname or alias.name] = _Binding(
-                    "import", mod=mod, target=(module, stmt.level, alias.name)
+                name = alias.asname or alias.name
+                prev = scope.get(name)
+                if (cond or mod.guard) and prev is not None and prev.kind in ("def", "class"):
+                    continue  # the import may not happen (a try/except ImportError, an `if`)
+                scope[name] = _Binding(
+                    "import",
+                    mod=mod,
+                    target=(module, stmt.level, alias.name),
+                    const=prev if prev is not None else _UNKNOWN,
                 )
     elif isinstance(stmt, ast.If):
         truth = _static_truth(stmt.test, scope, outer)
@@ -583,7 +654,9 @@ def _bind_stmt(
             _bind_body(stmt.body, mod, scope, True, outer)
             _bind_body(stmt.orelse, mod, scope, True, outer)
     elif isinstance(stmt, (ast.Try, getattr(ast, "TryStar", ast.Try))):
+        mod.guard += bool(stmt.handlers)  # an import in the body may fail into a handler
         _bind_body(stmt.body, mod, scope, cond, outer)
+        mod.guard -= bool(stmt.handlers)
         for handler in stmt.handlers:
             _bind_body(handler.body, mod, scope, True, outer)
         _bind_body(stmt.orelse, mod, scope, cond, outer)
@@ -756,6 +829,7 @@ class NodeResolver:
         self._building: set[int] = set()
         self._opaque = 0
         self._listings: dict[Path, list[str]] = {}
+        self._found: dict[tuple[str, int, Path], _Module | str | None] = {}
 
     # -- files ------------------------------------------------------------
 
@@ -764,8 +838,9 @@ class NodeResolver:
         tokenizer applies a BOM or a coding cookie exactly as the interpreter does."""
         if path not in self._modules:
             try:
-                tree = ast.parse(path.read_bytes(), filename=str(path))
-                self._modules[path] = _Module(path, tree)
+                raw = path.read_bytes()
+                tree = ast.parse(raw, filename=str(path))
+                self._modules[path] = _Module(path, tree, raw)
             except SyntaxError as exc:
                 self._modules[path] = f"test file does not parse (line {exc.lineno})"
             except (MemoryError, RecursionError):
@@ -812,7 +887,14 @@ class NodeResolver:
 
     def _find_module(self, name: str, level: int, origin: _Module) -> _Module | str | None:
         """An imported module that lives in the repository, best effort. None when it does
-        not (a stdlib or third-party import); a string when the import itself cannot work."""
+        not (a stdlib or third-party import); a string when the import itself cannot work.
+        Asked about the same import many times as the import graph is walked, so remembered."""
+        key = (name, level, origin.path)
+        if key not in self._found:
+            self._found[key] = self._find_module_uncached(name, level, origin)
+        return self._found[key]
+
+    def _find_module_uncached(self, name: str, level: int, origin: _Module) -> _Module | str | None:
         if level:
             if _not_a_package(origin.path, level):
                 return (
@@ -898,6 +980,11 @@ class NodeResolver:
             if isinstance(other, str):
                 return binding, f"is imported from `{where}`, which {other}"
             found = self._lookup(other, name or "")
+            if found is binding:  # the module imports a name from itself, bound by this very import
+                if isinstance(binding.const, _Binding):
+                    binding = binding.const  # what the name was before the import ran
+                    continue
+                return binding, "is imported from the module that holds it, so it is not defined"
             if found is None:
                 sub = self._find_module(
                     f"{module}.{name}" if module else str(name), level, binding.mod
@@ -1012,6 +1099,21 @@ class NodeResolver:
         try:
             seen = mod.befores.get(id(node)) or _Seen(mod.scope, tuple(mod.stars))
             _bind_body(node.body, mod, info.own, False, seen.names)
+            for body_stmt in node.body:  # a statement that always raises while the body runs
+                if (
+                    isinstance(body_stmt, ast.Raise)
+                    or (
+                        isinstance(body_stmt, ast.Assert)
+                        and _static_truth(body_stmt.test, info.own, seen.names) is False
+                    )
+                    or (
+                        isinstance(body_stmt, ast.Expr)
+                        and _raising_call(body_stmt.value, info.own.get)
+                    )
+                ):
+                    info.error = info.error or (
+                        "has a body that always raises while it runs, so importing the file raises"
+                    )
             sequences: list[list[Any]] = []
             direct: list[Any] = []
             info.constructor = _dataclass_problem(node, mod)
@@ -1188,22 +1290,57 @@ class NodeResolver:
             path.relative_to(self.root).as_posix() if path.is_relative_to(self.root) else str(path)
         )
 
-    def _missing_submodule(self, dotted: str, origin: _Module) -> str | None:
-        """Why `import a.b.c` provably fails: `a` is a regular package here and some `b` below it
-        has no such module. Nothing else is claimed: a namespace directory, a module file that
-        stops the chain, or a first name that is not a package in the repository may be
-        completed from somewhere a static read cannot see."""
-        parts = dotted.split(".")
+    def _package_bases(self, level: int, origin: _Module) -> list[Path]:
+        """Where an import of `level` dots looks: the sys.path entries a test is run with for an
+        absolute one, the file's own package (or a parent of it) for a relative one."""
+        if level == 0:
+            return [self.root, origin.path.parent]
+        parents = origin.path.parent.parents
+        if level == 1:
+            return [origin.path.parent]
+        return [parents[level - 2]] if level - 2 < len(parents) else []
+
+    def _uses_dynamic_names(self, mod: _Module) -> bool:
+        if mod.dynamic is None and not any(name.encode() in mod.raw for name in self._DYNAMIC):
+            mod.dynamic = False  # none of the words appears in the source at all
+        if mod.dynamic is None:
+            mod.dynamic = any(
+                (isinstance(n, ast.Name) and n.id in self._DYNAMIC)
+                or (
+                    isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and n.name in self._DYNAMIC
+                )
+                for n in ast.walk(mod.tree)
+            )
+        return mod.dynamic
+
+    def _missing_submodule(self, dotted: str, origin: _Module, level: int = 0) -> str | None:
+        """Why `import a.b.c` (or `from .a.b import c`) provably fails: the first name is a
+        regular package here and some name below it has no such module, or is a module that
+        cannot hold the next name. Nothing else is claimed: a namespace directory, or a first
+        name that is not a package in the repository, may be completed from somewhere a static
+        read cannot see."""
+        parts = dotted.split(".") if dotted else []
         missing: str | None = None
-        for base in (self.root, origin.path.parent):
-            current = base / parts[0]
-            if not (current / "__init__.py").is_file():
-                continue
-            for part in parts[1:]:
+        for base in self._package_bases(level, origin):
+            if level == 0:
+                current = base / parts[0]
+                if not (current / "__init__.py").is_file():
+                    continue
+                chain = parts[1:]
+            else:
+                current, chain = base, parts
+            for index, part in enumerate(chain):
                 if (current / part / "__init__.py").is_file():
                     current = current / part
-                elif (current / f"{part}.py").is_file() or (current / part).is_dir():
-                    return None  # a module or a namespace directory: not provable
+                elif (current / f"{part}.py").is_file():
+                    if index < len(chain) - 1:
+                        module_file = self._rel(current / f"{part}.py")
+                        missing = f"`{module_file}` is a module, not a package"
+                        break
+                    return None  # the last name is a module that exists
+                elif (current / part).is_dir():
+                    return None  # a namespace directory: not provable
                 else:
                     missing = f"package `{self._rel(current)}` has no module `{part}`"
                     break
@@ -1212,37 +1349,67 @@ class NodeResolver:
         return missing
 
     def _missing_name(self, stmt: ast.ImportFrom, other: _Module, origin: _Module) -> str | None:
-        """Why `from m import name` provably fails: `m` is a repository module that defines no
-        such name by any route a static read can see, and `name` is not a submodule."""
-        if other is origin:
-            return None
+        """Why `from m import name` provably fails: `m` is a repository module (this very file
+        included: a name it never defines cannot be imported from it) that defines no such name
+        by any route a static read can see, and `name` is not a submodule."""
         other.scope  # noqa: B018 -- the star imports are known only once the namespace is built
-        if any(
-            (isinstance(n, ast.Name) and n.id in self._DYNAMIC)
-            or (isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in self._DYNAMIC)
-            for n in ast.walk(other.tree)
-        ):
+        if self._uses_dynamic_names(other):
             return None
         for star_module, star_level in other.stars:
             if not isinstance(self._find_module(star_module, star_level, other), _Module):
                 return None  # a star import from outside may supply anything
         module = stmt.module or ""
         for alias in stmt.names:
-            if alias.name == "*" or self._lookup(other, alias.name) is not None:
+            found = self._lookup(other, alias.name)
+            if (
+                found is not None
+                and other is origin
+                and found.kind == "import"
+                and found.target == (module, stmt.level, alias.name)
+                and not isinstance(found.const, _Binding)
+            ):
+                found = None  # bound by this very statement: nothing defines it
+            if alias.name == "*" or found is not None:
                 continue
-            if self._find_module(f"{module}.{alias.name}", 0, origin) is not None:
+            submodule = f"{module}.{alias.name}" if module else alias.name
+            if self._find_module(submodule, stmt.level, origin) is not None:
                 continue  # a submodule
             if any(
-                base.joinpath(*module.split("."), alias.name).is_dir()
-                for base in (self.root, origin.path.parent)
+                base.joinpath(*[p for p in module.split(".") if p], alias.name).is_dir()
+                for base in self._package_bases(stmt.level, origin)
             ):
                 continue  # a namespace directory
-            return f"line {stmt.lineno} imports `{alias.name}` from `{module}`, which does not define it"
+            where = ("." * stmt.level) + module
+            return f"line {stmt.lineno} imports `{alias.name}` from `{where}`, which does not define it"
         return None
 
-    def _import_problem(self, mod: _Module) -> str | None:
-        """An import statement of the file itself that provably raises. Only top-level
-        statements are read: one inside a `try`, an `if` or a function may never run."""
+    def _module_chain_problem(
+        self, dotted: str, level: int, stmt: ast.stmt, origin: _Module, seen: set[Path], ending: str
+    ) -> str | None:
+        """Importing `a.b.c` runs `a`, then `a.b`, then `a.b.c`: each is a repository module that
+        may itself fail."""
+        parts = [p for p in dotted.split(".") if p]
+        for end in range(1, len(parts) + 1):
+            name = ".".join(parts[:end])
+            other = self._find_module(name, level, origin)
+            where = ("." * level) + name
+            if isinstance(other, str):
+                return f"line {stmt.lineno} imports `{where}`, which {other}, {ending}"
+            if isinstance(other, _Module) and self.rules.under_a_root(other.path):
+                # only what the test run itself owns is followed: a product module that cannot be
+                # imported breaks far more than one rule, and walking all of them is the cost
+                inner = self._import_failure(other, seen)
+                if inner:
+                    return (
+                        f"line {stmt.lineno} imports `{where}`, which fails to import "
+                        f"({inner}), {ending}"
+                    )
+        return None
+
+    def _import_problem(self, mod: _Module, seen: set[Path]) -> str | None:
+        """An import statement of the file that provably raises, directly or because a
+        repository module it imports does. Only top-level statements are read: one inside a
+        `try`, an `if` or a function may never run."""
         ending = "so importing the file raises and pytest collects nothing from the file"
         for stmt in mod.tree.body:
             if isinstance(stmt, ast.Import):
@@ -1250,32 +1417,104 @@ class NodeResolver:
                     why = self._missing_submodule(alias.name, mod)
                     if why:
                         return f"line {stmt.lineno} imports `{alias.name}`, but {why}, {ending}"
-                    other = self._find_module(alias.name, 0, mod)
-                    if isinstance(other, str):
-                        return f"line {stmt.lineno} imports `{alias.name}`, which {other}, {ending}"
-            elif isinstance(stmt, ast.ImportFrom) and stmt.level == 0 and stmt.module:
-                why = self._missing_submodule(stmt.module, mod)
+                    problem = self._module_chain_problem(alias.name, 0, stmt, mod, seen, ending)
+                    if problem:
+                        return problem
+            elif isinstance(stmt, ast.ImportFrom) and (stmt.module or stmt.level):
+                module = stmt.module or ""
+                why = self._missing_submodule(module, mod, stmt.level) if module else None
                 if why:
-                    return f"line {stmt.lineno} imports from `{stmt.module}`, but {why}, {ending}"
-                other = self._find_module(stmt.module, 0, mod)
-                if isinstance(other, str):
-                    return (
-                        f"line {stmt.lineno} imports from `{stmt.module}`, which {other}, {ending}"
-                    )
+                    where = ("." * stmt.level) + module
+                    return f"line {stmt.lineno} imports from `{where}`, but {why}, {ending}"
+                problem = self._module_chain_problem(module, stmt.level, stmt, mod, seen, ending)
+                if problem:
+                    return problem
+                other = self._find_module(module, stmt.level, mod)
                 if isinstance(other, _Module):
                     why = self._missing_name(stmt, other, mod)
                     if why:
                         return f"{why}, {ending}"
+                    for alias in stmt.names:  # a name that is a submodule is imported too
+                        if alias.name == "*" or self._lookup(other, alias.name) is not None:
+                            continue
+                        sub_name = f"{module}.{alias.name}" if module else alias.name
+                        problem = self._module_chain_problem(
+                            sub_name, stmt.level, stmt, mod, seen, ending
+                        )
+                        if problem:
+                            return problem
         return None
+
+    def _import_failure(self, mod: _Module, seen: set[Path] | None = None) -> str | None:
+        """Why importing this module provably raises: a statement that always raises, an import
+        that cannot work, a class that cannot be built, or any of those in a repository module
+        it imports. None when nothing is provable (a cycle is walked once, not followed)."""
+        if mod.failure is not _ABSENT:
+            return mod.failure
+        seen = set() if seen is None else seen
+        if mod.path in seen:
+            return None
+        seen.add(mod.path)
+        mod.scope  # noqa: B018 -- building the namespace is what finds what poisons the file
+        failure = mod.poison[0] if mod.poison else self._import_problem(mod, seen)
+        if failure is None:
+            for stmt in mod.tree.body:  # a class that cannot be built raises while importing
+                if isinstance(stmt, ast.ClassDef):
+                    error = self._class_info(stmt, mod).error
+                    if error:
+                        failure = (
+                            f"class `{stmt.name}` {error}; pytest collects nothing from the file"
+                        )
+                        break
+        mod.failure = failure
+        return failure
+
+    def _duplicate_problem(self, path: Path) -> str | None:
+        """pytest imports a test file in a directory with no `__init__.py` as a top-level module
+        named after the file, so a second one with the same name, collected later, fails with
+        "import file mismatch"."""
+        if (path.parent / "__init__.py").is_file():
+            return None
+        files = self.rules.collected_files()
+        if path not in files:
+            return None
+        for other in files:
+            if other == path:
+                return None
+            if other.name == path.name and not (other.parent / "__init__.py").is_file():
+                return (
+                    f"`{path.name}` is also `{self._rel(other)}`, which pytest imports first as "
+                    "the same top-level module, so this one fails with an import file mismatch "
+                    "and pytest collects nothing from the file"
+                )
+        return None
+
+    def _file_has_tests(self, mod: _Module) -> bool:
+        """Whether the file holds a test pytest would collect, by any name it binds."""
+        for name, binding in mod.scope.items():
+            followed, why = self._follow(binding)
+            if why or followed.node is None or followed.mod is None:
+                continue
+            if not self.rules.collect_imported_tests and followed.mod is not mod:
+                continue
+            if followed.kind == "def":
+                if self._function_problem(name, followed.node, followed.mod, False) is None:
+                    return True
+            elif followed.kind == "class":
+                info = self._class_info(followed.node, followed.mod)  # type: ignore[arg-type]
+                if not info.error and self._class_problem(name, info) is None:
+                    if self._has_tests(info):
+                        return True
+        return False
 
     # -- the walk ---------------------------------------------------------
 
     def file_problem(self, file_part: str) -> str | None:
         """Why a directory run would not collect the file a reference names without naming a
-        test in it, else None. Judged only for a file that is named like a test file AND lies
-        under `testpaths`: elsewhere the name is not evidence the file is meant as a test
-        (`core/gates/test_isolation.py` is a gate that happens to be called that), and
-        existence is the caller's check."""
+        test in it, or would collect nothing from it, else None. Judged only for a file that is
+        named like a test file AND lies under `testpaths`: elsewhere the name is not evidence
+        the file is meant as a test (`core/gates/test_isolation.py` is a gate that happens to be
+        called that), and existence is the caller's check."""
         path = self._inside(file_part)
         if path is None or not path.is_file():
             return None
@@ -1283,11 +1522,29 @@ class NodeResolver:
             return None
         if not self.rules.under_a_root(path):
             return None
-        return (
+        problem = (
             self._case_problem(path)
             or self.rules.conftest_problem(path)
             or self.rules.excluded(path)
+            or self._duplicate_problem(path)
         )
+        if problem:
+            return problem
+        mod = self._load(path)
+        if isinstance(mod, str):
+            return mod
+        try:
+            problem = self._import_failure(mod)
+            if problem:
+                return problem
+            flag = mod.scope.get("__test__")
+            if flag is not None and flag.kind == "other" and _verdict(flag.const) is False:
+                return f"the module sets __test__ = {flag.const!r}, so pytest collects nothing"
+            if not self._file_has_tests(mod):
+                return "the file holds no test pytest would collect"
+        except (RecursionError, MemoryError):
+            return _TOO_DEEP
+        return None
 
     def resolve(self, reference: str) -> str | None:
         """None when pytest would collect the node; otherwise why it would not."""
@@ -1316,7 +1573,7 @@ class NodeResolver:
                 f"file does not match python_files ({' '.join(patterns) or 'none set'}), so a directory "
                 "run never collects it"
             )
-        excluded = self.rules.excluded(path)
+        excluded = self.rules.excluded(path) or self._duplicate_problem(path)
         if excluded:
             return excluded
         deselected = self.rules.deselected_by(
@@ -1335,17 +1592,9 @@ class NodeResolver:
         if isinstance(mod, str):
             return mod
         try:
-            mod.scope  # noqa: B018 -- building the namespace is what finds what poisons the file
-            if mod.poison:
-                return mod.poison[0]
-            problem = self._import_problem(mod)
-            if problem:
-                return problem
-            for stmt in mod.tree.body:  # a class that cannot be built raises while importing
-                if isinstance(stmt, ast.ClassDef):
-                    error = self._class_info(stmt, mod).error
-                    if error:
-                        return f"class `{stmt.name}` {error}; pytest collects nothing from the file"
+            failure = self._import_failure(mod)
+            if failure:
+                return failure
             return self._walk(mod, segments, file_part)
         except (RecursionError, MemoryError):
             return _TOO_DEEP

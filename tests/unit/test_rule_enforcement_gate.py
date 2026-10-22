@@ -313,6 +313,29 @@ def test_a_reference_into_a_directory_the_run_skips_fails_the_gate_naming_the_ex
     assert "build/helper.py" not in out
 
 
+@pytest.mark.parametrize(
+    "body,fragment",
+    [
+        ("import pytest\npytest.skip('x', allow_module_level=True)\n", "skips the module"),
+        ("raise RuntimeError('x')\n", "always raises"),
+        ("def test_a(:\n", "does not parse"),
+        ("", "holds no test"),
+        ("__test__ = False\ndef test_a():\n    pass\n", "__test__ = False"),
+    ],
+)
+def test_a_bare_file_reference_is_judged_for_its_content_as_a_node_is(fake_repo, body, fragment):
+    """`tests/test_zz.py` with `::test_a` was refused for each of these and the bare path was
+    accepted: only the exclusion was checked, never whether anything could be collected."""
+    (fake_repo / "test_zz.py").write_text(body, encoding="utf-8")
+    why = _resolve("test_zz.py") or ""
+    assert fragment in why, why
+    assert _resolve("test_zz.py::test_a") is not None
+
+
+def test_a_bare_reference_to_a_file_with_a_test_in_it_still_passes(fake_repo):
+    assert _resolve("test_t.py") is None
+
+
 def test_a_dotted_module_that_is_an_excluded_test_file_fails_too(fake_repo):
     (fake_repo / "build").mkdir()
     (fake_repo / "build" / "test_dotted.py").write_text(_SAMPLE, encoding="utf-8")

@@ -730,6 +730,10 @@ _PACKAGES = {
     "tests/pkgmiss/__init__.py": "",
     "tests/pkgmiss/present.py": "def test_in_present():\n    pass\n",
     "tests/broken_helper.py": "def broken(:\n    pass\n",
+    "tests/helper_raises.py": "raise RuntimeError('at import')\n",
+    "tests/helper_imports_missing.py": "from pkgmiss.gone import thing\n",
+    # the FIRST of two files with one name: pytest imports it, so it is collected
+    "tests/dupx/test_dup.py": "def test_a():\n    pass\n",
 }
 
 # More files that raise when imported, each from a cause a static read can PROVE: a statement
@@ -761,6 +765,78 @@ _POISONED.update(
             "import broken_helper\n\n\ndef test_beside_the_cause():\n    pass\n",
             ["test_beside_the_cause"],
         ),
+        # relative imports inside a package: a name, a submodule, a package member, two levels up
+        "tests/pkgrel/test_rel_missing_name.py": (
+            "from .helper_rel import nothere\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/pkgrel/test_rel_missing_member.py": (
+            "from . import nomod\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/pkgrel/test_rel_missing_sub.py": (
+            "from .gone import x\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/pkgrel/sub/test_rel_up_missing.py": (
+            "from ..helper_rel import nothere\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        # a top-level call that always raises
+        "tests/test_skip_plain.py": (
+            "import pytest\n\npytest.skip('x')\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_skip_false.py": (
+            "import pytest\n\npytest.skip('x', allow_module_level=False)\n\n\n"
+            "def test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_xfail_call.py": (
+            "import pytest\n\npytest.xfail('x')\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_fail_call.py": (
+            "import pytest\n\npytest.fail('x')\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_zero_division.py": (
+            "1 / 0\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        # a class body that raises, a name augmented before it exists
+        "tests/test_class_raises.py": (
+            "class TestA:\n    raise RuntimeError('in the body')\n\n    def test_a(self):\n"
+            "        pass\n",
+            ["TestA::test_a"],
+        ),
+        "tests/test_class_asserts.py": (
+            "class TestA:\n    assert False\n\n    def test_a(self):\n        pass\n",
+            ["TestA::test_a"],
+        ),
+        "tests/test_augment_undefined.py": (
+            "nothere += 1\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        # a helper the file imports raises, imports what is not there, or is not a package
+        "tests/test_helper_raises.py": (
+            "import helper_raises\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_helper_imports_missing.py": (
+            "import helper_imports_missing\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_not_a_package.py": (
+            "import pkgmiss.present.deeper\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_self_import.py": (
+            "from test_self_import import nothere\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        # the second of two files with one name in directories that are not packages
+        "tests/dupy/test_dup.py": ("def test_a():\n    pass\n", ["test_a"]),
     }
 )
 
@@ -770,6 +846,11 @@ _IMPORT_FILES = {
         "try:\n    from pkgmiss.gone import thing\nexcept ImportError:\n    thing = None\n\n\n"
         "def test_guarded():\n    pass\n",
         ["test_guarded"],
+    ),
+    # importing itself by name works for what it has defined above the import
+    "tests/test_self_ok.py": (
+        "def test_a():\n    pass\n\n\nfrom test_self_ok import test_a  # noqa: E402,F401\n",
+        ["test_a"],
     ),
     "tests/test_import_ok.py": (
         "import pkgmiss.present\nfrom pkgmiss import present\n"
@@ -1338,7 +1419,7 @@ _KNOWN_LIMITS = {
     "a circular import": (
         "accept",
         {
-            "tests/circ_a.py": "import circ_b\n",
+            "tests/circ_a.py": "import circ_b\nthing = 1\n",
             "tests/circ_b.py": "from circ_a import thing\n",
             "tests/test_lim_circ.py": "import circ_a\n\n\ndef test_x():\n    pass\n",
         },
