@@ -271,9 +271,13 @@ def test_unequal_counts_are_unpairable_and_use_the_name_comparison(tmp_path: Pat
     assert _flagged_pairs(tmp_path, ["a", "a"], ["a, b"])
 
 
-def test_unequal_counts_with_the_same_shapes_are_not_reported(tmp_path: Path) -> None:
+def test_unequal_counts_with_fewer_definitions_of_a_known_shape_are_not_reported(
+    tmp_path: Path,
+) -> None:
+    """A dropped duplicate introduces no shape. An ADDED duplicate does (issue #926: the
+    multiset rule in tests/unit/test_blast_radius_pairing_introspection.py), so
+    `["a"] -> ["a", "a"]`, which the old set rule passed, is now reported there."""
     assert not _flagged_pairs(tmp_path, ["a", "a"], ["a"])
-    assert not _flagged_pairs(tmp_path, ["a"], ["a", "a"])
 
 
 def test_a_def_added_beside_an_unchanged_one_with_a_new_shape_is_reported(
