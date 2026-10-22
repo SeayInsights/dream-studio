@@ -14,16 +14,22 @@ dashboard renders only (1); the close gates consume only (2); nothing consumes
 (3). An operator has to know which of the three to look in before they can even
 start looking.
 
-This module defines the common shape. It is deliberately a READ-layer
-normalisation, not a schema migration: the right way to find out whether this
-shape is correct is to render every existing source through it first. Migrating
-storage before the shape is proven would just create a fourth format.
+This module defines the common shape. It started as a READ-layer
+normalisation: the way to find out whether this shape is correct was to render
+every existing source through it first, before migrating storage and creating a
+fourth format. The honesty fields (confidence, coverage, limitations) are now
+stored in security_events (migration 161); encode_honesty / decode_limitations
+below are the only translation between the shape and those columns.
 """
 
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass, field
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 #: Severity ordering, most severe first. Used for sorting and for the rank filter.
 SEVERITY_ORDER: tuple[str, ...] = ("critical", "high", "medium", "low", "info", "pass")
@@ -105,6 +111,66 @@ def normalize_limitations(raw: Any) -> tuple[str, ...] | None:
     if not items and not asserted_none:
         return None
     return items
+
+
+def encode_honesty(
+    confidence: Any = None, coverage: Any = None, limitations: Any = None
+) -> dict[str, str | None]:
+    """Turn the three honesty fields into the values security_events stores.
+
+    NULL is "unknown": a value this vocabulary does not recognise, or that is "unknown"
+    itself, is stored as NULL rather than as a certain-looking one. limitations is a JSON
+    array; "[]" records "none exist", NULL records "not recorded". The same normalisers
+    the read model applies decide what is recognised, so the vocabulary lives only here.
+
+    This never raises. A value that cannot be examined (an object whose __str__ raises, a
+    list whose __iter__ does) must cost the finding its honesty fields, not the finding
+    itself, so any failure degrades all three to NULL (unknown) and is logged. It is not
+    recorded as a limitation string: that would be a certain-looking value.
+    """
+    try:
+        encoded = _encode_honesty(confidence, coverage, limitations)
+    except Exception as exc:
+        # Only the exception's class is logged: the value is hostile, and so may be its message.
+        logger.warning(
+            "finding honesty fields could not be encoded (%s); the finding is recorded with "
+            "confidence, coverage and limitations unknown",
+            type(exc).__name__,
+        )
+        encoded = {"confidence": None, "coverage": None, "limitations": None}
+    return encoded
+
+
+def _encode_honesty(confidence: Any, coverage: Any, limitations: Any) -> dict[str, str | None]:
+    conf = normalize_confidence(confidence)
+    cov = normalize_coverage(coverage)
+    # An exact str, in the vocabulary: a str subclass that claims equality with everything
+    # is not a recognised value.
+    if type(conf) is not str or conf not in CONFIDENCE_VALUES:
+        conf = UNKNOWN
+    if type(cov) is not str or cov not in COVERAGE_VALUES:
+        cov = UNKNOWN
+    lims = normalize_limitations(limitations)
+    if lims is not None and not all(isinstance(item, str) for item in lims):
+        raise TypeError("limitations must be strings")
+    return {
+        "confidence": None if conf == UNKNOWN else conf,
+        "coverage": None if cov == UNKNOWN else cov,
+        "limitations": None if lims is None else json.dumps(list(lims)),
+    }
+
+
+def decode_limitations(stored: Any) -> tuple[str, ...] | None:
+    """Read a stored limitations value; anything that is not a JSON list is not recorded."""
+    if stored is None:
+        return None
+    value: Any = None
+    if isinstance(stored, (str, bytes, bytearray)):
+        try:
+            value = json.loads(stored)
+        except (ValueError, RecursionError):
+            value = None  # a corrupt cell is "not recorded", which normalize reads as unknown
+    return normalize_limitations(value) if isinstance(value, list) else None
 
 
 def severity_rank(severity: str) -> int:

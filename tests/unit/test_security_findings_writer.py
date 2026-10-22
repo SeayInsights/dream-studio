@@ -178,9 +178,9 @@ def test_emit_security_finding_spool_failure_does_not_block_sqlite(
 
 
 def test_resolve_security_finding_updates_status(patched_db, db_path: Path) -> None:
-    """resolve_security_finding() returns True and updates status in findings."""
+    """resolve_security_finding_reason() returns None and updates status in findings."""
     from core.telemetry.emitters import emit_security_finding
-    from core.telemetry.execution_spine import resolve_security_finding
+    from core.telemetry.execution_spine import resolve_security_finding_reason
 
     with patch("spool.writer.write_event"):
         result = emit_security_finding(
@@ -193,24 +193,28 @@ def test_resolve_security_finding_updates_status(patched_db, db_path: Path) -> N
 
     finding_id = result.record_id
     with sqlite3.connect(str(db_path)) as conn:
-        updated = resolve_security_finding(conn, finding_id=finding_id, resolution="mitigated")
+        reason = resolve_security_finding_reason(
+            conn, finding_id=finding_id, resolution="mitigated"
+        )
         row = conn.execute(
             "SELECT body FROM security_events"
             " WHERE parent_event_id = ? AND event_kind = 'finding.status_changed'",
             (finding_id,),
         ).fetchone()
 
-    assert updated is True
+    assert reason is None
     assert row is not None
     assert row[0] == "mitigated"
 
 
-def test_resolve_security_finding_returns_false_for_unknown_id(patched_db, db_path: Path) -> None:
-    from core.telemetry.execution_spine import resolve_security_finding
+def test_resolve_security_finding_reports_not_found_for_unknown_id(
+    patched_db, db_path: Path
+) -> None:
+    from core.telemetry.execution_spine import FINDING_NOT_FOUND, resolve_security_finding_reason
 
     with sqlite3.connect(str(db_path)) as conn:
-        updated = resolve_security_finding(conn, finding_id="does-not-exist")
-    assert updated is False
+        reason = resolve_security_finding_reason(conn, finding_id="does-not-exist")
+    assert reason == FINDING_NOT_FOUND
 
 
 # ── emit_security_finding_resolved: emitter ───────────────────────────────
