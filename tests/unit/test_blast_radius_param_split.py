@@ -77,7 +77,7 @@ class TestDetectorNoFalsePositive:
             "+++ b/core/thing.py\n"
             "@@ -1,1 +1,1 @@\n"
             "-def do_work(name: str):\n"
-            "+def do_work(name: str, extra: Dict[str, int] = None):\n"
+            "+def do_work(name: str, extra: Dict[str, int]):\n"
         )
         findings = detect_changed_signature_callers(diff, repo_root=repo)
         flagged = {f["path"] for f in findings}
@@ -100,6 +100,11 @@ class TestAmbiguousSymbolNames:
     cwd)` gained `handoff_path=None`, and the break was a test asserting the old call shape
     through `assert_called_once_with`. A compatible signature still breaks a mock assertion.
     The defect is ambiguity, not arity.
+
+    The signature changes below add a REQUIRED parameter on purpose: they test the
+    ambiguity rule, and a defaulted one is now classed call-compatible and would not reach
+    it. Compatibility keeps the #353 lesson -- a file that MOCKS the function is still
+    reported -- in tests/unit/test_blast_radius_compatible_signature.py.
     """
 
     def test_an_ambiguous_bare_name_is_not_a_reference(self, tmp_path: Path) -> None:
@@ -116,7 +121,7 @@ class TestAmbiguousSymbolNames:
             "+++ b/core/one.py\n"
             "@@ -1,1 +1,1 @@\n"
             "-def main():\n"
-            "+def main(argv=None):\n"
+            "+def main(argv):\n"
         )
         flagged = {f["path"] for f in detect_changed_signature_callers(diff, repo_root=repo)}
         assert "elsewhere.py" not in flagged, flagged
@@ -137,7 +142,7 @@ class TestAmbiguousSymbolNames:
             "+++ b/core/one.py\n"
             "@@ -1,1 +1,1 @@\n"
             "-def main():\n"
-            "+def main(argv=None):\n"
+            "+def main(argv):\n"
         )
         flagged = {f["path"] for f in detect_changed_signature_callers(diff, repo_root=repo)}
         assert "elsewhere.py" in flagged, flagged

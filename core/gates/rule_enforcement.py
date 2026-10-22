@@ -15,16 +15,31 @@ MEASURED WHEN THIS WAS WRITTEN: 21 of 102 `enforced_by` references across 7 of 3
 named a module or a test file that is not in the tree. A register of enforcement claims
 that nobody verifies is the failure it was built to prevent, one level up.
 
-A NODE IS RESOLVED TO THE TEST PYTEST WOULD COLLECT, NOT JUST THE FILE. Until #896 a
-`file::name` reference counted as resolved once `file` existed, so a test renamed or deleted
-underneath a rule left the rule claiming enforcement by nothing and the gate still printed
-OK; two rules were found that way. `core/gates/pytest_node_resolver.py` now reads the module
-with `ast` -- never imports it, so no test module runs on a push -- and answers the question
-pytest answers: the name must match the repo's own `python_functions`/`python_classes`, a
-fixture, a class with `__init__` or `__test__ = False`, a def later shadowed or deleted, and
-a def under `if TYPE_CHECKING` are not tests, and a class's tests include the ones it
-inherits. A parametrised id (`name[a-b]`) resolves when `name` does. A base class the
-resolver cannot read is a failure that names it, never an acceptance.
+A NODE IS RESOLVED TO A TEST A DIRECTORY RUN OF PYTEST WOULD COLLECT, NOT JUST THE FILE.
+Until #896 a `file::name` reference counted as resolved once `file` existed, so a test renamed
+or deleted underneath a rule left the rule claiming enforcement by nothing and the gate still
+printed OK; two rules were found that way. `core/gates/pytest_node_resolver.py` now reads the
+module with `ast` -- never imports it, so no test module runs on a push -- and answers the
+question pytest answers: the name must match the repo's own `python_functions` /
+`python_classes`; a fixture, a property, a class with an `__init__` or `__new__` (its own, or
+a `@dataclass`, dict, Exception, Enum, NamedTuple or Protocol brings one), an abstract class,
+a falsy `__test__`, a def later shadowed or deleted, and a def under `if TYPE_CHECKING` are
+not tests; a class's tests include the ones it inherits, in the order Python would find them.
+A parametrised id (`name[a-b]`) resolves when `name` does. A base class the resolver cannot
+read is a failure that names it, never an acceptance.
+
+CI AND DEVELOPERS RUN DIRECTORIES, NOT FILES. pytest given a file by name collects things a
+directory run never reaches, so a rule enforced only by such a test is enforced by nothing
+that runs. `core/gates/pytest_collection_rules.py` reads, again without importing anything,
+what the repo's own configuration leaves out of a run -- `--ignore`, `--ignore-glob` and
+`--deselect` in `addopts`, `norecursedirs`, `testpaths`, `collect_ignore` in the nearest
+conftest, `__pycache__`, virtualenvs -- and a reference to a file it leaves out fails naming
+the exclusion. What it cannot evaluate fails and says so: a `collect_ignore` that is not a
+literal list, a conftest hook that changes collection, an `addopts` option such as `-m`.
+`tests/unit/test_pytest_collection_agreement.py` holds both layers against pytest's own
+`--collect-only`; the module docstring of the resolver lists what is modelled, what is
+deliberately not (a skipped test still resolves), and the false accepts and refusals that
+remain, each pinned so the list cannot go stale unnoticed.
 
 A REGISTER THAT CANNOT BE READ, OR HOLDS NOTHING, FAILS. An empty `rules:` used to report
 "OK - 0 references", a string-valued `enforced_by` was walked one character at a time, and a
@@ -77,11 +92,19 @@ def _resolve(reference: Any, resolver: NodeResolver | None = None) -> str | None
     if "/" in ref or ref.endswith(_CODE_SUFFIXES):  # a path
         if not _inside_repo(ref):
             return "path escapes the repository"
-        return None if (REPO_ROOT / ref).exists() else "no such path"
+        if not (REPO_ROOT / ref).exists():
+            return "no such path"
+        # A test FILE named without a test is enforced only if a directory run collects it.
+        return (
+            (resolver or NodeResolver(REPO_ROOT)).file_problem(ref) if ref.endswith(".py") else None
+        )
 
     if "." in ref:  # a dotted module
         target = REPO_ROOT.joinpath(*ref.split("."))
-        if target.with_suffix(".py").is_file() or (target / "__init__.py").is_file():
+        if target.with_suffix(".py").is_file():
+            relative = target.with_suffix(".py").relative_to(REPO_ROOT).as_posix()
+            return (resolver or NodeResolver(REPO_ROOT)).file_problem(relative)
+        if (target / "__init__.py").is_file():
             return None
         return "no such module"
 
