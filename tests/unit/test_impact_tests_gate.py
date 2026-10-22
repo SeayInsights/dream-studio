@@ -87,13 +87,16 @@ def test_sweep_discovery_is_by_pattern_not_by_list():
         r"tests/unit/[a-z_/]+\.py", ast.get_source_segment(source, sweep) or ""
     ), "sweep_tests enumerates a test path instead of discovering it"
 
-    always = next(
-        n
+    # The two declared lists: the cross-cutting guards, and the rule-enforcement pair that a
+    # register or pytest-configuration change selects (its subject names no path to select by).
+    declared = "".join(
+        ast.get_source_segment(source, n) or ""
         for n in ast.walk(tree)
         if isinstance(n, ast.Assign)
-        and any(getattr(t, "id", None) == "ALWAYS_RUN" for t in n.targets)
+        and any(
+            getattr(t, "id", None) in ("ALWAYS_RUN", "RULE_ENFORCEMENT_TESTS") for t in n.targets
+        )
     )
-    declared = ast.get_source_segment(source, always) or ""
     body = source.split('"""', 2)[-1]  # after the module docstring, which cites examples
     stray = [m for m in re.findall(r"tests/unit/[a-z_/]+\.py", body) if m not in declared]
     assert not stray, f"a test path is hardcoded outside ALWAYS_RUN: {stray}"
@@ -376,6 +379,10 @@ def test_the_selection_file_is_removed_and_keeps_the_selection_order(monkeypatch
 
 def test_pytest_itself_reads_the_selection_from_the_file_and_the_exit_code_survives(tmp_path):
     """The one thing the stand-in cannot prove: that pytest understands ``@file``."""
+    # Its own config makes tmp_path the rootdir. Without one, pytest (started from the
+    # repository) walks the directories between the two, up to the user's home, and a neighbour
+    # deleting something under %TEMP% in that moment fails the session with FileNotFoundError.
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
     passing = tmp_path / "test_passes.py"
     passing.write_text("def test_p():\n    assert True\n", encoding="utf-8")
     failing = tmp_path / "test_fails.py"
@@ -396,3 +403,100 @@ def test_the_job_budget_matches_the_work():
         (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     )
     assert ci["jobs"]["pr-smoke"].get("timeout-minutes", 0) >= 25
+
+
+# ── the rule-enforcement tests follow what decides what a directory run collects ──────
+
+RULE_TESTS = [
+    "tests/unit/test_rule_enforcement_bare_run.py",
+    "tests/unit/test_rule_enforcement_gate.py",
+]
+
+
+def test_the_bare_run_was_selected_only_by_luck_and_is_now_selected_by_rule():
+    """The comparison of the resolver with a bare pytest run is selected by the impact set only
+    when the resolver or `tests/helpers` changes. Its subject is the register and pytest's own
+    configuration, which it names by no path, so a change to either left it unselected: the
+    register, a register-named test, pyproject.toml and a conftest could each go red in a PR the
+    job never ran it for."""
+    for changed in (
+        ["canonical/rules.yml"],
+        ["pyproject.toml"],
+        ["tests/conftest.py"],
+        ["tests/unit/sub/conftest.py"],
+        ["conftest.py"],
+    ):
+        selection = gate.select_tests(changed, REPO_ROOT)
+        assert set(RULE_TESTS) <= set(selection["tests"]), changed
+        assert selection["rule_enforcement_tests"] == RULE_TESTS, changed
+
+
+def test_every_pytest_config_file_pytest_reads_selects_them(tmp_path):
+    (tmp_path / "canonical").mkdir()
+    (tmp_path / "canonical" / "rules.yml").write_text("rules: []\n", encoding="utf-8")
+    for name in (
+        "pytest.toml",
+        ".pytest.toml",
+        "pytest.ini",
+        ".pytest.ini",
+        "pyproject.toml",
+        "tox.ini",
+        "setup.cfg",
+    ):
+        assert gate.rule_enforcement_tests([name], tmp_path) == RULE_TESTS, name
+
+
+def test_a_test_file_the_register_names_selects_them_and_one_it_does_not_name_does_not(tmp_path):
+    (tmp_path / "canonical").mkdir()
+    (tmp_path / "canonical" / "rules.yml").write_text(
+        "rules:\n"
+        "  - id: a-rule\n"
+        "    enforced_by:\n"
+        "      - tests/unit/test_named.py::TestA::test_x\n"
+        "      - core/gates/some_gate.py\n"
+        "      - tests/unit/test_plain_path.py\n"
+        "  - id: no-enforcement\n"
+        "    unenforced: gone\n",
+        encoding="utf-8",
+    )
+    for named in ("tests/unit/test_named.py", "tests/unit/test_plain_path.py"):
+        assert gate.rule_enforcement_tests([named], tmp_path) == RULE_TESTS, named
+    # a path spelled the Windows way is the same file
+    assert gate.rule_enforcement_tests(["tests\\unit\\test_named.py"], tmp_path) == RULE_TESTS
+    for other in ("tests/unit/test_other.py", "README.md", "core/gates/other.py"):
+        assert gate.rule_enforcement_tests([other], tmp_path) == [], other
+    assert gate.rule_enforcement_tests([], tmp_path) == []
+
+
+def test_a_register_that_cannot_be_read_selects_them_rather_than_nothing(tmp_path):
+    (tmp_path / "canonical").mkdir()
+    (tmp_path / "canonical" / "rules.yml").write_text("rules: [unclosed\n", encoding="utf-8")
+    assert gate.rule_enforcement_tests(["tests/unit/test_x.py"], tmp_path) == RULE_TESTS
+    assert gate.rule_enforcement_tests(["README.md"], tmp_path) == RULE_TESTS
+
+
+def test_a_real_register_named_test_selects_them_on_the_real_register():
+    register = yaml.safe_load((REPO_ROOT / "canonical" / "rules.yml").read_text(encoding="utf-8"))
+    named = sorted(
+        {
+            ref.split("::")[0]
+            for rule in register["rules"]
+            for ref in rule.get("enforced_by") or []
+            if ref.startswith("tests/") and ref.split("::")[0].endswith(".py")
+        }
+    )
+    assert len(named) > 40
+    for path in named:
+        assert gate.rule_enforcement_tests([path], REPO_ROOT) == RULE_TESTS, path
+
+
+def test_the_cost_of_the_rule_selection_is_bounded():
+    """Two files whatever the diff, not a file per register entry: the bare run is the slow one
+    and is paid once."""
+    wide = [f"tests/unit/test_{n}.py" for n in range(300)] + ["canonical/rules.yml"]
+    assert gate.rule_enforcement_tests(wide, REPO_ROOT) == RULE_TESTS
+
+
+def test_the_log_names_why_a_rule_test_was_selected():
+    source = Path(gate.__file__).read_text(encoding="utf-8")
+    assert '"rule-enforcement"' in source and 'selection["rule_enforcement_tests"]' in source

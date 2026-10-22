@@ -251,3 +251,68 @@ def test_a_module_that_raises_at_import_time_falls_back_rather_than_crashing(mon
         repo_root=REPO_ROOT,
     )
     assert result is None
+
+
+# -- the shape of a gate's main() ---------------------------------------------------------
+
+
+def _main_shape_is_documented(fn) -> bool:
+    """``main()`` or ``main(argv)``: no parameters, or exactly one that can take argv
+    positionally. Anything else (a keyword-only flag, a second parameter, ``*args``) is a
+    shape ``run_in_process`` does not understand."""
+    import inspect
+
+    params = list(inspect.signature(fn).parameters.values())
+    if not params:
+        return True
+    only_positional = (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    return len(params) == 1 and params[0].kind in only_positional
+
+
+def test_the_documented_main_shapes_are_recognised_and_nothing_else():
+    def no_args(): ...
+
+    def argv_only(argv=None): ...
+
+    def required_argv(argv): ...
+
+    def keyword_only(*, strict=False): ...
+
+    def argv_and_extra(argv=None, extra=None): ...
+
+    def varargs(*args): ...
+
+    def kwargs(**kw): ...
+
+    assert _main_shape_is_documented(no_args)
+    assert _main_shape_is_documented(argv_only)
+    assert _main_shape_is_documented(required_argv)
+    assert not _main_shape_is_documented(keyword_only)
+    assert not _main_shape_is_documented(argv_and_extra)
+    assert not _main_shape_is_documented(varargs)
+    assert not _main_shape_is_documented(kwargs)
+
+
+def test_every_in_process_gate_main_has_a_documented_shape():
+    """registry.run_in_process decides how to call a gate from
+    ``len(inspect.signature(main_fn).parameters) > 0``: any parameter at all means "pass
+    argv". A gate main() that gained a defaulted keyword-only parameter would be called
+    with an argv list it cannot take, and the changed-signature detector cannot see it
+    (`main` is defined in dozens of modules, so it is ambiguous and matched only by its
+    module). The assumption is enforced here, by a test over the real manifest, instead."""
+    from core.gates.pre_push import load_manifest
+
+    offenders: list[str] = []
+    checked = 0
+    for gate in load_manifest().get("gates", []):
+        main_fn = registry.importable_main(gate["id"], [str(part) for part in gate["command"]])
+        if main_fn is None:
+            continue
+        checked += 1
+        if not _main_shape_is_documented(main_fn):
+            offenders.append(gate["id"])
+    assert checked > 0, "no gate was importable: the manifest or the registry changed shape"
+    assert not offenders, (
+        f"gate main() with a parameter run_in_process cannot call correctly: {offenders}. "
+        "Use main() or main(argv)."
+    )

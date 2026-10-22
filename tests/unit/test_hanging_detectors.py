@@ -180,7 +180,7 @@ def test_an_import_alias_to_a_different_symbol_is_not_flagged(tmp_path: Path) ->
         "+++ b/projections/api/routes/analytics.py\n"
         "@@ -24,1 +24,1 @@\n"
         "-def _connect_analytics():\n"
-        "+def _connect_analytics(analytics_db_path=None):\n"
+        "+def _connect_analytics(analytics_db_path):\n"
     )
 
     findings = detect_changed_signature_callers(diff, repo_root=repo)

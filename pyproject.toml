@@ -81,7 +81,7 @@ line-length = 100
 [tool.pytest.ini_options]
 testpaths = ["tests", "analytics/tests"]
 asyncio_mode = "auto"
-addopts = "-v --color=no"
+addopts = "-v --color=no -m 'not install_check'"
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
