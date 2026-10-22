@@ -140,10 +140,7 @@ def run_pytest(tests: list[str], env: dict[str, str] | None = None) -> int:
             check=False,
         ).returncode
     finally:
-        try:
-            os.unlink(name)
-        except OSError:
-            pass
+        Path(name).unlink(missing_ok=True)
 
 
 def main() -> int:
