@@ -1045,11 +1045,42 @@ def test_a_manifest_that_asked_for_no_exemption_is_not_reloaded_when_the_home_ch
     assert len(loads) == 1
 
 
-def test_a_scope_is_not_sent_back_to_the_real_manifest_by_a_home_change(tmp_path, monkeypatch):
-    path = _manifest(tmp_path, GOOD)
-    with scoped_pack_manifest(path, trusted=TRUST):
+def test_a_scope_is_not_sent_back_to_the_real_manifest_by_a_home_change(
+    unloaded_process, tmp_path, monkeypatch
+):
+    """The outer process loaded a manifest that leaned on the trust file (so a home change would
+    send it back to be validated); a scope over another manifest pins its own allowance and is
+    not."""
+    trusted = _home_with_trust(tmp_path, "h1", trusts="legal")
+    monkeypatch.setattr(type_manifest, "default_manifest_path", lambda: _manifest(tmp_path, GOOD))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(trusted))
+    assert type_registry._STATE.get("trust_used") is None
+    assert "contract_review" in work_order_type_names()
+    assert type_registry._STATE["trust_used"] is True
+    other = _manifest(tmp_path, _bad(_OK_ENTRY.replace("contract_review", "other_type")), "o.yaml")
+    with scoped_pack_manifest(other, trusted=TRUST):
         monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "elsewhere"))
-        assert "contract_review" in work_order_type_names()
+        assert work_order_type_names() == builtin_work_order_type_names() + ("other_type",)
+
+
+def test_a_manifest_that_relied_on_the_trust_file_is_not_reloaded_while_the_home_is_unchanged(
+    unloaded_process, tmp_path, monkeypatch
+):
+    """Revalidation is for a CHANGED home: many reads under one home load once."""
+    trusted = _home_with_trust(tmp_path, "h1", trusts="legal")
+    monkeypatch.setattr(type_manifest, "default_manifest_path", lambda: _manifest(tmp_path, GOOD))
+    loads: list[int] = []
+    real = type_manifest.load_pack_work_order_types
+
+    def counting(*args, **kwargs):
+        loads.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(type_manifest, "load_pack_work_order_types", counting)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(trusted))
+    for _ in range(4):
+        work_order_type_names()
+    assert len(loads) == 1
 
 
 def test_a_pack_key_is_refused_when_too_long_never_truncated_into_a_trusted_one(tmp_path):
