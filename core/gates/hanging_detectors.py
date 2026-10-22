@@ -237,7 +237,7 @@ def _iter_code_files(repo_root: Path) -> Iterable[tuple[str, str]]:
         if any(part in _SKIP_DIRS for part in path.parts):
             continue
         try:
-            text = path.read_text(encoding="utf-8")
+            text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         yield _normalize(str(path.relative_to(repo_root))), text
@@ -413,8 +413,49 @@ _HASH_COMMENT_SUFFIXES = (
 _DASH_COMMENT_SUFFIXES = (".sql", ".lua")
 _LINE_COMMENT = {"c": "//", "hash": "#", "sql": "--"}
 _QUOTES = "'\"`"
-# A `/` starts a regular expression, not a division, after one of these (or at the start).
-_REGEX_PRECEDERS = frozenset("=(,:[!&|?{};+-*%<>~^")
+# A `/` starts a regular expression, not a division, after one of these (or at the start of
+# the line), after `=>`, and after one of the keywords below. `<` and `>` need a closer look
+# (see `_slash_starts_regex`): `</p>` and `<br/>` are markup, `a < /x/` and `s => /x/` are not.
+_REGEX_PRECEDERS = frozenset("=(,:[!&|?{};+-*%~^")
+_REGEX_KEYWORDS = frozenset(
+    {
+        "return",
+        "typeof",
+        "instanceof",
+        "in",
+        "of",
+        "delete",
+        "void",
+        "throw",
+        "case",
+        "do",
+        "else",
+        "yield",
+        "await",
+    }
+)
+_WORD_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$")
+
+
+def _slash_starts_regex(text: str, i: int, last: str, prev: str, last_idx: int) -> bool:
+    """Does the `/` at ``text[i]`` open a regex literal? Decided by the previous significant
+    token, the way a JS lexer does. ``last`` is the last code character before it, ``prev``
+    the one before that, ``last_idx`` its index."""
+    if last == "":
+        return True
+    if last == "<":
+        return text[i - 1] != "<"  # `</p>` closes a tag; `a < /x/` compares
+    if last == ">":
+        return prev == "="  # `s => /x/.test(s)`, not `<a>/</a>`
+    if last in _REGEX_PRECEDERS:
+        return True
+    if last in _WORD_CHARS:
+        start = last_idx
+        while start > 0 and text[start - 1] in _WORD_CHARS:
+            start -= 1
+        word_end = last_idx + 1
+        return text[start:word_end] in _REGEX_KEYWORDS  # `return /x/`, not `a / b`
+    return False
 
 
 def _is_python_path(path: str) -> bool:
@@ -475,10 +516,11 @@ def _lex(text: str, style: str = "c", probe=None):
     What it understands: ``'``, ``"`` and backtick strings (a backslash skips the next
     character; ``'''`` and ``\"\"\"`` triples where the text shows them), the style's line
     comment (``//``, ``#`` or ``--``), ``/* ... */`` for ``c`` and ``sql``, and for ``c`` a
-    regex literal (a `/` after ``=(,:[!&|?{};`` and operators, closed on the same line,
-    honouring ``[...]`` classes and escapes). In ``hash`` files a backslash outside a
-    string escapes the next character. NOT understood: a template literal's ``${...}``, a
-    regex after a keyword (``return /x/``, read as a division), anything spanning lines.
+    regex literal, told from a division by the previous token (`_slash_starts_regex`),
+    closed on the same line, honouring ``[...]`` classes and escapes. A ``#`` comment starts
+    at a TOKEN (the line start or after whitespace), so ``$#``, ``${#x}`` and ``a#b`` are
+    not comments. In ``hash`` files a backslash outside a string escapes the next
+    character. NOT understood: a template literal's ``${...}``, anything spanning lines.
     """
     line_comment = _LINE_COMMENT.get(style)
     block_comments = style in ("c", "sql")
@@ -486,15 +528,16 @@ def _lex(text: str, style: str = "c", probe=None):
     last_paren = text.rfind(")") if probe is not None else -1
     n, i = len(text), 0
     quote: str | None = None
-    last = ""  # the last significant code character: decides regex versus division
+    last, prev, last_idx = "", "", -1  # the last significant code characters
     while i < n:
         ch = text[i]
         if quote is not None:
             if ch == "\\":
                 i += 2
             elif text.startswith(quote, i):
+                prev, last, last_idx = last, ch, i
                 i += len(quote)
-                quote, last = None, ch
+                quote = None
             else:
                 i += 1
             continue
@@ -502,7 +545,11 @@ def _lex(text: str, style: str = "c", probe=None):
             found = probe(i)
             if found is not None:
                 return found, False
-        if line_comment is not None and text.startswith(line_comment, i):
+        if (
+            line_comment is not None
+            and text.startswith(line_comment, i)
+            and (line_comment != "#" or i == 0 or text[i - 1].isspace())
+        ):
             return None, True
         if block_comments and text.startswith("/*", i):
             end = text.find("*/", i + 2)
@@ -520,14 +567,15 @@ def _lex(text: str, style: str = "c", probe=None):
         if ch == "\\" and style == "hash":
             i += 2
             continue
-        if regex_ok and ch == "/" and (last == "" or last in _REGEX_PRECEDERS):
+        if regex_ok and ch == "/" and _slash_starts_regex(text, i, last, prev, last_idx):
             end = _regex_end(text, i)
             if end >= 0:
-                i, last = end, ")"
+                prev, last, last_idx = last, ")", end - 1
+                i = end
                 continue
             regex_ok = False  # no closing slash anywhere after this: stop trying (linear)
         if not ch.isspace():
-            last = ch
+            prev, last, last_idx = last, ch, i
         i += 1
     return None, quote is not None
 
@@ -561,13 +609,16 @@ def _signature_on_line(line: str, *, is_py: bool, style: str = "c") -> tuple[str
 
 
 def _py_line_end_state(line: str, state: str | None) -> str | None:
-    """The open triple-quote delimiter (or None) after ``line``, given ``state`` at its start.
+    """The open string delimiter (or None) after ``line``, given ``state`` at its start.
 
-    Handles single-line strings (a backslash skips a character), ``#`` comments, and
-    ``'''`` / ``\"\"\"`` strings that stay open across lines. A single-quoted string cannot
-    span a line here, so it is forgotten at the line's end.
+    ``state`` and the result are None (in code), ``'''`` or ``\"\"\"`` (a triple-quoted
+    string that stays open across lines) or a single ``'`` / ``"`` (a single-quoted string
+    continued over a line break by a trailing backslash). Handles single-line strings (a
+    backslash skips a character) and ``#`` comments. An unterminated single-quoted string
+    ends with its line unless the line ends in a backslash.
     """
-    triple, quote = state, None
+    triple = state if state is not None and len(state) == 3 else None
+    quote = state if state is not None and len(state) == 1 else None
     i, n = 0, len(line)
     while i < n:
         ch = line[i]
@@ -582,6 +633,9 @@ def _py_line_end_state(line: str, state: str | None) -> str | None:
             continue
         if quote is not None:
             if ch == "\\":
+                after = i + 1
+                if after >= n or line[after:] == "\r":
+                    return quote  # a backslash-newline continues the string
                 i += 2
             else:
                 i += 1
@@ -601,14 +655,15 @@ def _py_line_end_state(line: str, state: str | None) -> str | None:
 
 
 def _split_source_lines(text: str) -> list[str]:
+    """Lines as git and `ast` count them: by newline only. A lone CR is a character."""
     lines = text.split("\n")
     if lines and lines[-1] == "":
         lines.pop()
     return lines
 
 
-def _py_start_states(text: str) -> list[str | None]:
-    """For each line of a Python file, the triple-quote delimiter open at its START."""
+def _py_start_states_lexer(text: str) -> list[str | None]:
+    """The hand-lexer's reading of `_py_start_states`: used only when `tokenize` cannot."""
     states: list[str | None] = []
     state: str | None = None
     for line in _split_source_lines(text):
@@ -617,20 +672,88 @@ def _py_start_states(text: str) -> list[str | None]:
     return states
 
 
-def _py_ignorable_lines(f: dict[str, Any], root: Path) -> tuple[set[int], set[int]]:
+def _quote_of(token_text: str) -> str:
+    """The delimiter a STRING or FSTRING_START token opens with, prefix letters removed."""
+    body = token_text.lstrip("rRbBuUfF")
+    return body[:3] if body[:3] in ('"""', "'''") else body[:1]
+
+
+def _tokenize_string_rows(text: str) -> dict[int, str] | None:
+    """Rows that START inside a multi-line string, by `tokenize`: or None if it cannot say.
+
+    `tokenize` is the source of truth for a file that tokenizes: it knows PEP 701 nested
+    f-strings (``f"{\"\"\"x\"\"\"}"``) and backslash-continued strings that the hand lexer
+    does not. A lone CR makes its row count differ from git's, so such a file is left to
+    the hand lexer, which counts by newline.
+    """
+    import io  # function-local: see _parse_params
+    import tokenize
+
+    if re.search(r"\r(?!\n)", text):
+        return None
+    rows: dict[int, str] = {}
+    open_fstrings: list[tuple[int, str]] = []
+    fstring_start = getattr(tokenize, "FSTRING_START", -1)
+    fstring_end = getattr(tokenize, "FSTRING_END", -1)
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+            if tok.type == tokenize.STRING and tok.end[0] > tok.start[0]:
+                delim = _quote_of(tok.string)
+                for row in range(tok.start[0] + 1, tok.end[0] + 1):
+                    rows.setdefault(row, delim)
+            elif tok.type == fstring_start:
+                open_fstrings.append((tok.start[0], _quote_of(tok.string)))
+            elif tok.type == fstring_end and open_fstrings:
+                start_row, delim = open_fstrings.pop()
+                for row in range(start_row + 1, tok.end[0] + 1):
+                    rows.setdefault(row, delim)
+    except (tokenize.TokenError, SyntaxError, ValueError, RecursionError, MemoryError):
+        rows = None  # type: ignore[assignment]
+    return rows
+
+
+def _py_start_states(text: str) -> list[str | None]:
+    """For each line of a Python file, the string delimiter open at its START (or None)."""
+    rows = _tokenize_string_rows(text)
+    if rows is None:
+        return _py_start_states_lexer(text)
+    return [rows.get(number) for number in range(1, len(_split_source_lines(text)) + 1)]
+
+
+def _read_disk_text(path: Path) -> str:
+    """A file's text with its line breaks untouched (no universal-newline translation: a lone
+    CR is not a line break to git) and undecodable bytes replaced."""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        data = b""
+    return data.decode("utf-8", errors="replace")
+
+
+def _py_ignorable_lines(
+    f: dict[str, Any], root: Path, file_reader=None
+) -> tuple[set[int], set[int]]:
     """Indexes into ``f["removed"]`` / ``f["added"]`` of lines that START inside a
     multi-line string, and so are text, not definitions.
 
     A diff shows the changed lines and three of context, never the string's opener, so the
-    state is rebuilt per hunk: from the file ON DISK (the new file: exact at the hunk's first
-    line), then by scanning the hunk's lines in order. The old side starts each hunk in the
-    state the new side does (they share everything before the first change). RESIDUAL: a
-    PR that changes a quote's balance in one hunk and edits a def inside the affected string
-    in a later hunk of the same file. With no file on disk the state starts as "in code".
-    Only hunks holding a def-shaped changed line are scanned.
+    state is rebuilt per hunk from the NEW file (`_py_start_states` at the hunk's first line)
+    and then by scanning the hunk's lines in order. The old side starts each hunk in the
+    state the new side does (they share everything before the first change).
+
+    WHERE THE NEW FILE COMES FROM matters: the working tree can carry an uncommitted edit.
+    ``file_reader(path)`` supplies the text (the blast-radius gate passes
+    ``git show HEAD:path``); with none, the working tree is read. Either way a copy is
+    trusted for a hunk only if it CARRIES the hunk's own lines at the hunk's position; one
+    that does not (shifted by an edit, shorter, absent, or a deleted or new file) says
+    nothing about the hunk, and the hunk starts in code. RESIDUALS: a working-tree edit
+    above a hunk that keeps the line count and the hunk's lines (use a reader), and a PR
+    that changes a quote's balance in one hunk and edits a def inside the affected string
+    in a later hunk of the same file. Only hunks holding a def-shaped changed line are scanned.
     """
     removed_skip: set[int] = set()
     added_skip: set[int] = set()
+    source_lines: list[str] = []
     starts: list[str | None] | None = None
     r_i = a_i = 0
     for hunk in f.get("hunks") or []:
@@ -640,13 +763,19 @@ def _py_ignorable_lines(f: dict[str, Any], root: Path) -> tuple[set[int], set[in
             a_i += sum(1 for tag, _ in lines if tag == "+")
             continue
         if starts is None:
-            try:
-                source = (root / _normalize(f["path"])).read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                source = ""
+            path = _normalize(f["path"])
+            source = (
+                file_reader(path) if file_reader is not None else _read_disk_text(root / path)
+            ) or ""
+            source_lines = _split_source_lines(source)
             starts = _py_start_states(source)
+        new_side = [text.rstrip("\r") for tag, text in lines if tag != "-"]
         k = hunk["new_start"] - 1
-        old_state = new_state = starts[k] if 0 <= k < len(starts) else None
+        stop = k + len(new_side)
+        carries = (
+            bool(new_side) and k >= 0 and [x.rstrip("\r") for x in source_lines[k:stop]] == new_side
+        )
+        old_state = new_state = starts[k] if carries else None
         for tag, text in lines:
             if tag == "-":
                 if old_state is not None:
@@ -827,7 +956,8 @@ def _SETATTR_TARGET_RE(name: str):
 # A cheap textual pre-filter: only a file naming one of these is worth an AST parse.
 _INTROSPECTION_HINT_RE = re.compile(
     r"signature|getfullargspec|getargspec|getcallargs|from_callable|get_type_hints"
-    r"|get_annotations|__code__|__defaults__|__kwdefaults__|__annotations__|__wrapped__"
+    r"|get_annotations|getmembers|__code__|__defaults__|__kwdefaults__|__annotations__"
+    r"|__wrapped__"
     r"|\bdir\b|wraps|update_wrapper"
 )
 # Calls that read (or copy) a callable's parameters, and attributes that expose them.
@@ -840,6 +970,8 @@ _INTROSPECTION_CALLS = frozenset(
         "from_callable",
         "get_type_hints",
         "get_annotations",
+        "getmembers",
+        "getmembers_static",
         "dir",
         "wraps",
         "update_wrapper",
@@ -914,28 +1046,160 @@ def _introspection_text_re(name: str):
     return re.compile(rf"(?:{calls})\s*\({arg}(?<!\w){n}\b|(?<!\w){n}\s*\.\s*(?:{attrs})\b")
 
 
+def _ast_idents(node: Any) -> set[str]:
+    """Every identifier-like thing a subtree mentions: Name ids, Attribute attrs, and string
+    constants (whole, and the last segment of a dotted path: ``"pkg.mod.fn"`` names ``fn``)."""
+    import ast  # function-local: see _parse_params
+
+    found: set[str] = set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name):
+            found.add(n.id)
+        elif isinstance(n, ast.Attribute):
+            found.add(n.attr)
+        elif isinstance(n, ast.Constant) and isinstance(n.value, str):
+            found.add(n.value)
+            found.add(n.value.rsplit(".", 1)[-1])
+    return found
+
+
+def _ast_store_names(node: Any) -> list[str]:
+    import ast  # function-local: see _parse_params
+
+    return [n.id for n in ast.walk(node) if isinstance(n, ast.Name)]
+
+
+def _callee_ids(func: Any) -> set[str]:
+    """What a call is calling: ``f`` for ``f(...)``, ``fn`` for ``mod.fn(...)`` (the attribute,
+    not the receiver: ``REG.items()`` calls ``items``, so a loop over it still binds from
+    ``REG``), and everything the expression mentions for any other callee (``REG["k"]()``)."""
+    import ast  # function-local: see _parse_params
+
+    if isinstance(func, ast.Name):
+        return {func.id}
+    if isinstance(func, ast.Attribute):
+        return {func.attr}
+    return _ast_idents(func)
+
+
+def _ast_bindings(nodes: list[Any]) -> list[tuple[set[str], set[str] | None, list[str]]]:
+    """Every plain binding in a module as ``(names mentioned by the source, names mentioned
+    by the callee when the source is a call, names bound)``: assignments (plain, annotated,
+    walrus), loop and comprehension targets, ``with ... as``, and ``match`` captures."""
+    import ast  # function-local: see _parse_params
+
+    found: list[tuple[Any, list[str]]] = []
+    for node in nodes:
+        if isinstance(node, ast.Assign):
+            found.append((node.value, [t for tgt in node.targets for t in _ast_store_names(tgt)]))
+        elif isinstance(node, (ast.AnnAssign, ast.NamedExpr)) and node.value is not None:
+            found.append((node.value, _ast_store_names(node.target)))
+        elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+            found.append((node.iter, _ast_store_names(node.target)))
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            for item in node.items:
+                if item.optional_vars is not None:
+                    found.append((item.context_expr, _ast_store_names(item.optional_vars)))
+        elif isinstance(node, getattr(ast, "Match", ())):
+            captured: list[str] = []
+            for pattern in (case.pattern for case in node.cases):
+                for sub in ast.walk(pattern):
+                    captured.extend(
+                        x for x in (getattr(sub, "name", None), getattr(sub, "rest", None)) if x
+                    )
+            found.append((node.subject, captured))
+    return [
+        (
+            _ast_idents(source),
+            _callee_ids(source.func) if isinstance(source, ast.Call) else None,
+            targets,
+        )
+        for source, targets in found
+    ]
+
+
+def _introspection_callables(tree: Any, nodes: list[Any]) -> set[str]:
+    """Names that ARE an introspection call: `signature` and friends, ``from inspect import
+    signature as sig``, ``sig = inspect.signature`` (and ``b = sig``), and helper defs or
+    lambdas whose body introspects one of their own parameters (to a fixed point, so a helper
+    of a helper counts)."""
+    import ast  # function-local: see _parse_params
+
+    def callee(func: Any) -> str | None:
+        return func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+
+    names = set(_INTROSPECTION_CALLS)
+    assigns: list[tuple[list[str], str | None]] = []
+    helpers: list[tuple[str, set[str], list[tuple[str | None, set[str]]]]] = []
+    for node in nodes:
+        if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in (
+            _INTROSPECTION_MODULES
+        ):
+            names.update(a.asname for a in node.names if a.asname and a.name in names)
+        elif isinstance(node, ast.Assign):
+            targets = [t for tgt in node.targets for t in _ast_store_names(tgt)]
+            if isinstance(node.value, ast.Lambda):
+                params = {a.arg for a in node.value.args.args + node.value.args.kwonlyargs}
+                calls = [
+                    (callee(c.func), set().union(*(_ast_idents(a) for a in c.args), set()))
+                    for c in ast.walk(node.value.body)
+                    if isinstance(c, ast.Call)
+                ]
+                helpers.extend((t, params, calls) for t in targets)
+            elif isinstance(node.value, (ast.Name, ast.Attribute)):
+                assigns.append((targets, callee(node.value)))
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            params = {a.arg for a in node.args.args + node.args.kwonlyargs + node.args.posonlyargs}
+            calls = [
+                (callee(c.func), set().union(*(_ast_idents(a) for a in c.args), set()))
+                for stmt in node.body
+                for c in ast.walk(stmt)
+                if isinstance(c, ast.Call)
+            ]
+            helpers.append((node.name, params, calls))
+    changed = True
+    while changed:
+        changed = False
+        for targets, source in assigns:
+            if source in names:
+                for t in targets:
+                    if t not in names:
+                        names.add(t)
+                        changed = True
+        for hname, params, calls in helpers:
+            if hname not in names and any(c in names and ids & params for c, ids in calls):
+                names.add(hname)
+                changed = True
+    return names
+
+
 def _inspects_symbol(text: str, name: str) -> bool:
     """Does this file READ THE PARAMETERS of ``name``?
 
-    ``inspect.signature(fn).parameters``, ``getfullargspec(fn).args``,
-    ``fn.__code__.co_argcount`` / ``co_varnames``, ``fn.__signature__``,
-    ``fn.__defaults__``, ``fn.__annotations__``, ``typing.get_type_hints(fn)``, ``dir(fn)``,
-    ``functools.wraps(fn)``: a consumer of the OLD SHAPE. A call-compatible change keeps
-    every call valid and still changes every one of these answers, so such a file breaks
-    exactly as a mock does. tests/unit/test_workflow_runner.py asserts
-    ``list(sig.parameters) == ["self", "node_id", "ynode"]``.
+    ``inspect.signature(fn).parameters``, ``getfullargspec(fn).args``, ``inspect.getmembers``,
+    ``fn.__code__.co_argcount`` / ``co_varnames``, ``fn.__signature__``, ``fn.__defaults__``,
+    ``fn.__annotations__``, ``getattr(fn, "__defaults__")`` (any introspection dunder named
+    as a string), ``typing.get_type_hints(fn)``, ``dir(fn)``, ``functools.wraps(fn)``: a
+    consumer of the OLD SHAPE. A call-compatible change keeps every call valid and still
+    changes every one of these answers, so such a file breaks exactly as a mock does.
+    tests/unit/test_workflow_runner.py asserts ``list(sig.parameters) == ["self", "node_id",
+    "ynode"]``.
 
     The introspection must be OF THIS FUNCTION. "The file contains ``inspect.signature``
     anywhere" would report every test that ever inspected anything, so the AST is asked
     whether the call's arguments (or the attribute's owner) mention the name -- as a name,
     an attribute (``Cls.name``), a string (``getattr(mod, "name")``), or a variable bound
-    from one of those by an assignment, annotated assignment, walrus, loop or comprehension,
-    followed to a fixed point however many hops or in whatever textual order, or by
-    ``from mod import name as alias``. ``from inspect import signature as sig`` makes
-    ``sig(fn)`` an introspection call. A file that is not parseable Python gets the textual
-    equivalent (no alias following).
+    from one of those by an assignment, annotated assignment, walrus, loop, comprehension,
+    ``with ... as`` or ``match`` capture, followed to a fixed point however many hops and in
+    whatever textual order (a worklist: linear, where a rescan per link was quadratic), or by
+    ``from mod import name as alias``. The introspection CALL may itself be aliased:
+    ``from inspect import signature as sig``, ``sig = inspect.signature``, or a helper
+    ``def get(fn): return inspect.signature(fn)``. A file that is not parseable Python gets
+    the textual equivalent (no alias following, no getattr form).
 
-    NOT DETECTED: a computed name (``getattr(Cls, method)``), and a stub or fake handed in
+    NOT DETECTED, because no static reading can tie them to the function: a computed name
+    (``getattr(Cls, method)``), a computed attribute (``getattr(fn, attr)``,
+    ``operator.attrgetter``), ``vars()`` / ``__dict__`` access, and a stub or fake handed in
     without the name appearing in the file at all.
     """
     if name not in text or not _INTROSPECTION_HINT_RE.search(text):
@@ -946,60 +1210,50 @@ def _inspects_symbol(text: str, name: str) -> bool:
     if tree is None:
         return bool(_introspection_text_re(name).search(text))
 
+    nodes = list(ast.walk(tree))
+    call_names = _introspection_callables(tree, nodes)
     names = {name}
-    call_names = set(_INTROSPECTION_CALLS)
-
-    def mentions(node: Any) -> bool:
-        for n in ast.walk(node):
-            if isinstance(n, ast.Name) and n.id in names:
-                return True
-            if isinstance(n, ast.Attribute) and n.attr in names:
-                return True
-            if isinstance(n, ast.Constant) and isinstance(n.value, str):
-                if n.value in names or any(n.value.endswith("." + x) for x in names):
-                    return True
-        return False
-
-    bindings: list[tuple[Any, list[Any]]] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            bindings.append((node.value, node.targets))
-        elif isinstance(node, (ast.AnnAssign, ast.NamedExpr)) and node.value is not None:
-            bindings.append((node.value, [node.target]))
-        elif isinstance(node, (ast.For, ast.comprehension)):
-            bindings.append((node.iter, [node.target]))
-        elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in (
-            _INTROSPECTION_MODULES
-        ):
-            call_names.update(
-                a.asname for a in node.names if a.asname and a.name in _INTROSPECTION_CALLS
-            )
+    for node in nodes:
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             names.update(a.asname for a in node.names if a.asname and a.name.split(".")[-1] == name)
 
-    # Variables bound from the function, followed to a fixed point (the set only grows).
-    changed = True
-    while changed:
-        changed = False
-        for source, targets in bindings:
-            if isinstance(source, ast.Call) and mentions(source.func):
+    # Variables bound from the function, by a worklist over an index from each mentioned
+    # name to the bindings that mention it: every binding is looked at once per name that
+    # reaches it, so a 5000-link chain is 5000 steps, not 5000 x 5000.
+    bindings = _ast_bindings(nodes)
+    index: dict[str, list[int]] = {}
+    for position, (mentioned, _, _) in enumerate(bindings):
+        for word in mentioned:
+            index.setdefault(word, []).append(position)
+    queue = list(names)
+    while queue:
+        word = queue.pop()
+        for position in index.get(word, ()):
+            _, callee_mentions, targets = bindings[position]
+            if callee_mentions is not None and callee_mentions & names:
                 continue  # `result = do_work(1)` binds what the function RETURNS
-            if mentions(source):
-                before = len(names)
-                for target in targets:
-                    names.update(t.id for t in ast.walk(target) if isinstance(t, ast.Name))
-                changed = changed or len(names) != before
+            for target in targets:
+                if target not in names:
+                    names.add(target)
+                    queue.append(target)
 
-    for node in ast.walk(tree):
+    for node in nodes:
         if isinstance(node, ast.Call):
             func = node.func
             called = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
-            if called in call_names and any(
-                mentions(a) for a in [*node.args, *(k.value for k in node.keywords)]
+            arguments = [*node.args, *(k.value for k in node.keywords)]
+            if called in call_names and any(_ast_idents(a) & names for a in arguments):
+                return True
+            if (
+                called == "getattr"
+                and len(node.args) >= 2
+                and isinstance(node.args[1], ast.Constant)
+                and node.args[1].value in _INTROSPECTION_ATTRS
+                and _ast_idents(node.args[0]) & names
             ):
                 return True
         elif isinstance(node, ast.Attribute):
-            if node.attr in _INTROSPECTION_ATTRS and mentions(node.value):
+            if node.attr in _INTROSPECTION_ATTRS and _ast_idents(node.value) & names:
                 return True
     return False
 
@@ -1102,22 +1356,24 @@ def _PATCH_TARGET_RE(name: str):
     return re.compile(r"patch[\w.]*\(\s*['\"][\w.]*(?<![\w])" + re.escape(name) + r"[^'\"]*['\"]")
 
 
-def _definition_modules(root: Path, name: str) -> int:
-    """How many files in the repo define ``name``.
+_DEF_NAME_RE = re.compile(r"^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(", re.M)
+_IDENT_RE = re.compile(r"[A-Za-z_]\w*")
+
+
+def _definition_counts(files: Iterable[tuple[str, str]], names: set[str]) -> dict[str, int]:
+    """How many files define each of ``names``: ONE pass over the files, indexed by name.
 
     A NAME DEFINED ONCE IDENTIFIES ITS SYMBOL; A NAME DEFINED EVERYWHERE DOES NOT. `main`
     and `run` are defined in dozens of modules here, so a bare-name match against them
     finds every unrelated mention in the tree -- measured at 720 findings on one PR, 682 of
-    them for those two names alone.
+    them for those two names alone. (This walked the whole tree once per changed name, so a
+    PR changing 100k names never finished.)
     """
-    count = 0
-    pattern = re.compile(r"^\s*(?:async\s+)?def\s+" + re.escape(name) + r"\s*\(", re.M)
-    for _rel, text in _iter_code_files(root):
-        if pattern.search(text):
-            count += 1
-            if count > 1:
-                return count
-    return count
+    counts = dict.fromkeys(names, 0)
+    for _rel, text in files:
+        for name in names.intersection(_DEF_NAME_RE.findall(text)):
+            counts[name] += 1
+    return counts
 
 
 def _qualified_reference(text: str, module_hint: str, name: str) -> bool:
@@ -1189,22 +1445,28 @@ def _classify_changes(old_items: list[tuple[str, bool]], new_items: list[tuple[s
     every changed pair is.
 
     When the counts differ no pairing is trustworthy, so the full parameter text (whitespace
-    removed) is compared as a MULTISET: any parameter list that occurs more often on the
-    added side than on the removed side is a new or changed definition and is reported
-    without a compatibility verdict. Comparing sets of name lists hid a changed definition
-    that reused an old shape (issue #926: ``-(a)`` ``-(a, b)`` / ``+(a, b)`` ``+(a, b)``
-    ``+(a)``) and a kind-only change such as ``(a, b)`` -> ``(a, *, b)``. Fewer definitions
-    of a shape already present introduce nothing and are not reported.
+    removed) is compared as a MULTISET, and the file is reported, without a compatibility
+    verdict, if EITHER (a) a parameter list occurs more often on the added side than on the
+    removed side (a new or changed definition: comparing sets of name lists hid one that
+    reused an old shape, issue #926: ``-(a)`` ``-(a, b)`` / ``+(a, b)`` ``+(a, b)`` ``+(a)``,
+    and a kind-only change such as ``(a, b)`` -> ``(a, *, b)``), or (b) a parameter list that
+    was removed no longer exists at all (a definition whose shape disappeared is a signature
+    change: ``-(a)`` ``-(a, b)`` / ``+(a, b)``). The only silent count change is fewer
+    definitions of a shape that still exists, a dropped DUPLICATE (``-(a)`` ``-(a)`` /
+    ``+(a)``).
     """
     if len(old_items) != len(new_items):
-        surplus: dict[str, int] = {}
-        for text, _ in new_items:
-            key = _normalized_params(text)
-            surplus[key] = surplus.get(key, 0) + 1
+        old_counts: dict[str, int] = {}
+        new_counts: dict[str, int] = {}
         for text, _ in old_items:
             key = _normalized_params(text)
-            surplus[key] = surplus.get(key, 0) - 1
-        if not any(count > 0 for count in surplus.values()):
+            old_counts[key] = old_counts.get(key, 0) + 1
+        for text, _ in new_items:
+            key = _normalized_params(text)
+            new_counts[key] = new_counts.get(key, 0) + 1
+        added = any(count > old_counts.get(key, 0) for key, count in new_counts.items())
+        vanished = any(key not in new_counts for key in old_counts)
+        if not (added or vanished):
             return None
         return _param_names(old_items[-1][0]), _param_names(new_items[-1][0]), False
     changes = [
@@ -1217,7 +1479,7 @@ def _classify_changes(old_items: list[tuple[str, bool]], new_items: list[tuple[s
 
 
 def detect_changed_signature_callers(
-    diff_text: str, *, repo_root: Path | str = REPO_ROOT
+    diff_text: str, *, repo_root: Path | str = REPO_ROOT, file_reader=None
 ) -> list[Finding]:
     """Flag files outside the diff that reference a function whose signature changed.
 
@@ -1312,7 +1574,9 @@ def detect_changed_signature_callers(
         path = _normalize(f["path"])
         is_py, style = _is_python_path(path), _comment_style(path)
         # Lines that START inside a multi-line string of a Python file are text.
-        removed_skip, added_skip = _py_ignorable_lines(f, root) if is_py else (set(), set())
+        removed_skip, added_skip = (
+            _py_ignorable_lines(f, root, file_reader) if is_py else (set(), set())
+        )
         for idx, ln in enumerate(f["removed"]):
             sig = None if idx in removed_skip else _signature_on_line(ln, is_py=is_py, style=style)
             if sig:
@@ -1336,26 +1600,35 @@ def detect_changed_signature_callers(
     if not changed_sigs:
         return []
 
-    # Measured once per run, not per file: `_iter_code_files` walks the tree.
-    _ambiguous = {name: _definition_modules(root, name) > 1 for name in changed_sigs}
+    # ONE walk of the tree serves both the definition count and the scan below (it used to
+    # walk once per changed name, and again for the scan).
+    files_in_tree = list(_iter_code_files(root))
+    definitions = _definition_counts(files_in_tree, set(changed_sigs))
+    _ambiguous = {name: count > 1 for name, count in definitions.items()}
 
     # Match the name as a whole word, but ALLOW a leading "." so attribute and
     # patch-target references (e.g. monitor._write_handoff_packet_to_db, the real
     # #353 caller) are caught — only a leading word char rules out a match.
-    ref_res = {name: re.compile(r"(?<!\w)" + re.escape(name) + r"\b") for name in changed_sigs}
+    ref_res: dict[str, re.Pattern[str]] = {}
+    wanted = set(changed_sigs)
     findings: list[Finding] = []
     _Memo.reset(True)
     try:
-        for rel, text in _iter_code_files(root):
+        for rel, text in files_in_tree:
             if rel in changed_paths:
                 continue
-            for name, pat in ref_res.items():
-                # EVERY REFERENCE CONTAINS THE NAME LITERALLY: a call, an attribute, a dotted
-                # path inside a patch string, a setattr string, an introspection argument.
-                # A file without it is skipped before anything is tokenized or parsed (a
-                # 20-name scan paid for a tokenization of every file once per name).
-                if name not in text:
-                    continue
+            # EVERY REFERENCE CONTAINS THE NAME AS AN IDENTIFIER: a call, an attribute, a
+            # dotted path inside a patch string, a setattr string, an introspection
+            # argument. One pass over the file finds the changed names it holds; a file
+            # holding none is skipped before anything is tokenized or parsed (the old
+            # per-name substring test was files x names: 100k names timed out).
+            held = wanted.intersection(_IDENT_RE.findall(text))
+            if not held:
+                continue
+            for name in sorted(held):
+                pat = ref_res.get(name)
+                if pat is None:
+                    pat = ref_res[name] = re.compile(r"(?<!\w)" + re.escape(name) + r"\b")
                 # AN AMBIGUOUS NAME NEEDS ITS MODULE NAMED. `main` and `run` are defined in
                 # dozens of modules here, so matching them bare finds every unrelated mention
                 # -- 720 findings on one PR, 682 for those two names. A name defined ONCE (the
@@ -1577,7 +1850,12 @@ def detect_migration_file_db_duplication(
     return findings
 
 
-def run_all_detectors(diff_text: str, *, repo_root: Path | str = REPO_ROOT) -> list[Finding]:
+def run_all_detectors(
+    diff_text: str, *, repo_root: Path | str = REPO_ROOT, file_reader=None
+) -> list[Finding]:
+    """Run every detector. ``file_reader(path)`` supplies the NEW text of a file for the one
+    detector that needs it (the changed-signature detector's Python string state); the
+    blast-radius gate passes ``git show HEAD:path``."""
     findings: list[Finding] = []
     for detector in (
         detect_stale_removed_symbol_tests,
@@ -1585,5 +1863,8 @@ def run_all_detectors(diff_text: str, *, repo_root: Path | str = REPO_ROOT) -> l
         detect_unowned_table_writes,
         detect_migration_file_db_duplication,
     ):
-        findings.extend(detector(diff_text, repo_root=repo_root))
+        if detector is detect_changed_signature_callers:
+            findings.extend(detector(diff_text, repo_root=repo_root, file_reader=file_reader))
+        else:
+            findings.extend(detector(diff_text, repo_root=repo_root))
     return findings

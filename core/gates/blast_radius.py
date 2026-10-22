@@ -590,16 +590,16 @@ def evaluate(
     changed_files: Iterable[str],
     *,
     repo_root: Path | str = REPO_ROOT,
+    file_reader: Any = None,
 ) -> dict[str, Any]:
     """Run the merge-time blast-radius gate. Pure — no git, no exit.
 
-    Returns a report dict with ``status`` ``"pass"``/``"fail"``. Status is
-    ``"fail"`` when any nothing-left-hanging detector fires; the impact set is
-    always included so the matrix step can run the dependent tests.
-    """
+    Report ``status`` is ``"fail"`` when any detector fires; the impact set is always included.
+    ``file_reader(path)`` is a file's new text (``git show HEAD:path``), not the working
+    tree."""
     from core.gates.hanging_detectors import run_all_detectors
 
-    findings = run_all_detectors(diff_text, repo_root=repo_root)
+    findings = run_all_detectors(diff_text, repo_root=repo_root, file_reader=file_reader)
     impact = compute_impact_set(changed_files, repo_root=repo_root)
     return {
         "schema": BLAST_RADIUS_GATE_SCHEMA,
@@ -641,6 +641,35 @@ def _resolve_diff_and_changed(repo_root: Path, base_ref: str | None) -> tuple[st
     return diff_text, [ln.strip() for ln in names.splitlines() if ln.strip()]
 
 
+def _git_head_reader(repo_root: Path):
+    """``reader(path)`` -> the text of ``path`` at HEAD (the diff's head), or None.
+
+    The detectors need a Python file's NEW text to rebuild its string state, and the working
+    tree is the wrong place to get it: an uncommitted edit can put a hunk "inside a string"
+    and hide a real changed def. The object in git is what the diff describes. Bytes are
+    decoded here, never through text mode, because universal newlines would turn a lone CR
+    into a line break that git does not count.
+    """
+
+    def read(path: str) -> str | None:
+        text = None
+        try:
+            r = subprocess.run(
+                ["git", "show", f"HEAD:{path}"],
+                cwd=repo_root,
+                capture_output=True,
+                check=False,
+                timeout=30,
+            )
+            if r.returncode == 0:
+                text = r.stdout.decode("utf-8", errors="replace")
+        except (OSError, subprocess.SubprocessError):
+            text = None
+        return text
+
+    return read
+
+
 def main() -> int:
     base_ref = os.environ.get("DREAM_STUDIO_BASE_REF")
     github_base = os.environ.get("GITHUB_BASE_REF")
@@ -650,7 +679,9 @@ def main() -> int:
         base_ref = "origin/main"
 
     diff_text, changed = _resolve_diff_and_changed(REPO_ROOT, base_ref)
-    report = evaluate(diff_text, changed, repo_root=REPO_ROOT)
+    report = evaluate(
+        diff_text, changed, repo_root=REPO_ROOT, file_reader=_git_head_reader(REPO_ROOT)
+    )
     print(json.dumps(report, indent=2, sort_keys=True))
     truncated = report["impact_set"].get("import_graph_truncated_test_count", 0)
     if truncated:
