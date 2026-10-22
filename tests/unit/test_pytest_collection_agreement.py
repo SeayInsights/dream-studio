@@ -37,6 +37,7 @@ from tests.helpers.resolver_cases import (
     _CANDIDATES,
     _CASES,
     _CASES_FOLLOWUP,
+    _CASES_VERIFIER2,
     _CASES_ITEM3,
     _CASES_MORE,
     _FOLLOWUP_CANDIDATES,
@@ -51,6 +52,8 @@ from tests.helpers.resolver_cases import (
     _STAR_HELPER,
     _STAR_NOLIST,
     _SUFFIX_FILE,
+    _VERIFIER2_CANDIDATES,
+    _YIELD_FIXTURE,
 )
 from tests.helpers.resolver_cases import write_tree as _tree
 
@@ -104,6 +107,8 @@ def test_the_resolver_agrees_with_pytest_collection_on_every_candidate(tmp_path)
             "tests/test_more.py": _CASES_MORE,
             "tests/test_item3.py": _CASES_ITEM3,
             "tests/test_followup.py": _CASES_FOLLOWUP,
+            "tests/test_verifier2.py": _CASES_VERIFIER2,
+            "tests/test_yield_fixture.py": _YIELD_FIXTURE,
             "tests/star_helper.py": _STAR_HELPER,
             "tests/star_nolist.py": _STAR_NOLIST,
             **{name: body for name, (body, _) in _IMPORT_FILES.items()},
@@ -127,6 +132,8 @@ def test_the_resolver_agrees_with_pytest_collection_on_every_candidate(tmp_path)
         ("tests/test_more.py", _MORE_CANDIDATES),
         ("tests/test_item3.py", _ITEM3_CANDIDATES),
         ("tests/test_followup.py", _FOLLOWUP_CANDIDATES),
+        ("tests/test_verifier2.py", _VERIFIER2_CANDIDATES),
+        ("tests/test_yield_fixture.py", ["test_f"]),
         *((name, names) for name, (_, names) in _IMPORT_FILES.items()),
         *((name, names) for name, (_, names) in _POISONED.items()),
         ("tests/pkgrel/test_ok_rel.py", ["test_in_rel"]),

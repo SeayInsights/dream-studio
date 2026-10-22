@@ -25,6 +25,7 @@ from core.gates.pytest_node_resolver import NodeResolver
 from tests.helpers.resolver_cases import (
     _CASES,
     _CASES_FOLLOWUP,
+    _CASES_VERIFIER2,
     _CASES_ITEM3,
     _CASES_MORE,
     _HELPER,
@@ -2096,3 +2097,282 @@ def test_an_import_through_a_module_file_is_refused_only_when_a_name_follows_it(
     )
     assert "is a module, not a package" in (_why(root, "test_a.py::test_x") or "")
     assert _why(root, "test_b.py::test_x") is None
+
+
+# --------------------------------------------------------------------------
+# Follow-ups: standard-library bases, __eq__ without __hash__, and a few spellings
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def verifier2(tmp_path):
+    return _tree(tmp_path, {"tests/test_verifier2.py": _CASES_VERIFIER2})
+
+
+@pytest.mark.parametrize(
+    "candidate,fragment",
+    [
+        ("TestThread::test_a", "base `threading.Thread`"),
+        ("TestStringIO::test_a", "base `io.StringIO`"),
+        ("TestHandler::test_a", "base `logging.Handler`"),
+        ("TestNamespace::test_a", "base `argparse.Namespace`"),
+        ("TestPurePath::test_a", "base `pathlib.PurePath`"),
+        ("TestMock::test_a", "base `mock.Mock`"),
+        ("TestOrderedDict::test_a", "base `collections.OrderedDict`"),
+        ("TestNamedTupleCall::test_a", "base `namedtuple('Point', 'x y')`"),
+        ("TestContextManagerAbstract::test_a", "is abstract"),
+        ("TestMapping::test_a", "is abstract"),
+        ("TestEq::test_a", "defines __eq__ without __hash__"),
+        ("TestHashNone::test_a", "sets __hash__ = None"),
+        ("TestEqChild::test_a", "defines __eq__ without __hash__"),
+        ("TestFalseComparison::test_a", "sets __test__ = False"),
+        ("TestSetattr::test_a", "sets __test__ = False"),
+        ("test_decorated_nottest", "sets __test__ = False"),
+        ("TestDecoratedNottest::test_a", "sets __test__ = False"),
+        ("test_while_true", "is not a function or class"),
+    ],
+)
+def test_the_third_review_nodes_pytest_does_not_collect_are_refused(verifier2, candidate, fragment):
+    why = _why(verifier2, f"tests/test_verifier2.py::{candidate}")
+    assert why is not None and fragment in why, why
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        "test_kept",
+        "TestContextManagerImplemented::test_a",
+        "TestEqHash::test_a",
+        "TestEqChildHash::test_a",
+        "TestTrueComparison::test_a",
+        "helper_decorated_istest",
+        "TestStatic::test_s",
+        "TestStatic::test_c",
+    ],
+)
+def test_the_third_review_nodes_pytest_collects_resolve(verifier2, candidate):
+    assert _why(verifier2, f"tests/test_verifier2.py::{candidate}") is None
+
+
+def test_a_standard_library_base_that_is_not_safe_to_import_is_not_imported(tmp_path):
+    """`this` prints a poem and `antigravity` opens a browser when imported, so a class built on
+    something from them is read as an unreadable base, never by importing the module."""
+    import sys
+
+    from core.gates.pytest_node_resolver import _stdlib_traits
+
+    assert _stdlib_traits("this", "d") == {}
+    assert _stdlib_traits("antigravity", "geohash") == {}
+    assert "this" not in sys.modules and "antigravity" not in sys.modules
+
+
+def test_a_name_that_is_not_a_class_or_not_in_the_module_gives_no_traits():
+    from core.gates.pytest_node_resolver import _stdlib_traits
+
+    assert _stdlib_traits("threading", "no_such_name_zzz") == {}
+    assert _stdlib_traits("threading", "active_count") == {}  # a function, not a class
+    assert _stdlib_traits("not_a_stdlib_module_zzz", "X") == {}
+    assert _stdlib_traits("threading", "Thread")["constructs"] is True
+    assert _stdlib_traits("collections.abc", "Mapping")["abstract"]
+    assert _stdlib_traits("collections", "OrderedDict")["constructs"] is True
+    assert _stdlib_traits("collections.abc", "Mapping")["unhashable"] is True
+    assert _stdlib_traits("threading", "Thread")["unhashable"] is False
+
+
+def test_a_third_party_base_is_not_imported_and_is_only_named(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "from vendored_zzz import Base\n\n\nclass TestA(Base):\n"
+                "    def test_a(self):\n        pass\n"
+            )
+        },
+    )
+    assert _why(root, "test_a.py::TestA::test_a") is None
+    assert "Base" in (_why(root, "test_a.py::TestA::test_missing") or "")
+
+
+def test_a_subclass_that_redefines_hash_is_hashable_again(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "class TestEq:\n    def __eq__(self, o):\n        return True\n"
+                "    def test_a(self):\n        pass\n\n\n"
+                "class TestBack(TestEq):\n    __hash__ = object.__hash__\n\n\n"
+                "class TestStill(TestEq):\n    pass\n\n\n"
+                "class TestFresh:\n    __hash__ = None\n\n\n"
+                "class TestFreshChild(TestFresh):\n    def __eq__(self, o):\n"
+                "        return True\n\n    def __hash__(self):\n        return 1\n\n"
+                "    def test_a(self):\n        pass\n"
+            )
+        },
+    )
+    assert _why(root, "test_a.py::TestBack::test_a") is None
+    assert "defines __eq__" in (_why(root, "test_a.py::TestStill::test_a") or "")
+    assert _why(root, "test_a.py::TestFreshChild::test_a") is None
+
+
+def test_an_unhashable_stdlib_base_is_overridden_by_a_hash_in_the_subclass(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "import collections.abc as abc\n\n\nclass TestA(abc.Mapping):\n"
+                "    def __getitem__(self, k):\n        return 1\n    def __iter__(self):\n"
+                "        return iter(())\n    def __len__(self):\n        return 0\n"
+                "    def __hash__(self):\n        return 1\n    def test_a(self):\n        pass\n\n\n"
+                "class TestB(abc.Mapping):\n    def __getitem__(self, k):\n        return 1\n"
+                "    def __iter__(self):\n        return iter(())\n    def __len__(self):\n"
+                "        return 0\n    def test_a(self):\n        pass\n"
+            )
+        },
+    )
+    assert _why(root, "test_a.py::TestA::test_a") is None
+    assert "unhashable" in (_why(root, "test_a.py::TestB::test_a") or "")
+
+
+@pytest.mark.parametrize(
+    "expression,truthy",
+    [
+        ("1 > 2", False),
+        ("2 > 1", True),
+        ("1 == 1", True),
+        ("1 != 1", False),
+        ("1 <= 1", True),
+        ("2 >= 3", False),
+        ("1 < 2 < 3", True),
+        ("1 < 3 < 2", False),
+        ("'a' in 'abc'", True),
+        ("'z' in 'abc'", False),
+        ("'z' not in 'abc'", True),
+        ("None is None", True),
+        ("None is not None", False),
+        ("1 + 1 == 2", True),
+        ("2 * 3 - 6", False),
+        ("7 // 2 - 3", False),
+        ("7 % 2", True),
+    ],
+)
+def test_comparisons_and_arithmetic_over_constants_are_decided(tmp_path, expression, truthy):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                f"VALUE = {expression}\n\nif VALUE:\n    def test_x():\n        pass\n"
+                "else:\n    def test_y():\n        pass\n"
+            )
+        },
+    )
+    chosen, other = ("test_x", "test_y") if truthy else ("test_y", "test_x")
+    assert _why(root, f"test_a.py::{chosen}") is None
+    assert f"no `{other}` defined" in (_why(root, f"test_a.py::{other}") or "")
+
+
+@pytest.mark.parametrize("expression", ["1 / 0", "'a' > 1", "make() > 1", "1 < make()", "2 ** 3"])
+def test_an_expression_that_cannot_be_evaluated_leaves_both_arms_possible(tmp_path, expression):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                f"VALUE = {expression}\n\nif VALUE:\n    def test_x():\n        pass\n"
+                "else:\n    def test_y():\n        pass\n"
+            )
+        },
+    )
+    assert _why(root, "test_a.py::test_x") is None
+    assert _why(root, "test_a.py::test_y") is None
+
+
+def test_setattr_of_the_test_flag_is_read_only_when_it_certainly_runs(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "import sys\n\n\ndef test_x():\n    pass\n\n\ndef test_y():\n    pass\n\n\n"
+                "def test_z():\n    pass\n\n\ndef test_w():\n    pass\n\n\n"
+                "setattr(test_x, '__test__', False)\n"
+                "if sys.platform == 'plan9':\n    setattr(test_y, '__test__', False)\n"
+                "setattr(test_z, 'other', False)\n"
+                "setattr(test_w, '__test__', make())\n"
+            )
+        },
+    )
+    assert "sets __test__ = False" in (_why(root, "test_a.py::test_x") or "")
+    assert _why(root, "test_a.py::test_y") is None
+    assert _why(root, "test_a.py::test_z") is None
+    assert _why(root, "test_a.py::test_w") is None
+
+
+def test_nottest_and_istest_are_read_by_name_through_an_alias(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "from nose.tools import nottest as skip_me\nfrom nose.tools import istest\n\n\n"
+                "@skip_me\ndef test_x():\n    pass\n\n\n@istest\ndef helper_y():\n    pass\n"
+            )
+        },
+    )
+    assert "sets __test__ = False" in (_why(root, "test_a.py::test_x") or "")
+    assert _why(root, "test_a.py::helper_y") is None
+
+
+def test_yield_fixture_is_a_fixture(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "import pytest\nfrom pytest import yield_fixture as yf\n\n\n"
+                "@pytest.yield_fixture\ndef test_x():\n    yield 1\n\n\n"
+                "@yf\ndef test_y():\n    yield 1\n"
+            )
+        },
+    )
+    assert "is a fixture" in (_why(root, "test_a.py::test_x") or "")
+    assert "is a fixture" in (_why(root, "test_a.py::test_y") or "")
+
+
+def test_a_while_true_body_runs_and_its_else_does_not(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "def test_x():\n    pass\n\n\ndef test_y():\n    pass\n\n\n"
+                "while True:\n    test_x = None\n    break\nelse:\n    del test_y\n"
+            )
+        },
+    )
+    assert "not a function or class" in (_why(root, "test_a.py::test_x") or "")
+    assert _why(root, "test_a.py::test_y") is None
+
+
+def test_an_import_that_may_fail_does_not_replace_a_def(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "import sys\n\n\ndef test_a():\n    pass\n\n\ndef test_b():\n    pass\n\n\n"
+                "def test_c():\n    pass\n\n\ntry:\n    from nomod_zzz import test_a\n"
+                "except ImportError:\n    pass\n\nif sys.platform == 'plan9':\n"
+                "    from nomod_zzz import test_b\n\nfrom nomod_zzz import test_c\n"
+            )
+        },
+    )
+    assert _why(root, "test_a.py::test_a") is None
+    assert _why(root, "test_a.py::test_b") is None
+    assert "outside the repository" in (_why(root, "test_a.py::test_c") or "")
+
+
+def test_a_try_without_handlers_does_not_guard_its_imports(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "def test_a():\n    pass\n\n\ntry:\n    from nomod_zzz import test_a\n"
+                "finally:\n    pass\n"
+            )
+        },
+    )
+    assert "outside the repository" in (_why(root, "test_a.py::test_a") or "")

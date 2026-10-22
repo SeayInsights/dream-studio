@@ -1132,6 +1132,219 @@ _FOLLOWUP_CANDIDATES = [
     "TestClassAlias::test_from_outer",
 ]
 
+# The third review: standard-library bases that bring a constructor, a missing hash or abstract
+# methods of their own; `__eq__` without `__hash__`; constants that are comparisons; the setattr,
+# nottest and staticmethod spellings; and `while True`, which always runs its body.
+_CASES_VERIFIER2 = """\
+import argparse
+import collections
+import collections.abc
+import contextlib
+import io
+import logging
+import pathlib
+import threading
+from collections import namedtuple
+from unittest import mock
+
+try:
+    from nomod_zzz import test_kept
+except ImportError:
+    pass
+
+
+def test_kept():
+    pass
+
+
+def nottest(obj):
+    obj.__test__ = False
+    return obj
+
+
+def istest(obj):
+    obj.__test__ = True
+    return obj
+
+
+class TestThread(threading.Thread):
+    def test_a(self):
+        pass
+
+
+class TestStringIO(io.StringIO):
+    def test_a(self):
+        pass
+
+
+class TestHandler(logging.Handler):
+    def test_a(self):
+        pass
+
+
+class TestNamespace(argparse.Namespace):
+    def test_a(self):
+        pass
+
+
+class TestPurePath(pathlib.PurePath):
+    def test_a(self):
+        pass
+
+
+class TestMock(mock.Mock):
+    def test_a(self):
+        pass
+
+
+class TestOrderedDict(collections.OrderedDict):
+    def test_a(self):
+        pass
+
+
+class TestNamedTupleCall(namedtuple("Point", "x y")):
+    def test_a(self):
+        pass
+
+
+class TestContextManagerAbstract(contextlib.AbstractContextManager):
+    def test_a(self):
+        pass
+
+
+class TestContextManagerImplemented(contextlib.AbstractContextManager):
+    def __exit__(self, *exc):
+        return None
+
+    def test_a(self):
+        pass
+
+
+class TestMapping(collections.abc.Mapping):
+    def test_a(self):
+        pass
+
+
+class TestEq:
+    def __eq__(self, other):
+        return True
+
+    def test_a(self):
+        pass
+
+
+class TestEqHash:
+    def __eq__(self, other):
+        return True
+
+    def __hash__(self):
+        return 1
+
+    def test_a(self):
+        pass
+
+
+class TestHashNone:
+    __hash__ = None
+
+    def test_a(self):
+        pass
+
+
+class TestEqChild(TestEq):
+    pass
+
+
+class TestEqChildHash(TestEq):
+    def __hash__(self):
+        return 2
+
+
+class TestFalseComparison:
+    __test__ = 1 > 2
+
+    def test_a(self):
+        pass
+
+
+class TestTrueComparison:
+    __test__ = 1 < 2
+
+    def test_a(self):
+        pass
+
+
+class TestSetattr:
+    def test_a(self):
+        pass
+
+
+setattr(TestSetattr, "__test__", False)
+
+
+@nottest
+def test_decorated_nottest():
+    pass
+
+
+@nottest
+class TestDecoratedNottest:
+    def test_a(self):
+        pass
+
+
+@istest
+def helper_decorated_istest():
+    pass
+
+
+class TestStatic:
+    test_s = staticmethod(lambda: None)
+    test_c = classmethod(lambda cls: None)
+
+
+def test_while_true():
+    pass
+
+
+while True:
+    test_while_true = None
+    break
+"""
+
+# a fixture spelled yield_fixture: either pytest still has it and it is a fixture, or it does not and
+# the file does not import; pytest collects nothing from it either way
+_YIELD_FIXTURE = "import pytest\n\n\n@pytest.yield_fixture\ndef test_f():\n    yield 1\n"
+
+_VERIFIER2_CANDIDATES = [
+    "test_kept",
+    "TestThread::test_a",
+    "TestStringIO::test_a",
+    "TestHandler::test_a",
+    "TestNamespace::test_a",
+    "TestPurePath::test_a",
+    "TestMock::test_a",
+    "TestOrderedDict::test_a",
+    "TestNamedTupleCall::test_a",
+    "TestContextManagerAbstract::test_a",
+    "TestContextManagerImplemented::test_a",
+    "TestMapping::test_a",
+    "TestEq::test_a",
+    "TestEqHash::test_a",
+    "TestHashNone::test_a",
+    "TestEqChild::test_a",
+    "TestEqChildHash::test_a",
+    "TestFalseComparison::test_a",
+    "TestTrueComparison::test_a",
+    "TestSetattr::test_a",
+    "test_decorated_nottest",
+    "TestDecoratedNottest::test_a",
+    "helper_decorated_istest",
+    "TestStatic::test_s",
+    "TestStatic::test_c",
+    "test_while_true",
+]
+
 # Node ids to ask both pytest and the resolver about. Every one names something, or
 # looks like it could.
 _CANDIDATES = [

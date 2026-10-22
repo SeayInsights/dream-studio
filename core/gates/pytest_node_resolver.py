@@ -108,7 +108,11 @@ from __future__ import annotations
 import ast
 import builtins
 import fnmatch
+import functools
+import importlib
+import operator
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -376,7 +380,51 @@ def _combined_constant(node: ast.expr) -> Any:
             if bool(picked) == keep_going:
                 picked = value
         return picked
+    if isinstance(node, ast.Compare):
+        return _compare_constants(node)
+    if isinstance(node, ast.BinOp) and type(node.op) in _ARITHMETIC:
+        left, right = _literal(node.left), _literal(node.right)
+        if _UNKNOWN in (left, right):
+            return _UNKNOWN
+        try:
+            return _ARITHMETIC[type(node.op)](left, right)
+        except (TypeError, ValueError, ZeroDivisionError, OverflowError, MemoryError):
+            return _UNKNOWN
     return _UNKNOWN
+
+
+_ARITHMETIC = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+}
+_COMPARISONS = {
+    ast.Eq: operator.eq,
+    ast.NotEq: operator.ne,
+    ast.Lt: operator.lt,
+    ast.LtE: operator.le,
+    ast.Gt: operator.gt,
+    ast.GtE: operator.ge,
+    ast.Is: operator.is_,
+    ast.IsNot: operator.is_not,
+    ast.In: lambda a, b: a in b,
+    ast.NotIn: lambda a, b: a not in b,
+}
+
+
+def _compare_constants(node: ast.Compare) -> Any:
+    """`1 > 2`, `"a" in "abc"`, a chain of them: decided when every operand is a constant."""
+    operands = [_literal(node.left), *[_literal(c) for c in node.comparators]]
+    if _UNKNOWN in operands or any(type(op) not in _COMPARISONS for op in node.ops):
+        return _UNKNOWN
+    try:
+        return all(
+            _COMPARISONS[type(op)](operands[i], operands[i + 1]) for i, op in enumerate(node.ops)
+        )
+    except (TypeError, ValueError):
+        return _UNKNOWN
 
 
 def _static_truth(
@@ -506,6 +554,15 @@ def _alias_binding(
     if isinstance(value, ast.Lambda):  # pytest collects a lambda: it is a function
         return _Binding("def", value, mod)
     if isinstance(value, ast.Call):
+        if value.args and _final_name(value.func, lookup) in ("staticmethod", "classmethod"):
+            wrapped = value.args[
+                0
+            ]  # `x = staticmethod(lambda: None)`: pytest collects the function
+            if isinstance(wrapped, ast.Lambda):
+                return _Binding("def", wrapped, mod)
+            bound = lookup(wrapped.id) if isinstance(wrapped, ast.Name) else None
+            if bound is not None and bound.kind in ("def", "import"):
+                return bound
         if value.args and _final_name(value.func, lookup) == "partial":
             first = value.args[0]
             bound = lookup(first.id) if isinstance(first, ast.Name) else None
@@ -556,6 +613,23 @@ def _bind_walrus(
                 _bind_walrus(child, mod, scope, cond, outer)
 
 
+def _bind_setattr(expr: ast.expr, mod: _Module, scope: dict[str, _Binding], cond: bool) -> None:
+    """`setattr(test_x, "__test__", False)` as a statement is `test_x.__test__ = False`."""
+    if (
+        not cond
+        and isinstance(expr, ast.Call)
+        and isinstance(expr.func, ast.Name)
+        and expr.func.id == "setattr"
+        and len(expr.args) == 3
+        and isinstance(expr.args[0], ast.Name)
+        and isinstance(expr.args[1], ast.Constant)
+        and expr.args[1].value == "__test__"
+    ):
+        holder = scope.get(expr.args[0].id)
+        if holder is not None and holder.kind in ("def", "class") and holder.node is not None:
+            mod.flags[id(holder.node)] = _literal(expr.args[2])
+
+
 def _bind_target(
     target: ast.expr,
     value: ast.expr | None,
@@ -600,6 +674,7 @@ def _bind_stmt(
 ) -> None:
     if isinstance(stmt, ast.Expr):
         _bind_walrus(stmt.value, mod, scope, cond, outer)
+        _bind_setattr(stmt.value, mod, scope, cond)
     elif isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
         _bind_walrus(stmt.value, mod, scope, cond, outer)
     elif isinstance(stmt, (ast.If, ast.While)):
@@ -675,9 +750,13 @@ def _bind_stmt(
             _bind_body(stmt.body, mod, scope, cond or not runs, outer)
             _bind_body(stmt.orelse, mod, scope, True, outer)
     elif isinstance(stmt, ast.While):
-        if _static_truth(stmt.test, scope, outer) is not False:
-            _bind_body(stmt.body, mod, scope, True, outer)
-        _bind_body(stmt.orelse, mod, scope, True, outer)
+        truth = _static_truth(stmt.test, scope, outer)
+        if truth is True:  # `while True`: the body runs, and the `else` never does
+            _bind_body(stmt.body, mod, scope, cond, outer)
+        else:
+            if truth is not False:
+                _bind_body(stmt.body, mod, scope, True, outer)
+            _bind_body(stmt.orelse, mod, scope, True, outer)
     elif isinstance(stmt, ast.Match):
         for case in stmt.cases:
             _bind_body(case.body, mod, scope, True, outer)
@@ -693,7 +772,18 @@ def _decorators(node: ast.AST, mod: _Module) -> list[tuple[str, ast.expr]]:
 
 
 def _is_fixture(node: ast.AST, mod: _Module) -> bool:
-    return any(name == "fixture" for name, _ in _decorators(node, mod))
+    return any(name in ("fixture", "yield_fixture") for name, _ in _decorators(node, mod))
+
+
+def _decorator_flag(node: ast.AST, mod: _Module) -> Any:
+    """`@nottest` sets `__test__ = False` and `@istest` sets it True (nose's decorators, and the
+    names people give their own). Absent when neither decorates the object."""
+    for name, _ in _decorators(node, mod):
+        if name == "nottest":
+            return False
+        if name == "istest":
+            return True
+    return _ABSENT
 
 
 #: Decorators whose result is not a callable test: `@property` and its relatives.
@@ -707,6 +797,35 @@ _ABSTRACT = frozenset(
 #: Stdlib bases that bring an `__init__` or `__new__` of their own, which pytest will not collect.
 _ENUM_BASES = frozenset({"Enum", "IntEnum", "StrEnum", "Flag", "IntFlag", "ReprEnum"})
 _TYPING_CONSTRUCTING = frozenset({"NamedTuple", "TypedDict", "Protocol"})
+
+
+#: Standard-library modules that must not be imported to look at a class: they open a browser,
+#: print, start a GUI or run a demo as a side effect of being imported.
+_STDLIB_UNSAFE = frozenset(
+    {"antigravity", "this", "idlelib", "tkinter", "turtle", "turtledemo", "test", "lib2to3"}
+)
+_NO_TRAITS: dict[str, Any] = {}
+
+
+@functools.lru_cache(maxsize=None)
+def _stdlib_traits(module: str, name: str) -> dict[str, Any]:
+    """What a standard-library class means for a subclass, read from the interpreter: whether it
+    brings an `__init__` or `__new__`, is unhashable, or has abstract methods left to implement.
+    Nothing outside the standard library is imported; an empty answer means "not known"."""
+    top = module.split(".")[0]
+    if top not in sys.stdlib_module_names or top in _STDLIB_UNSAFE:
+        return _NO_TRAITS
+    try:
+        found = getattr(importlib.import_module(module), name)
+    except (Exception, SystemExit):
+        return _NO_TRAITS
+    if not isinstance(found, type):
+        return _NO_TRAITS
+    return {
+        "constructs": found.__init__ is not object.__init__ or found.__new__ is not object.__new__,
+        "unhashable": found.__hash__ is None,
+        "abstract": frozenset(getattr(found, "__abstractmethods__", ())),
+    }
 
 
 def _stdlib_base(module: str, name: str) -> str | None:
@@ -775,6 +894,12 @@ class _ClassInfo:
     constructor: str | None = None
     #: whether `abc.ABC` or `ABCMeta` is in play, so an unimplemented abstract method counts
     abc: bool = False
+    #: why instances cannot be hashed (pytest hashes the instance it collects from), if so
+    unhashable: str | None = None
+    #: the same, when it comes from a standard-library base
+    external_unhashable: str | None = None
+    #: abstract methods a standard-library base leaves to the subclass
+    external_abstract: frozenset[str] = frozenset()
 
 
 def _c3(sequences: list[list[Any]]) -> list[Any] | None:
@@ -1034,6 +1159,11 @@ class NodeResolver:
         def lookup(name: str) -> _Binding | None:
             return self._lookup_in(mod, seen.names, seen.stars, name)
 
+        if isinstance(expr, ast.Call) and _final_name(expr.func, lookup) in (
+            "namedtuple",
+            "NamedTuple",
+        ):  # a class made by namedtuple() has a __new__ of its own
+            return "constructs", text
         if isinstance(expr, ast.Name):
             binding = lookup(expr.id)
             if binding is None:
@@ -1052,6 +1182,11 @@ class NodeResolver:
                 std = _stdlib_base(target[0], target[2]) if target and not target[1] else None
                 if std is not None:
                     return self._stdlib_kind(std, target[2], text)  # type: ignore[index]
+                traits = (
+                    _stdlib_traits(target[0], target[2]) if target and not target[1] else _NO_TRAITS
+                )
+                if traits:
+                    return "external", (text, why, traits)
                 return "unresolved", f"{text} ({why})"
             if followed.kind == "class":
                 return "class", (followed.node, followed.mod)
@@ -1066,11 +1201,20 @@ class NodeResolver:
             root = lookup(node.id) if isinstance(node, ast.Name) else None
             if root is not None:
                 followed, _ = self._follow(root)
+                base_module = None
                 if followed.kind == "module" and followed.target is not None:
-                    dotted = ".".join([followed.target[0], *parts[:-1]]).strip(".")
+                    base_module = followed.target[0]
+                elif root.kind == "import" and root.target and not root.target[1]:
+                    # `from unittest import mock` then `mock.Mock`: the module is unittest.mock
+                    base_module = ".".join(p for p in (root.target[0], root.target[2]) if p)
+                if base_module is not None:
+                    dotted = ".".join([base_module, *parts[:-1]]).strip(".")
                     std = _stdlib_base(dotted, parts[-1])
                     if std is not None:
                         return self._stdlib_kind(std, parts[-1], text)
+                    traits = _stdlib_traits(dotted, parts[-1])
+                    if traits:
+                        return "external", (text, "outside the repository", traits)
                 found, why = self._resolve_attribute(root, parts, mod)
                 if found is not None:
                     inner, why = self._follow(found)
@@ -1123,7 +1267,21 @@ class NodeResolver:
             )
             for expr in node.bases:
                 kind, payload = self._base(expr, mod, seen)
-                if kind == "constructs":
+                if kind == "external":
+                    shown, why, traits = payload
+                    if traits["constructs"]:
+                        info.constructor = info.constructor or f"its base `{shown}`"
+                    if traits["unhashable"]:
+                        info.external_unhashable = info.external_unhashable or (
+                            f"its base `{shown}` is unhashable"
+                        )
+                    info.external_abstract |= traits["abstract"]
+                    self._opaque += 1
+                    placeholder = f"?{self._opaque}"
+                    sequences.append([placeholder])
+                    direct.append(placeholder)
+                    info.unresolved.append(f"{shown} ({why})")
+                elif kind == "constructs":
                     info.constructor = info.constructor or f"its base `{payload}`"
                 elif kind == "abc":
                     info.abc = True
@@ -1137,6 +1295,8 @@ class NodeResolver:
                     info.unresolved.extend(inner.unresolved)
                     info.unittest = info.unittest or inner.unittest
                     info.abc = info.abc or inner.abc
+                    info.external_abstract |= inner.external_abstract
+                    info.external_unhashable = info.external_unhashable or inner.external_unhashable
                     if inner.constructor and not info.constructor:
                         info.constructor = f"{inner.constructor} on its base `{ast.unparse(expr)}`"
                 elif kind == "unittest":
@@ -1170,6 +1330,7 @@ class NodeResolver:
                 owner = info.classes.get(member)
                 if owner is not None:
                     info.members.update(owner.own)
+            info.unhashable = self._hash_problem(info)
         finally:
             self._building.discard(key)
         self._classes[key] = info
@@ -1185,6 +1346,9 @@ class NodeResolver:
             outside = owner.mod.flags.get(id(owner.node), _ABSENT)
             if outside is not _ABSENT:
                 return outside
+            decorated = _decorator_flag(owner.node, owner.mod)
+            if decorated is not _ABSENT:
+                return decorated
             inside = owner.own.get("__test__")
             if inside is not None:
                 return inside.const if inside.kind == "other" else _UNKNOWN
@@ -1194,6 +1358,8 @@ class NodeResolver:
         self, name: str, node: ast.AST, mod: _Module, in_unittest: bool
     ) -> str | None:
         flag = mod.flags.get(id(node), _ABSENT)
+        if flag is _ABSENT:
+            flag = _decorator_flag(node, mod)
         if in_unittest:
             if not name.startswith("test"):
                 return f"`{name}` does not start with `test`, so unittest never runs it"
@@ -1223,9 +1389,29 @@ class NodeResolver:
             isinstance(n, ast.Name) and n.id in self._DYNAMIC for n in ast.walk(mod.tree)
         )
 
+    def _hash_problem(self, info: _ClassInfo) -> str | None:
+        """Python gives a class that defines `__eq__` but not `__hash__` a `__hash__` of None, and
+        pytest hashes the instance it collects from, so such a class (or a subclass that does not
+        redefine `__hash__`) is not collected. Walked in MRO order: the nearest class that says
+        anything about either decides."""
+        for key in info.lin:
+            owner = info.classes.get(key)
+            if owner is None:
+                continue
+            if "__hash__" in owner.own:
+                binding = owner.own["__hash__"]
+                if binding.kind == "other" and binding.const is None:
+                    return f"`{owner.node.name}` sets __hash__ = None"
+                return None
+            if "__eq__" in owner.own:
+                return f"`{owner.node.name}` defines __eq__ without __hash__"
+        return info.external_unhashable
+
     def _is_abstract(self, info: _ClassInfo) -> bool:
         """`inspect.isabstract`: the class is built on `abc.ABC` or `ABCMeta` and the nearest
         definition of some method in its MRO is still marked abstract."""
+        if any(method not in info.members for method in info.external_abstract):
+            return True  # a standard-library base left a method nothing here implements
         if not info.abc:
             return False
         for binding in info.members.values():
@@ -1251,6 +1437,11 @@ class NodeResolver:
                 return (
                     f"class `{name}` gets __init__ or __new__ from {info.constructor}, "
                     "so pytest never collects it"
+                )
+            if info.unhashable:
+                return (
+                    f"class `{name}` is unhashable ({info.unhashable}), which pytest cannot "
+                    "collect an instance of, so it never collects it"
                 )
             if "__init__" in info.members or "__new__" in info.members:
                 return f"class `{name}` defines __init__ or __new__, so pytest never collects it"
