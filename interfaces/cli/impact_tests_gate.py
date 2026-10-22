@@ -93,6 +93,79 @@ def sweep_tests(repo_root: Path | str = REPO_ROOT) -> list[str]:
     return found
 
 
+#: What decides which tests a directory run of pytest collects: the config files pytest reads.
+#: A conftest.py is matched by name wherever it sits.
+PYTEST_CONFIG_FILES = frozenset(
+    {
+        "pytest.toml",
+        ".pytest.toml",
+        "pytest.ini",
+        ".pytest.ini",
+        "pyproject.toml",
+        "tox.ini",
+        "setup.cfg",
+    }
+)
+
+#: The comparison of the rule-enforcement gate's resolver with pytest's own collection. Its
+#: subject is the register and pytest's configuration, which it names by no path, so the
+#: impact set reaches it only when the resolver itself changes. Two files, paid once however
+#: many register entries a diff touches.
+RULE_ENFORCEMENT_TESTS = (
+    "tests/unit/test_rule_enforcement_bare_run.py",
+    "tests/unit/test_rule_enforcement_gate.py",
+)
+
+REGISTER = "canonical/rules.yml"
+
+
+#: What `_register_test_files` returns when the register cannot be read: a signal the caller
+#: acts on (it selects the tests), not an empty answer that reads as "no test is named".
+_REGISTER_UNREADABLE: frozenset[str] = frozenset({"<canonical/rules.yml cannot be read>"})
+
+
+def _register_test_files(root: Path) -> frozenset[str] | set[str]:
+    """The test files `canonical/rules.yml` names as enforcers, or `_REGISTER_UNREADABLE`."""
+    import yaml
+
+    try:
+        data = yaml.safe_load((root / REGISTER).read_text(encoding="utf-8"))
+        rules = data["rules"] if isinstance(data, dict) else data
+        named: set[str] = set()
+        for rule in rules:
+            for ref in rule.get("enforced_by") or []:
+                file_part = str(ref).split("::", 1)[0].strip()
+                if file_part.endswith(".py") and file_part.startswith("tests/"):
+                    named.add(file_part)
+        return named
+    except (OSError, UnicodeDecodeError, yaml.YAMLError, KeyError, TypeError, AttributeError):
+        return _REGISTER_UNREADABLE
+
+
+def rule_enforcement_tests(
+    changed_files: list[str], repo_root: Path | str = REPO_ROOT
+) -> list[str]:
+    """The rule-enforcement tests, when a change can alter what the register's enforcers resolve
+    to: the register, any pytest config file, any conftest.py, or a test file the register names.
+
+    A register that cannot be read selects them: not knowing which files it names is not
+    evidence that none are affected."""
+    root = Path(repo_root)
+    if not changed_files:
+        return []
+    names = {p.replace("\\", "/") for p in changed_files}
+    if (
+        REGISTER in names
+        or any(n.rsplit("/", 1)[-1] in PYTEST_CONFIG_FILES for n in names)
+        or any(n.rsplit("/", 1)[-1] == "conftest.py" for n in names)
+    ):
+        return list(RULE_ENFORCEMENT_TESTS)
+    named = _register_test_files(root)
+    if named is _REGISTER_UNREADABLE or names & named:
+        return list(RULE_ENFORCEMENT_TESTS)
+    return []
+
+
 def select_tests(changed_files: list[str], repo_root: Path | str = REPO_ROOT) -> dict[str, Any]:
     """The impact set unioned with the sweep tests, with provenance for the log."""
     from core.gates.blast_radius import compute_impact_set
@@ -102,12 +175,14 @@ def select_tests(changed_files: list[str], repo_root: Path | str = REPO_ROOT) ->
     dependent = [t for t in impact["dependent_tests"] if (root / t).is_file()]
     sweep = sweep_tests(root)
     always = [p for p in ALWAYS_RUN if (root / p).is_file()]
-    union = sorted(set(dependent) | set(sweep) | set(always))
+    rule = [p for p in rule_enforcement_tests(changed_files, root) if (root / p).is_file()]
+    union = sorted(set(dependent) | set(sweep) | set(always) | set(rule))
     return {
         "changed_files": impact["changed_files"],
         "dependent_tests": dependent,
         "sweep_tests": sweep,
         "always_run": always,
+        "rule_enforcement_tests": rule,
         "tests": union,
         # Real import-graph ancestors past IMPORT_GRAPH_MAX_DEPTH -- see that
         # constant's docstring in core/gates/blast_radius.py. Propagated (not
@@ -137,8 +212,9 @@ def main() -> int:
     print(
         f"[impact-tests] {len(selection['changed_files'])} changed file(s) -> "
         f"{len(selection['dependent_tests'])} dependent test file(s) + "
-        f"{len(selection['sweep_tests'])} sweep + {len(selection['always_run'])} always"
-        f" = {len(selection['tests'])} to run"
+        f"{len(selection['sweep_tests'])} sweep + {len(selection['always_run'])} always + "
+        f"{len(selection['rule_enforcement_tests'])} rule-enforcement"
+        f" = {len(selection['tests'])} to run (overlaps counted once)"
     )
     for path in selection["tests"]:
         why = "+".join(
@@ -147,6 +223,7 @@ def main() -> int:
                 ("impact", selection["dependent_tests"]),
                 ("sweep", selection["sweep_tests"]),
                 ("always", selection["always_run"]),
+                ("rule-enforcement", selection["rule_enforcement_tests"]),
             )
             if path in v
         )

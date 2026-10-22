@@ -150,6 +150,20 @@ gates:
       Also carries the pack self-containment guard (tests/unit/test_pack_self_contained.py):
       it was in no workflow, so an enrolled pack could regress and nothing ran it until
       the full suite did.
+      Also carries the rule-enforcement gate's own tests and the agreement tests that hold its
+      resolver beside pytest's `--collect-only` (test_pytest_node_resolver.py,
+      test_pytest_collection_rules.py, test_pytest_collection_agreement.py,
+      test_rule_enforcement_gate.py). They were in no workflow, so only the gate itself
+      (0.3 s) ran on a push and the resolver could drift from pytest with nothing on a push
+      noticing. Measured when they were added:
+      about 17 s for the three unit files (11 s of it the real register against a directory
+      run of tests/unit) and 7 s for the agreement file, 24 s together on a quiet machine and
+      up to about 38 s on a loaded one. The bare run from
+      `testpaths` as a whole (tests/unit/test_rule_enforcement_bare_run.py, about 45 s) is
+      deliberately NOT here. GitHub CI never runs the pre-push gates: the bare run is selected
+      into the pr-smoke job by interfaces/cli/impact_tests_gate.py whenever a change touches
+      canonical/rules.yml, a pytest config file, a conftest.py, a test file the register
+      names, or the resolver and its helpers, and Full CI runs it after every merge.
     command: [py, -m, pytest,
       tests/unit/test_duckdb_business_schema.py,
       tests/unit/test_packs_yaml_integrity.py,
@@ -183,6 +197,10 @@ gates:
       tests/unit/test_gate_manifests_name_real_files.py,
       tests/unit/test_generated_artifacts_gate.py,
       tests/unit/test_pack_self_contained.py,
+      tests/unit/test_pytest_node_resolver.py,
+      tests/unit/test_pytest_collection_rules.py,
+      tests/unit/test_pytest_collection_agreement.py,
+      tests/unit/test_rule_enforcement_gate.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME
@@ -198,9 +216,19 @@ gates:
     description: |
       Every enforced_by reference in canonical/rules.yml must resolve, or the rule must
       declare itself unenforced with a reason. A pytest node (file::Class::test) must
-      resolve to a test pytest would collect, found by reading the file's source
-      (core/gates/pytest_node_resolver.py; nothing is imported), not only to the file:
-      a renamed test, a helper, a fixture or a class pytest skips does not count. An
+      resolve to a test a DIRECTORY run of pytest would collect, found by reading the file's
+      source (core/gates/pytest_node_resolver.py and core/gates/pytest_collection_rules.py;
+      nothing is imported), not only to the file: a renamed test, a helper, a fixture, a class
+      with no tests, a class pytest skips, or a file the run leaves out (--ignore,
+      --ignore-glob or --deselect in addopts, norecursedirs, testpaths, collect_ignore in the
+      nearest conftest) does not count. What the resolver cannot evaluate fails and says why:
+      a collect_ignore that is not a literal list, a conftest hook that changes collection,
+      an addopts option such as -m or -k. A skipped test still resolves (skipping is a run-time
+      outcome); a module that skips itself at import does not. A file that provably raises
+      when imported (a top-level raise, a missing repository module or name, an undefined
+      base) is refused whole. What the resolver still gets wrong, in either direction, is
+      listed in its module docstring and pinned against pytest by
+      tests/unit/test_pytest_collection_agreement.py. An
       empty or unreadable register fails. The register exists to separate the
       statements something enforces from the ones nothing does; its previous checker
       (core/gates/rule_registry.py) was culled in the same sweep that removed several of
