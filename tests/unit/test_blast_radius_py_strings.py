@@ -373,7 +373,13 @@ SHAPE = re.compile(r"\bdef\s+[A-Za-z_]\w*\s*\(")
 
 def _tracked_python_files() -> list[Path]:
     out = subprocess.run(
-        ["git", "ls-files", "*.py"], cwd=REPO_ROOT, capture_output=True, text=True, check=False
+        ["git", "ls-files", "*.py"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
     )
     if out.returncode != 0 or not out.stdout.strip():
         pytest.skip("not a git checkout")
