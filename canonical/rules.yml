@@ -1,5 +1,9 @@
 # Dream Studio rule registry.
 #
+# HAND-MAINTAINED. No generator writes this file (CLAUDE.md used to say it did): edit it
+# directly, and `core.gates.rule_enforcement` checks that every `enforced_by` node it names
+# resolves to a real test.
+#
 # WHY THIS FILE EXISTS. Operator, on the substrate: it is "a lot of prose laid on top of
 # each other as suggestions with no rules, evals, or really any real test that doing
 # anything they are supposed to". Nothing distinguished the statements something enforces
@@ -197,6 +201,10 @@ rules:
       - tests/unit/test_work_order_type_names_core_writes.py::test_every_type_name_core_writes_is_built_in_or_reserved
       - tests/unit/test_broken_manifest_does_not_break_ds.py::test_doctor_reports_the_broken_manifest_as_a_finding_not_a_crash
       - tests/unit/test_broken_manifest_does_not_break_ds.py::test_a_command_that_reads_a_type_fails_in_one_line_naming_the_manifest
+      - tests/unit/test_pack_trust_follows_home.py::test_ds_home_decides_whose_trust_file_counts_not_the_ambient_home
+      - tests/unit/test_pack_trust_follows_home.py::test_mcp_serve_home_decides_whose_trust_file_counts
+      - tests/unit/test_work_order_type_manifest.py::test_a_pack_key_is_refused_when_too_long_never_truncated_into_a_trusted_one
+      - tests/unit/integrations/test_mcp_broken_manifest.py::test_tools_list_over_http_is_a_200_with_every_tool_when_the_manifest_is_broken
     note: >
       A manifest is the pack's statement about itself, so it is an attestation, not
       evidence. Verified attacks: exempt_from_verification on a code-class type closes code

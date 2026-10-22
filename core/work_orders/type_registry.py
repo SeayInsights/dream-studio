@@ -53,6 +53,7 @@ start refuses them with a message that says why.
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 from collections.abc import Iterator
@@ -76,6 +77,10 @@ MAX_NAME_LENGTH = 64
 
 #: A description is one row of a markdown table in the generated AGENTS.md.
 MAX_DESCRIPTION_LENGTH = 200
+
+#: Characters that would break or inject into that table cell. Control characters, line and
+#: paragraph separators (U+2028, U+0085) and the like are refused by ``str.isprintable``.
+_TABLE_CELL_UNSAFE = ("|", "`", "<", ">")
 
 #: Names core itself writes into ``business_work_orders.work_order_type`` without going through
 #: the declared set, or has written, and so cannot be declared by anything else. A name here is
@@ -222,13 +227,14 @@ def _build(
         )
     if (
         len(description) > MAX_DESCRIPTION_LENGTH
-        or "\n" in description
-        or "\r" in description
-        or "|" in description
+        or not description.isprintable()
+        or any(ch in description for ch in _TABLE_CELL_UNSAFE)
     ):
         raise ValueError(
-            f"work-order type {name!r}: description must be one line of at most"
-            f" {MAX_DESCRIPTION_LENGTH} characters with no '|' (it is a table row)"
+            f"work-order type {name!r}: description must be one printable line of at most"
+            f" {MAX_DESCRIPTION_LENGTH} characters with none of {' '.join(_TABLE_CELL_UNSAFE)}"
+            " (it is a table row in a generated markdown file: control and line-separator"
+            " characters, a pipe, a backtick or an angle bracket would break or inject into it)"
         )
     if order is not None and (type(order) is not int or order < 0):
         raise ValueError(
@@ -305,26 +311,59 @@ def register_work_order_type(
         )
 
 
+def _trust_home() -> str | None:
+    """The one input to the operator's trust file that can change inside a process: the home
+    variable (`ds --home` sets it for the length of a command). The installed-app marker it
+    also falls back to is fixed for a process."""
+    return os.environ.get("DREAM_STUDIO_HOME")
+
+
+def _home_changed_under_trust() -> bool:
+    """True when the loaded manifest was accepted on the strength of one home's trust file and
+    the home has since changed. A manifest that asked for no exemption does not depend on the
+    trust file, so it is never reloaded for a home change; a scope pins its own trust."""
+    return (
+        bool(_STATE.get("trust_used"))
+        and not _STATE.get("pinned")
+        and _STATE.get("home_key") != _trust_home()
+    )
+
+
 def ensure_loaded() -> None:
     """Apply the running checkout's (or installed app's) ``packs.yaml`` to the registry, once.
 
     Called by every accessor below and by ``register_work_order_type``; nothing else needs to
     remember to. Idempotent and thread-safe. Raises ``PackManifestError`` if the manifest is
     unreadable or invalid, on every call until it is fixed, and leaves the registry as it was.
+
+    HOME MEANS HOME. A manifest that declared an exemption was accepted because the operator's
+    trust file, in the home that was current at load, allowed it. If the home changes
+    afterwards (``ds --home H0`` run under an ambient ``DREAM_STUDIO_HOME=H1``, which the
+    argument parser reads before ``--home`` takes effect), the load is not trusted for the new
+    home: the manifest's types are dropped and it is validated again against that home's trust
+    file, which raises if the allowance is not there.
     """
-    if _STATE["loaded"]:
+    if _STATE["loaded"] and not _home_changed_under_trust():
         return
     with _LOCK:
-        if _STATE["loaded"] or _STATE["loading"]:
+        if _STATE["loading"]:
             return
+        if _STATE["loaded"] and not _home_changed_under_trust():
+            return
+        if _STATE["loaded"]:
+            for name in [n for n, t in _REGISTRY.items() if t.declared_by is not None]:
+                del _REGISTRY[name]
+            _STATE["loaded"] = False
         from .type_manifest import fingerprint, load_pack_work_order_types
 
         # The fingerprint is taken BEFORE the read, so an edit that lands during the load is
         # reported as a change rather than recorded as already seen.
         seen = fingerprint()
-        load_pack_work_order_types()
+        registered = load_pack_work_order_types()
         _STATE["loaded"] = True
         _STATE["fingerprint"] = seen
+        _STATE["trust_used"] = any(t.exempt_from_verification for t in registered)
+        _STATE["home_key"] = _trust_home()
 
 
 def manifest_changed_since_load() -> str | None:
@@ -332,18 +371,22 @@ def manifest_changed_since_load() -> str | None:
 
     The manifest is read once per process, so a long-lived one (``ds mcp serve``) keeps serving
     the types it loaded until it is restarted. This compares the file's size and mtime with
-    what was seen at load (no read), so it is cheap enough to call on every request.
+    what was seen at load (no read), so it is cheap enough to call on every request. The
+    message carries the file's current size and mtime, so each distinct edit is a distinct
+    message and is reported once, not just the first one a process sees.
     """
     recorded = _STATE.get("fingerprint")
     if not recorded:
         return None
     from .type_manifest import fingerprint
 
-    if fingerprint(Path(recorded[0])) == recorded:
+    now = fingerprint(Path(recorded[0]))
+    if now == recorded:
         return None
     return (
-        f"the pack manifest {recorded[0]} changed on disk after this process loaded its"
-        " work-order types; restart the process to pick up the edit"
+        f"the pack manifest {recorded[0]} changed on disk (now {now[1]} bytes, mtime_ns"
+        f" {now[2]}) after this process loaded its work-order types; restart the process to"
+        " pick up the edit"
     )
 
 
@@ -446,6 +489,9 @@ def scoped_pack_manifest(
                 for name in [n for n in _REGISTRY if n not in _BUILTIN_NAMES]:
                     del _REGISTRY[name]
                 _STATE["loaded"] = True
+                # An explicit manifest and allowance: a change of home inside the block must
+                # not send the registry back to the real manifest.
+                _STATE["pinned"] = True
             load_pack_work_order_types(packs_yaml_path=packs_yaml_path, trusted=trusted)
             yield
         finally:

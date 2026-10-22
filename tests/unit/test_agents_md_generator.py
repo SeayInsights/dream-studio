@@ -209,3 +209,29 @@ def test_a_pack_declared_type_reaches_the_operator_projection_and_only_there(tmp
     assert work_order_type_names() == before
     # The contributor file at the repo root carries no table, so no manifest can change it.
     assert check_agents_md_fresh(REPO_ROOT / "AGENTS.md")["ok"] is True
+
+
+def test_types_from_an_alternate_manifest_keep_the_manifests_order_after_the_built_ins(tmp_path):
+    """Their order is the manifest's, not alphabetical and not all equal: a zeta type declared
+    before an alpha one is listed first, and both follow the ten built-ins."""
+    from integrations.compiler.agents_md import _declared_types
+
+    packs = tmp_path / "packs.yaml"
+    packs.write_text(
+        "schema_version: 2\n"
+        "packs:\n"
+        "  legal:\n"
+        "    contributes:\n"
+        "      work_order_types:\n"
+        "        - {name: zeta_review, artifact_class: document, description: Zeta first,"
+        " ui_bearing: false, exempt_from_verification: false}\n"
+        "        - {name: alpha_review, artifact_class: document, description: Alpha second,"
+        " ui_bearing: false, exempt_from_verification: false}\n",
+        encoding="utf-8",
+    )
+    declared = _declared_types(packs)
+    names = [t.name for t in declared]
+    assert names[-2:] == ["zeta_review", "alpha_review"], names
+    orders = [t.order for t in declared]
+    assert orders == sorted(orders) and len(set(orders)) == len(orders), orders
+    assert max(t.order for t in declared[:-2]) < declared[-2].order

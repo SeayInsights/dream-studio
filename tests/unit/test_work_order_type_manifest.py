@@ -198,7 +198,7 @@ _OK_ENTRY = (
         ),
         pytest.param(
             _bad(_OK_ENTRY.replace("A real sentence", "has | a pipe")),
-            "no '|'",
+            "printable line",
             id="pipe-in-description",
         ),
         pytest.param(
@@ -975,3 +975,204 @@ def test_a_scope_inside_a_scope_on_one_thread_is_fine():
             register_work_order_type("inner_type", artifact_class=CODE)
         assert get_work_order_type("outer_type") and get_work_order_type("inner_type") is None
     assert work_order_type_names() == before
+
+
+# ── review round: home, pack keys, descriptions, pinned limits ────────────────
+
+
+def _home_with_trust(tmp_path: Path, name: str, *, trusts: str | None) -> Path:
+    home = tmp_path / name
+    home.mkdir()
+    if trusts is not None:
+        (home / "pack-trust.yaml").write_text(
+            f"exempt_from_verification: [{trusts}]\n", encoding="utf-8"
+        )
+    return home
+
+
+@pytest.fixture
+def unloaded_process(monkeypatch):
+    """A fresh process state that resolves the trust file from the real home lookup."""
+    builtins = {
+        n: t for n, t in type_registry._REGISTRY.items() if n in builtin_work_order_type_names()
+    }
+    monkeypatch.setattr(type_registry, "_REGISTRY", builtins)
+    monkeypatch.setattr(type_registry, "_STATE", {"loaded": False, "loading": False})
+
+
+def test_a_manifest_accepted_under_one_home_is_not_trusted_under_another(
+    unloaded_process, tmp_path, monkeypatch
+):
+    """HOME MEANS HOME. The argument parser reads the registry before `--home` is applied, so a
+    load made under an ambient home H1 that trusts the legal pack was reused under `--home H0`,
+    where nothing allows it. A load that leaned on the trust file is validated again when the
+    home changes."""
+    trusted = _home_with_trust(tmp_path, "h1", trusts="legal")
+    untrusted = _home_with_trust(tmp_path, "h0", trusts=None)
+    monkeypatch.setattr(type_manifest, "default_manifest_path", lambda: _manifest(tmp_path, GOOD))
+
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(trusted))
+    assert "contract_review" in work_order_type_names()
+
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(untrusted))
+    with pytest.raises(PackManifestError, match="exempt_from_verification: true"):
+        work_order_type_names()
+    assert "contract_review" not in type_registry._REGISTRY, "dropped, not left readable"
+    assert tuple(type_registry._REGISTRY) == builtin_work_order_type_names()
+
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(trusted))
+    assert "contract_review" in work_order_type_names(), "and accepted again where allowed"
+
+
+def test_a_manifest_that_asked_for_no_exemption_is_not_reloaded_when_the_home_changes(
+    unloaded_process, tmp_path, monkeypatch
+):
+    """The trust file is irrelevant to it, so a home change costs nothing."""
+    plain = _bad(_OK_ENTRY)
+    monkeypatch.setattr(type_manifest, "default_manifest_path", lambda: _manifest(tmp_path, plain))
+    loads: list[int] = []
+    real = type_manifest.load_pack_work_order_types
+
+    def counting(*args, **kwargs):
+        loads.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(type_manifest, "load_pack_work_order_types", counting)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "a"))
+    work_order_type_names()
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "b"))
+    work_order_type_names()
+    assert len(loads) == 1
+
+
+def test_a_scope_is_not_sent_back_to_the_real_manifest_by_a_home_change(tmp_path, monkeypatch):
+    path = _manifest(tmp_path, GOOD)
+    with scoped_pack_manifest(path, trusted=TRUST):
+        monkeypatch.setenv("DREAM_STUDIO_HOME", str(tmp_path / "elsewhere"))
+        assert "contract_review" in work_order_type_names()
+
+
+def test_a_pack_key_is_refused_when_too_long_never_truncated_into_a_trusted_one(tmp_path):
+    """Keys were cut to 64 characters before the trust lookup, so a pack whose key merely began
+    with a trusted 64-character key inherited its allowance."""
+    trusted_key = "p" * 64
+    attacker = trusted_key + "evil"
+    text = _bad(
+        _OK_ENTRY.replace("exempt_from_verification: false", "exempt_from_verification: true"),
+        pack=attacker,
+    )
+    with scoped_registration():
+        with pytest.raises(PackManifestError) as exc:
+            load_pack_work_order_types(
+                packs_yaml_path=_manifest(tmp_path, text), trusted=frozenset({trusted_key})
+            )
+    assert "pack key is 68 characters" in str(exc.value) and "at most 64" in str(exc.value)
+
+
+def test_a_pack_key_of_exactly_the_limit_is_accepted(tmp_path):
+    key = "k" * 64
+    text = _bad(_OK_ENTRY, pack=key)
+    with scoped_registration():
+        (declared,) = _load(_manifest(tmp_path, text))
+    assert declared.declared_by == key
+
+
+#: Built with chr(): a literal control or invisible character in this file would be a defect in
+#: the file itself. (code point, label)
+_HOSTILE_CHARS = [
+    (0x00, "nul"),
+    (0x0B, "vertical-tab"),
+    (0x2028, "line-separator"),
+    (0x2029, "paragraph-separator"),
+    (0x85, "next-line"),
+    (0x1B, "escape"),
+    (0x09, "tab"),
+    (0x200B, "zero-width-space"),
+    (0x60, "backtick"),
+    (0x3C, "angle-bracket"),
+    (0x7C, "pipe"),
+]
+
+
+@pytest.mark.parametrize(
+    "code", [c for c, _ in _HOSTILE_CHARS], ids=[label for _, label in _HOSTILE_CHARS]
+)
+def test_a_description_with_a_control_or_markup_character_is_refused(code):
+    """The text lands in a row of the generated operator AGENTS.md."""
+    bad = "before " + chr(code) + " after"
+    with scoped_registration():
+        with pytest.raises(ValueError, match="printable line"):
+            register_work_order_type("poster", artifact_class=CODE, description=bad)
+        assert get_work_order_type("poster") is None
+
+
+def test_a_hostile_description_in_a_manifest_is_refused_naming_the_file(tmp_path):
+    text = _bad(_OK_ENTRY.replace("A real sentence", '"ok \\u2028 injected"'))
+    path = _manifest(tmp_path, text)
+    with scoped_registration():
+        with pytest.raises(PackManifestError, match="printable line") as exc:
+            _load(path)
+    assert str(path) in str(exc.value)
+
+
+def test_ordinary_punctuation_and_non_ascii_letters_are_still_a_description():
+    with scoped_registration():
+        register_work_order_type(
+            "poster",
+            artifact_class=CODE,
+            description="Revue d'un contrat (clause 3), v2.1 - e.g. "
+            + chr(0xE9)
+            + "t"
+            + chr(0xE9)
+            + ": r"
+            + chr(0xE9)
+            + "sum"
+            + chr(0xE9)
+            + "!",
+        )
+
+
+def test_the_four_reserved_names_are_pinned_by_literal():
+    """Not derived from the registry: a name quietly dropped from the set would reopen the hole
+    for that name, and only a spelled-out expectation notices."""
+    assert set(RESERVED_WORK_ORDER_TYPES) == {"cleanup", "migration", "chore", "investigation"}
+
+
+def _nested(depth: int) -> str:
+    """A manifest whose deepest value sits `depth` levels down (the root mapping is level 1)."""
+    return "schema_version: 2\nx: " + "[" * (depth - 1) + "]" * (depth - 1) + "\npacks: {}\n"
+
+
+def test_the_nesting_bound_is_exactly_twelve_levels(tmp_path):
+    assert type_manifest.MAX_NESTING == 12
+    with scoped_registration():
+        assert _load(_manifest(tmp_path, _nested(12), name="at-limit.yaml")) == ()
+        with pytest.raises(PackManifestError, match="nests deeper than 12"):
+            _load(_manifest(tmp_path, _nested(13), name="over.yaml"))
+
+
+def test_the_trust_file_is_bounded_at_64_kib(tmp_path):
+    """A trust file is a short list of pack keys; one larger than 64 KiB is not read."""
+    assert type_manifest.MAX_TRUST_BYTES == 65536
+    comment = "# " + "x" * (65536 - 3) + "\n"
+    assert len(comment.encode()) == 65536
+    at_limit = _manifest(tmp_path, comment.encode(), name="at-limit.yaml")
+    assert read_pack_trust(at_limit) == frozenset()
+    over = _manifest(tmp_path, (comment + "#").encode(), name="over.yaml")
+    assert over.stat().st_size == 65537
+    with pytest.raises(PackManifestError, match="limit is 65536") as exc:
+        read_pack_trust(over)
+    assert str(over) in str(exc.value)
+
+
+def test_a_scope_removes_the_running_manifests_types_and_gives_them_back(
+    new_process, tmp_path, monkeypatch
+):
+    """Inside `scoped_pack_manifest` the registry is the built-ins plus THAT manifest, not the
+    running one's types as well; afterwards the running manifest's types are back."""
+    _running_manifest(monkeypatch, _manifest(tmp_path, GOOD))
+    assert "contract_review" in work_order_type_names()
+    other = _manifest(tmp_path, _bad(_OK_ENTRY.replace("contract_review", "other_type")), "o.yaml")
+    with scoped_pack_manifest(other, trusted=TRUST):
+        assert work_order_type_names() == builtin_work_order_type_names() + ("other_type",)
+    assert work_order_type_names()[-3:] == ("contract_review", "poster", "month_end_close")

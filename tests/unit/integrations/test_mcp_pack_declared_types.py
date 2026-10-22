@@ -179,3 +179,46 @@ def test_the_server_logs_nothing_when_the_manifest_has_not_changed(monkeypatch, 
     with caplog.at_level(logging.WARNING, logger="dream_studio.mcp.server"):
         handle_message({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     assert not [r for r in caplog.records if "changed on disk" in r.getMessage()]
+
+
+def test_each_distinct_edit_is_reported_once_not_only_the_first_one_a_process_sees(
+    monkeypatch, caplog, tmp_path
+):
+    """The dedupe keyed on the message, and the message named only the file, so the second edit
+    of a long-lived server was swallowed as the same warning. The message now carries the file's
+    current size and mtime: a new edit is a new message; the same state is not repeated."""
+    import logging
+    import os
+    import time
+
+    from core.work_orders import type_manifest, type_registry
+
+    path = tmp_path / "packs.yaml"
+    path.write_text(MANIFEST, encoding="utf-8")
+    builtins = {
+        n: t
+        for n, t in type_registry._REGISTRY.items()
+        if n in type_registry.builtin_work_order_type_names()
+    }
+    monkeypatch.setattr(type_registry, "_REGISTRY", builtins)
+    monkeypatch.setattr(type_registry, "_STATE", {"loaded": False, "loading": False})
+    monkeypatch.setattr(type_manifest, "default_manifest_path", lambda: path)
+    monkeypatch.setattr(server, "_WARNED_MANIFEST_CHANGES", set())
+    work_order_type_names()  # the process loads its manifest
+
+    def tick(extra: str, offset: int) -> None:
+        path.write_text(MANIFEST + extra, encoding="utf-8")
+        stamp = time.time() + offset
+        os.utime(path, (stamp, stamp))
+
+    with caplog.at_level(logging.WARNING, logger="dream_studio.mcp.server"):
+        handle_message({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        assert not [r for r in caplog.records if "changed on disk" in r.getMessage()]
+        tick("# first edit\n", 60)
+        handle_message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        handle_message({"jsonrpc": "2.0", "id": 3, "method": "tools/list"})
+        tick("# second edit, longer\n", 120)
+        handle_message({"jsonrpc": "2.0", "id": 4, "method": "tools/list"})
+        handle_message({"jsonrpc": "2.0", "id": 5, "method": "tools/list"})
+    warnings = [r.getMessage() for r in caplog.records if "changed on disk" in r.getMessage()]
+    assert len(warnings) == 2 and warnings[0] != warnings[1], warnings

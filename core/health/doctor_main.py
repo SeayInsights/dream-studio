@@ -68,6 +68,28 @@ def _ds_command(home: Path, *args: str) -> list[str]:
     ]
 
 
+def _overall_status(
+    *,
+    critical_fail: bool,
+    authority_attention: bool,
+    pack_types_ok: bool,
+    core_pass: bool,
+    has_warnings: bool,
+) -> str:
+    """The doctor's one-word verdict from its checks, strictest first.
+
+    A pack manifest that does not load is attention_required on its own: it breaks every
+    command that reads a work-order type, so it is never a pass or a warning.
+    """
+    if critical_fail:
+        return "fail"
+    if authority_attention or not pack_types_ok or not core_pass:
+        return "attention_required"
+    if has_warnings:
+        return "warn"
+    return "pass"
+
+
 def run_doctor_checks(
     *,
     source_root: Path,
@@ -198,19 +220,13 @@ def run_doctor_checks(
         or installed_app_info["warnings"]
         or authority_data_info.get("record_refused")
     )
-    if critical_fail:
-        overall = "fail"
-    elif authority_attention:
-        overall = "attention_required"
-    elif not pack_types_info["ok"]:
-        # A manifest that does not load breaks every command that reads a work-order type.
-        overall = "attention_required"
-    elif not core_pass:
-        overall = "attention_required"
-    elif has_warnings:
-        overall = "warn"
-    else:
-        overall = "pass"
+    overall = _overall_status(
+        critical_fail=critical_fail,
+        authority_attention=authority_attention,
+        pack_types_ok=pack_types_info["ok"],
+        core_pass=core_pass,
+        has_warnings=has_warnings,
+    )
 
     fix_actions: list[str] = []
     if fix:

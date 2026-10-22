@@ -155,3 +155,31 @@ def test_the_help_still_lists_the_declared_types_when_the_manifest_is_fine():
     wo_sub = next(a for a in wo._actions if getattr(a, "choices", None) and "create" in a.choices)
     type_action = next(a for a in wo_sub.choices["create"]._actions if a.dest == "work_order_type")
     assert type_action.choices is not None and "documentation" in type_action.choices
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected"),
+    [
+        (dict(), "pass"),
+        (dict(has_warnings=True), "warn"),
+        (dict(pack_types_ok=False), "attention_required"),
+        (dict(core_pass=False), "attention_required"),
+        (dict(authority_attention=True), "attention_required"),
+        (dict(critical_fail=True), "fail"),
+        (dict(critical_fail=True, pack_types_ok=False), "fail"),
+        (dict(pack_types_ok=False, has_warnings=True), "attention_required"),
+    ],
+)
+def test_a_manifest_that_does_not_load_is_attention_required_on_its_own(kwargs, expected):
+    """Everything else clean, the manifest alone moves the verdict off pass: the other checks in an
+    empty test home are never all clean, so the end-to-end doctor test cannot show this."""
+    from core.health.doctor_main import _overall_status
+
+    clean = dict(
+        critical_fail=False,
+        authority_attention=False,
+        pack_types_ok=True,
+        core_pass=True,
+        has_warnings=False,
+    )
+    assert _overall_status(**{**clean, **kwargs}) == expected

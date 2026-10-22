@@ -73,6 +73,8 @@ MAX_TRUST_BYTES = 64 * 1024
 MAX_NESTING = 12
 #: Across all packs. Ten built-ins; a pack declares a handful.
 MAX_TYPES = 200
+#: A pack key, the name the operator's trust file allows a pack by.
+MAX_PACK_KEY_LENGTH = 64
 #: How many key names one message lists.
 _MAX_KEYS_SHOWN = 8
 
@@ -221,6 +223,13 @@ def _declarations(path: Path, data: dict[str, Any]) -> list[tuple[str, int, dict
         if not isinstance(entry, dict) or "contributes" not in entry:
             continue
         where = f"{path}: pack {quote(pack)}"
+        if len(str(pack)) > MAX_PACK_KEY_LENGTH:
+            # Refused, never truncated: the operator's trust file names a pack by its full key,
+            # and two packs sharing a prefix must not share an allowance.
+            raise PackManifestError(
+                f"{where}: the pack key is {len(str(pack))} characters; it must be at most"
+                f" {MAX_PACK_KEY_LENGTH}"
+            )
         schema = data.get("schema_version")
         if type(schema) is not int or schema < _MIN_SCHEMA_VERSION:
             raise PackManifestError(
@@ -247,7 +256,7 @@ def _declarations(path: Path, data: dict[str, Any]) -> list[tuple[str, int, dict
                 raise PackManifestError(
                     f"{where}: work_order_types[{index}] must be a mapping, got {quote(item)}"
                 )
-            found.append((str(pack)[:64], index, item))
+            found.append((str(pack), index, item))
             if len(found) > MAX_TYPES:
                 raise PackManifestError(
                     f"{path}: more than {MAX_TYPES} work-order types declared across all packs"

@@ -150,8 +150,8 @@ def test_an_explicit_order_places_a_type_among_the_built_ins(clean_registry):
     ("kwargs", "match"),
     [
         ({"description": 5}, "description must be a string"),
-        ({"description": "two\nlines"}, "one line"),
-        ({"description": "has | pipe"}, "no '|'"),
+        ({"description": "two\nlines"}, "printable line"),
+        ({"description": "has | pipe"}, "printable line"),
         ({"description": "x" * 201}, "at most 200"),
         ({"order": -1}, "non-negative integer"),
         ({"order": True}, "non-negative integer"),
