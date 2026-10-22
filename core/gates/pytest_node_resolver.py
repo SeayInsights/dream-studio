@@ -129,7 +129,8 @@ THE KNOWN FALSE REFUSALS: pytest collects it and the resolver says no.
   * a star import that overrides a base class defined above it, a base class defined in each arm
     of an `if` only the run can decide (the resolver takes the last), a star import whose
     `__all__` is computed, a test made by writing into `globals()`, a class made by `type()`, a
-    tuple of tests made by a comprehension, and the doctest items `--doctest-modules` adds.
+    tuple of tests made by a comprehension, a name another file imports that a module makes through
+    `global` or a match capture, and the doctest items `--doctest-modules` adds.
 
 REFUSED CONFIGURATION. `-k`, `-m`, `--noconftest`, `--confcutdir`, `--pyargs`, `--import-mode`,
 `--rootdir` and `-p <plugin>` in `addopts` change collection in ways that need marks, imports or

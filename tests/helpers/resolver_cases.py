@@ -1992,3 +1992,37 @@ _KNOWN_LIMITS.update(
         ),
     }
 )
+
+# The last of what the replay left: names made on a path the resolver does not follow, and a base
+# that is a call to something undefined.
+_KNOWN_LIMITS.update(
+    {
+        "a base that is a call to something undefined": (
+            "accept",
+            {
+                "tests/test_lim_callbase.py": (
+                    "class TestA(undefined_factory()):\n    def test_a(self):\n        pass\n"
+                )
+            },
+            "tests/test_lim_callbase.py::TestA::test_a",
+        ),
+        "an imported name a module makes through global": (
+            "refuse",
+            {
+                "tests/lim_global.py": (
+                    "def make():\n    global test_made\n    test_made = lambda: None\n\n\nmake()\n"
+                ),
+                "tests/test_lim_importglobal.py": "from lim_global import test_made\n",
+            },
+            "tests/test_lim_importglobal.py::test_made",
+        ),
+        "an imported name a module makes with a match capture": (
+            "refuse",
+            {
+                "tests/lim_capture.py": "match (lambda: None):\n    case test_captured:\n        pass\n",
+                "tests/test_lim_importcapture.py": "from lim_capture import test_captured\n",
+            },
+            "tests/test_lim_importcapture.py::test_captured",
+        ),
+    }
+)
