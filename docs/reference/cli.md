@@ -13,7 +13,7 @@ Complete reference for all `ds` CLI commands.
 |---------|-------------|
 | `ds status` | Show installed runtime status |
 | `ds version` | Show source and runtime version |
-| `ds doctor [--fix]` | Verify Claude Code integration health (skills, agents, hooks, routing, schema) |
+| `ds doctor [--fix]` | Verify Claude Code integration health (skills, agents, hooks, routing, schema, and `checks.bypass_audit`: gate escape hatches that fired in a printed window, as raw runs and distinct `HEAD` runs) |
 | `ds repair` | Plan repair actions without mutating state |
 | `ds validate` | Verify DB health (schema version, migrations, module profiles) |
 | `ds adapters` | Show adapter status |

@@ -57,10 +57,26 @@ core/config/schema_coherence.py  ← aspirational-schema audit
    - Lists all 3 CI platforms: `ubuntu-latest`, `macos-latest`, `windows-latest`
    - Exits 1 (blocks push)
 
-**Bypass:** `MIGRATION_RISK_ACKNOWLEDGED=1 git push`  
+**Bypass:** `MIGRATION_RISK_ACKNOWLEDGED=1 git push`. The variable must equal exactly `1`: `0`, `false`, `yes`, the empty string and anything else is not an acknowledgement, the push stays blocked, and the gate says so. Nothing is recorded for a value that does not acknowledge.  
 **CI:** Always returns 0 inside GitHub Actions to avoid false positives in the matrix.
 
 **Why this exists:** Migration files historically pass local tests but fail on macOS/Windows in the remote matrix (Phase 18.x regressions: migrations 081, 082, near-miss 18.4.6).
+
+### Bypass ledger (`gate.bypassed`)
+
+A gate escape hatch that fires leaves one `gate.bypassed` event, and each event is one **run** of the gate that took the hatch, not one bypass: a pre-push retry, a manual replay, or a stacked branch that inherits an earlier `Docs-Reviewed-No-Change` trailer is another run and another event. The `migration_risk` and `docs_drift_reviewed_no_change` events say which run, in addition to `gate`, `reason` and the gate's own fields (`risk_files`, `domains`):
+
+| Field | Meaning |
+|-------|---------|
+| `branch` | Checked-out branch; `null` on a detached HEAD |
+| `head_sha` | `HEAD` when the gate ran |
+| `base_ref` / `base_sha` | The ref the diff was taken against, and the commit it pointed at; `null` when no base was named or it did not resolve |
+| `trailer_commits` | (`docs_drift_reviewed_no_change` only) shas of the commits in `base_ref..HEAD` whose `Docs-Reviewed-No-Change` trailer cleared a listed domain, oldest first; empty when the domain was cleared by flag or environment variable |
+| `invocation` | Who started the gate: `pre_push_hook` (`hooks/git/pre-push`), `pre_push_runner` (`core.gates.pre_push` or `ds workflow run pre-push` without the hook), `ci_gate` (`interfaces/cli/ci_gate.py`), `github_actions`, or `direct` (run on its own; nothing says by whom). A launcher declares itself through `DREAM_STUDIO_GATE_INVOCATION`; the gate never guesses, and a value outside that list is ignored. A git hook installed before this field existed does not declare itself, so its runs read `pre_push_runner` until the hook is reinstalled. |
+
+Events written before these fields existed have none of them. They are still counted, as unattributed.
+
+`ds doctor` (`checks.bypass_audit`) prints the window it counted over (`window`, `since_days`, default 7 days) and, per gate, `count` (raw runs), `distinct_runs` (distinct `HEAD` shas among attributed runs) and `unattributed` (runs with no sha, counted separately and never given one). Duplicates are counted rather than suppressed at emission: a retry is a real execution, and de-duplicating it there would need state shared between runs.
 
 ---
 

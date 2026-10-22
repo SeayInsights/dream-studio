@@ -91,6 +91,11 @@ _RISK_PATTERNS = (
 
 _MATRIX_PLATFORMS = "ubuntu-latest, macos-latest, windows-latest"
 
+#: The acknowledgement is this variable set to exactly this value. Any other value,
+#: including "0", "false" and the empty string, is not one.
+ACK_ENV = "MIGRATION_RISK_ACKNOWLEDGED"
+ACK_VALUE = "1"
+
 
 def _changed_files(base_ref: str = "origin/main") -> list[str]:
     """Return files changed on the current branch vs base_ref."""
@@ -204,19 +209,27 @@ def main() -> int:
     print()
 
     # Exit 1 to make the gate visible as FAIL in the pre-push output.
-    # Bypass with: MIGRATION_RISK_ACKNOWLEDGED=1 git push
-    if os.environ.get("MIGRATION_RISK_ACKNOWLEDGED"):
-        print("MIGRATION_RISK_ACKNOWLEDGED set — bypassing block.")
+    # Bypass with: MIGRATION_RISK_ACKNOWLEDGED=1 git push (exactly 1; see ACK_VALUE)
+    acknowledged = os.environ.get(ACK_ENV)
+    if acknowledged == ACK_VALUE:
+        print(f"{ACK_ENV}={ACK_VALUE} - bypassing block.")
         # WO-BYPASS-TELEMETRY: the acknowledgment still works, but it is recorded —
         # previously this env var left no trace anywhere.
-        from core.gates.bypass_event import record_gate_bypass
+        from core.gates.bypass_event import record_gate_bypass, run_context
 
         record_gate_bypass(
             "migration_risk",
-            "MIGRATION_RISK_ACKNOWLEDGED=1 — matrix-watch reminder bypassed at push",
-            extra={"risk_files": risk_files},
+            f"{ACK_ENV}={ACK_VALUE} - matrix-watch reminder bypassed at push",
+            extra={"risk_files": risk_files, **run_context(REPO_ROOT, base_ref)},
         )
         return 0
+
+    if acknowledged:
+        # Set, but not to the one value that means yes: "0", "false" and "no" read as
+        # refusals to a person and used to bypass the block and be recorded as a bypass.
+        print(
+            f"{ACK_ENV}={acknowledged!r} is not an acknowledgement; set it to exactly {ACK_VALUE}."
+        )
 
     return 1
 

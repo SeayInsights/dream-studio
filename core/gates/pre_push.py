@@ -15,6 +15,7 @@ pre-push hook itself (the hook's exit code is governed by gate results alone).
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import time
@@ -23,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from core.gates import registry as _registry
+from core.gates.bypass_event import INVOCATION_ENV
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = REPO_ROOT / "canonical" / "workflows" / "pre-push.yaml"
@@ -390,27 +392,37 @@ def run_pre_push_gates(
     root = repo_root or REPO_ROOT
 
     report = PrePushReport(overall_passed=True)
-    for gate in gates:
-        result = run_gate(gate, repo_root=root)
-        report.gates.append(result)
-        # EVERY outcome is recorded, including the ones that change nothing.
-        # Recording only blocking failures gave the authority 649 failures and
-        # zero passes, so "has this gate ever fired" had no answer and a dead
-        # gate was indistinguishable from a gate that prevents.
-        if emit_events:
-            emit_gate_outcome_event(result, repo_root=root)
-        if not result.passed:
-            if result.is_advisory:
-                # Advisory failures surface as warnings but never block push.
-                # They used to emit nothing at all -- the one tier meant to
-                # surface a signal without blocking surfaced none.
-                pass
-            else:
-                report.overall_passed = False
-                if emit_events:
-                    emit_gate_failure_event(result, repo_root=root)
-                if stop_on_first_failure:
-                    break
+    # Say who is running the gates, for the bypass ledger. The git hook already declared
+    # itself; when nothing did, this is the runner started without the hook. Set for the
+    # run only, so an in-process gate never leaves it behind for an unrelated caller.
+    prior = os.environ.get(INVOCATION_ENV)
+    if prior is None:
+        os.environ[INVOCATION_ENV] = "pre_push_runner"
+    try:
+        for gate in gates:
+            result = run_gate(gate, repo_root=root)
+            report.gates.append(result)
+            # EVERY outcome is recorded, including the ones that change nothing.
+            # Recording only blocking failures gave the authority 649 failures and
+            # zero passes, so "has this gate ever fired" had no answer and a dead
+            # gate was indistinguishable from a gate that prevents.
+            if emit_events:
+                emit_gate_outcome_event(result, repo_root=root)
+            if not result.passed:
+                if result.is_advisory:
+                    # Advisory failures surface as warnings but never block push.
+                    # They used to emit nothing at all -- the one tier meant to
+                    # surface a signal without blocking surfaced none.
+                    pass
+                else:
+                    report.overall_passed = False
+                    if emit_events:
+                        emit_gate_failure_event(result, repo_root=root)
+                    if stop_on_first_failure:
+                        break
+    finally:
+        if prior is None:
+            os.environ.pop(INVOCATION_ENV, None)
     return report
 
 

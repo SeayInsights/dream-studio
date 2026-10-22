@@ -9,7 +9,11 @@ canonical event spine. Two families:
   grouped by rule.
 - ``gate.bypassed`` events (``business_canonical_events``): force-closes,
   MIGRATION_RISK_ACKNOWLEDGED, Docs-Reviewed-No-Change trailer consumption,
-  grouped by gate.
+  grouped by gate. Each row is one gate EXECUTION, so a gate's bucket reports
+  ``count`` (raw runs), ``distinct_runs`` (distinct HEAD shas among rows that
+  carry one) and ``unattributed`` (rows that carry none: written before the
+  payload had a sha, or never had one, as force-closes do). The report names
+  its window (``window``, ``since_days``) so a count is never read as "today".
 
 The companion of the observe-tier ``observations_report``: bypasses may
 exist — invisible bypasses may not. Consumed by ``ds doctor`` (bypass_audit
@@ -29,6 +33,8 @@ def bypass_audit(db_path: Path, *, since_days: int = 7) -> dict[str, Any]:
     since_iso = (datetime.now(UTC) - timedelta(days=since_days)).isoformat()
     result: dict[str, Any] = {
         "since": since_iso,
+        "since_days": since_days,
+        "window": f"last {since_days} day{'' if since_days == 1 else 's'} (since {since_iso})",
         "total": 0,
         "by_rule": {},
         "gate_bypasses": {},
@@ -75,7 +81,10 @@ def bypass_audit(db_path: Path, *, since_days: int = 7) -> dict[str, Any]:
             grows = conn.execute(
                 "SELECT event_timestamp,"
                 " json_extract(payload, '$.gate') AS gate,"
-                " json_extract(payload, '$.reason') AS reason"
+                " json_extract(payload, '$.reason') AS reason,"
+                " json_extract(payload, '$.head_sha') AS head_sha,"
+                " json_extract(payload, '$.branch') AS branch,"
+                " json_extract(payload, '$.invocation') AS invocation"
                 " FROM business_canonical_events"
                 " WHERE event_type = 'gate.bypassed' AND event_timestamp >= ?"
                 " ORDER BY event_timestamp DESC",
@@ -83,12 +92,33 @@ def bypass_audit(db_path: Path, *, since_days: int = 7) -> dict[str, Any]:
             ).fetchall()
         except sqlite3.Error:
             grows = []
+        head_shas: dict[str, set[str]] = {}
         for row in grows:
             gate = row["gate"] or "unknown"
-            bucket = result["gate_bypasses"].setdefault(gate, {"count": 0, "samples": []})
+            bucket = result["gate_bypasses"].setdefault(
+                gate, {"count": 0, "distinct_runs": 0, "unattributed": 0, "samples": []}
+            )
+            # `count` is raw gate EXECUTIONS: every retry, replay and stacked branch that
+            # inherits an earlier trailer is another row. A run is a (gate, HEAD sha).
+            # A row from before the payload carried a sha cannot be grouped, so it is
+            # counted on its own as unattributed -- never dropped, never given a sha.
             bucket["count"] += 1
+            if row["head_sha"]:
+                head_shas.setdefault(gate, set()).add(row["head_sha"])
+            else:
+                bucket["unattributed"] += 1
             if len(bucket["samples"]) < 5:
-                bucket["samples"].append({"when": row["event_timestamp"], "reason": row["reason"]})
+                bucket["samples"].append(
+                    {
+                        "when": row["event_timestamp"],
+                        "reason": row["reason"],
+                        "head_sha": row["head_sha"],
+                        "branch": row["branch"],
+                        "invocation": row["invocation"],
+                    }
+                )
+        for gate, bucket in result["gate_bypasses"].items():
+            bucket["distinct_runs"] = len(head_shas.get(gate, ()))
         result["total"] += len(grows)
 
         # WO-MERGE-BEFORE-VERIFY task 4: the PATTERN is the finding, not the
