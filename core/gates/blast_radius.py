@@ -616,29 +616,34 @@ def _git(args: list[str], repo_root: Path) -> str:
             ["git", *args],
             cwd=repo_root,
             capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
+            # BYTES, decoded below: text mode would turn a lone CR or a CRLF inside a
+            # changed line into a line break, and miscount the hunk the detectors rebuild.
+            # (Comments, not code, so the fail-open baseline keeps its line numbers.)
             check=False,
             timeout=30,
         )
     except (OSError, subprocess.SubprocessError):
         return ""
-    return r.stdout if r.returncode == 0 else ""
+    return r.stdout.decode("utf-8", errors="replace") if r.returncode == 0 else ""
+
+
+# git quotes a path with non-ASCII characters ("caf\303\251.py") unless told not to, and a
+# quoted header is a file the detectors never see: a changed def in `café.py` was invisible.
+_PLAIN_PATHS = ["-c", "core.quotepath=off"]
 
 
 def _resolve_diff_and_changed(repo_root: Path, base_ref: str | None) -> tuple[str, list[str]]:
     """Resolve the unified diff text and changed-file list against the base ref."""
     if base_ref:
         rng = f"{base_ref}...HEAD"
-        diff_text = _git(["diff", rng], repo_root)
-        names = _git(["diff", "--name-only", rng], repo_root)
+        diff_text = _git([*_PLAIN_PATHS, "diff", rng], repo_root)
+        names = _git([*_PLAIN_PATHS, "diff", "--name-only", rng], repo_root)
         if diff_text or names:
-            return diff_text, [ln.strip() for ln in names.splitlines() if ln.strip()]
+            return diff_text, [ln.strip() for ln in names.split("\n") if ln.strip()]
     # Fallback: staged + working-tree changes.
-    diff_text = _git(["diff", "HEAD"], repo_root)
-    names = _git(["diff", "--name-only", "HEAD"], repo_root)
-    return diff_text, [ln.strip() for ln in names.splitlines() if ln.strip()]
+    diff_text = _git([*_PLAIN_PATHS, "diff", "HEAD"], repo_root)
+    names = _git([*_PLAIN_PATHS, "diff", "--name-only", "HEAD"], repo_root)
+    return diff_text, [ln.strip() for ln in names.split("\n") if ln.strip()]
 
 
 def _git_head_reader(repo_root: Path):

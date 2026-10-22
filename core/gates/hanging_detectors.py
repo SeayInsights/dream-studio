@@ -126,7 +126,13 @@ def _parse_diff(diff_text: str, *, repo_root: Path | str = REPO_ROOT) -> list[di
     cur: dict[str, Any] | None = None
     cur_added_lineno: list[int] = []
     new_lineno: int | None = None
-    for line in diff_text.splitlines():
+    # SPLIT ON LF ONLY. `str.splitlines()` also breaks at CR, VT, FF, FS, GS, RS, NEL, U+2028
+    # and U+2029: characters INSIDE a changed line (a docstring holding a form feed), whose
+    # split miscounts a hunk and silently disables the trusted-copy check on it.
+    diff_lines = diff_text.split("\n")
+    if diff_lines and diff_lines[-1] == "":
+        diff_lines.pop()
+    for line in diff_lines:
         if line.startswith("diff --git"):
             if cur is not None:
                 files.append(cur)
@@ -389,12 +395,18 @@ def detect_stale_removed_symbol_tests(
 
 # --- (b) changed-signature callers ------------------------------------------
 
-_SIG_RE = re.compile(r"\b(?:def|function)\s+([A-Za-z_]\w*)\s*\(([^)]*)\)")
+_SIG_RE = re.compile(r"\b(?:def|function)\s+([A-Za-z_]\w*)\s*(?:<[^()]*?>)?\s*\(([^)]*)\)")
 # A Python definition STARTS a statement: nothing but indentation (and `async`, and a byte
 # order mark on the file's first line) may precede `def`. Anchoring is exact where lexing
 # is a heuristic, which is why Python files use this and every other file type walks the
 # line with `_lex` and `_SIG_RE`.
-_PY_DEF_RE = re.compile("[" + chr(0xFEFF) + r"]?\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(([^)]*)\)")
+# The HEAD of a def: everything up to its opening paren, PEP 695 type parameters allowed
+# (`def f[T](x)`, `def f[T: Seq[int]](x)`). The parameter list is read by `_balanced_close`,
+# so a default holding a call (`b=g(1)`) is whole and the list may continue on later lines.
+_PY_DEF_RE = re.compile(
+    "[" + chr(0xFEFF) + r"]?\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*"
+    r"(?:\[(?:[^\[\]]|\[[^\[\]]*\])*\])?\s*\("
+)
 
 _PY_SUFFIXES = (".py", ".pyi")
 _HASH_COMMENT_SUFFIXES = (
@@ -407,11 +419,13 @@ _HASH_COMMENT_SUFFIXES = (
     ".toml",
     ".pl",
     ".pm",
-    ".ps1",
     ".mk",
 )
+_PS_SUFFIXES = (".ps1", ".psm1", ".psd1")
 _DASH_COMMENT_SUFFIXES = (".sql", ".lua")
-_LINE_COMMENT = {"c": "//", "hash": "#", "sql": "--"}
+_LINE_COMMENT = {"c": "//", "hash": "#", "sql": "--", "ps": "#"}
+# Block comments: `/* */` in C-like and sql files, `<# #>` in PowerShell.
+_BLOCK_COMMENT = {"c": ("/*", "*/"), "sql": ("/*", "*/"), "ps": ("<#", "#>")}
 _QUOTES = "'\"`"
 # A `/` starts a regular expression, not a division, after one of these (or at the start of
 # the line), after `=>`, and after one of the keywords below. `<` and `>` need a closer look
@@ -443,10 +457,12 @@ def _slash_starts_regex(text: str, i: int, last: str, prev: str, last_idx: int) 
     the one before that, ``last_idx`` its index."""
     if last == "":
         return True
-    if last == "<":
-        return text[i - 1] != "<"  # `</p>` closes a tag; `a < /x/` compares
-    if last == ">":
-        return prev == "="  # `s => /x/.test(s)`, not `<a>/</a>`
+    if last in ("<", ">"):
+        if last == ">" and prev == "=":
+            return True  # `s => /x/.test(s)`
+        # `</p>`, `<br/>` and `<a>/</a>` put the slash right against the bracket (markup); an
+        # operator has space after it: `a < /x/`, `a > /x/.source`.
+        return not (i > 0 and text[i - 1] == last)
     if last in _REGEX_PRECEDERS:
         return True
     if last in _WORD_CHARS:
@@ -466,13 +482,15 @@ def _is_python_path(path: str) -> bool:
 def _comment_style(path: str) -> str:
     """How a file marks comments, which decides what a `def` match may sit inside.
 
-    ``py`` (anchored, see `_PY_DEF_RE`), ``hash`` (`#`: ruby, shell, yaml, toml),
-    ``sql`` (`--` and block comments) or ``c`` (`//`, block comments and regex literals:
+    ``py`` (anchored, see `_PY_DEF_RE`), ``hash`` (`#`: ruby, shell, yaml, toml), ``ps``
+    (PowerShell: `#`, `<# #>`, a backtick escapes), ``sql`` (`--` and block comments) or ``c`` (`//`, block comments and regex literals:
     JS, TS, HTML, and the default for any type not listed).
     """
     low = path.lower()
     if low.endswith(_PY_SUFFIXES):
         return "py"
+    if low.endswith(_PS_SUFFIXES):
+        return "ps"
     if low.endswith(_HASH_COMMENT_SUFFIXES):
         return "hash"
     if low.endswith(_DASH_COMMENT_SUFFIXES):
@@ -520,10 +538,23 @@ def _lex(text: str, style: str = "c", probe=None):
     closed on the same line, honouring ``[...]`` classes and escapes. A ``#`` comment starts
     at a TOKEN (the line start or after whitespace), so ``$#``, ``${#x}`` and ``a#b`` are
     not comments. In ``hash`` files a backslash outside a string escapes the next
-    character. NOT understood: a template literal's ``${...}``, anything spanning lines.
+    character. In ``ps`` (PowerShell) files ``<# ... #>`` is a block comment, a backtick
+    escapes and a backslash is just a path separator.
+
+    A slash after ``<`` or ``>`` is a division when it touches the bracket (``</p>``,
+    ``<br/>``, ``<a>/``) and a regex when a space follows it (``a < /x/``, ``a > /x/.source``);
+    after ``=>`` it is a regex either way.
+
+    NOT understood, so a def after one of these on the same line can be missed: a template
+    literal's ``${...}``; anything spanning lines; a regex after ``)`` (``if (a) /x'/``);
+    JSX text holding an apostrophe (``<p>it's</p>``). OVER-REPORTED: a slash after ``await``
+    or ``yield`` is always a regex, even where ``yield`` is an identifier.
     """
     line_comment = _LINE_COMMENT.get(style)
-    block_comments = style in ("c", "sql")
+    block = _BLOCK_COMMENT.get(style)
+    # PowerShell: a backtick escapes, a backslash is a path separator, a backtick opens nothing.
+    quotes = "'\"" if style == "ps" else _QUOTES
+    escape = "`" if style == "ps" else "\\"
     regex_ok = style == "c"
     last_paren = text.rfind(")") if probe is not None else -1
     n, i = len(text), 0
@@ -532,7 +563,7 @@ def _lex(text: str, style: str = "c", probe=None):
     while i < n:
         ch = text[i]
         if quote is not None:
-            if ch == "\\":
+            if ch == escape:
                 i += 2
             elif text.startswith(quote, i):
                 prev, last, last_idx = last, ch, i
@@ -551,20 +582,20 @@ def _lex(text: str, style: str = "c", probe=None):
             and (line_comment != "#" or i == 0 or text[i - 1].isspace())
         ):
             return None, True
-        if block_comments and text.startswith("/*", i):
-            end = text.find("*/", i + 2)
+        if block is not None and text.startswith(block[0], i):
+            end = text.find(block[1], i + len(block[0]))
             if end < 0:
                 return None, True
-            i = end + 2
+            i = end + len(block[1])
             continue
-        if ch in _QUOTES:
+        if ch in quotes:
             triple = ch * 3
             if ch != "`" and text.startswith(triple, i):
                 quote, i = triple, i + 3
             else:
                 quote, i = ch, i + 1
             continue
-        if ch == "\\" and style == "hash":
+        if ch == escape and style in ("hash", "ps"):
             i += 2
             continue
         if regex_ok and ch == "/" and _slash_starts_regex(text, i, last, prev, last_idx):
@@ -596,13 +627,121 @@ def _signature_on_line(line: str, *, is_py: bool, style: str = "c") -> tuple[str
     """
     if is_py:
         m = _PY_DEF_RE.match(line)
-        return (m.group(1), m.group(2), True) if m else None
+        if m is None:
+            return None
+        begin = m.end()
+        close = _balanced_close(line, begin)
+        return (m.group(1), line[begin:close], True) if close >= 0 else None
 
     def probe(i: int):
         m = _SIG_RE.match(line, i)
         return (m.group(1), m.group(2), False) if m else None
 
     return _lex(line, style, probe)[0]
+
+
+def _code_part(line: str) -> str:
+    """``line`` up to a trailing ``#`` comment (a ``#`` inside a string is not one)."""
+    quote: str | None = None
+    i, n = 0, len(line)
+    while i < n:
+        ch = line[i]
+        if quote is not None:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+        elif ch in "'\"":
+            quote = ch
+        elif ch == "#":
+            return line[:i]
+        i += 1
+    return line
+
+
+def _scan_parens(text: str, start: int, depth: int) -> tuple[int, int]:
+    """Walk ``text`` from ``start`` with ``depth`` parens open, skipping quoted strings.
+
+    Returns ``(index of the paren that closes the list, depth)``: the index is -1 while the
+    list is still open at the end of ``text``, and ``depth`` then says how deep."""
+    quote: str | None = None
+    i, n = start, len(text)
+    while i < n:
+        ch = text[i]
+        if quote is not None:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+        elif ch in "'\"":
+            quote = ch
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i, 0
+        i += 1
+    return -1, depth
+
+
+def _balanced_close(text: str, start: int) -> int:
+    """The index of the ``)`` that closes the parameter list whose first character is at
+    ``text[start]``, or -1 if it does not close within ``text``."""
+    return _scan_parens(text, start, 1)[0]
+
+
+# A multi-line parameter list is joined across at most this many lines / characters.
+_MAX_JOINED_LINES = 300
+_MAX_JOINED_CHARS = 20_000
+
+
+def _python_signatures(
+    lines: list[str], skip: set[int] | frozenset[int] = frozenset()
+) -> list[tuple[str, str, bool]]:
+    """Every ``(name, parameter text, True)`` a stream of changed Python lines defines.
+
+    A def whose parameter list closes on its own line is read as ``_signature_on_line``
+    reads it. One that does not (the list continues on the next lines, one parameter each)
+    is JOINED: the following lines are appended, comments removed, until the parens
+    balance, bounded by `_MAX_JOINED_LINES`, `_MAX_JOINED_CHARS` and a work budget linear in
+    the number of lines (a file of unclosed ``def f(`` lines must not be quadratic).
+    ``skip`` holds indexes of lines that start inside a multi-line string. Only the lines of
+    the stream itself are joined: a def whose header is unchanged context and whose
+    parameters changed is not seen (documented limit).
+    """
+    found: list[tuple[str, str, bool]] = []
+    budget = 2000 + 5 * len(lines)
+    count = len(lines)
+    for i, line in enumerate(lines):
+        if i in skip:
+            continue
+        m = _PY_DEF_RE.match(line)
+        if m is None:
+            continue
+        begin = m.end()
+        close = _balanced_close(line, begin)
+        if close >= 0:
+            found.append((m.group(1), line[begin:close], True))
+            continue
+        parts = [_code_part(line[begin:])]
+        depth = _scan_parens(parts[0], 0, 1)[1]
+        size = len(parts[0])
+        j = i + 1
+        while j < count and j - i <= _MAX_JOINED_LINES and size <= _MAX_JOINED_CHARS and budget > 0:
+            budget -= 1
+            nxt = _code_part(lines[j])
+            end, depth = _scan_parens(nxt, 0, depth)
+            if end >= 0:
+                parts.append(nxt[:end])
+                found.append((m.group(1), "\n".join(parts), True))
+                break
+            parts.append(nxt)
+            size += len(nxt)
+            j += 1
+    return found
 
 
 # --- python: is a line inside a multi-line string? ---------------------------
@@ -674,7 +813,7 @@ def _py_start_states_lexer(text: str) -> list[str | None]:
 
 def _quote_of(token_text: str) -> str:
     """The delimiter a STRING or FSTRING_START token opens with, prefix letters removed."""
-    body = token_text.lstrip("rRbBuUfF")
+    body = token_text.lstrip("rRbBuUfFtT")
     return body[:3] if body[:3] in ('"""', "'''") else body[:1]
 
 
@@ -691,21 +830,24 @@ def _tokenize_string_rows(text: str) -> dict[int, str] | None:
 
     rows: dict[int, str] = {}
     open_fstrings: list[tuple[int, str]] = []
-    fstring_start = getattr(tokenize, "FSTRING_START", -1)
-    fstring_end = getattr(tokenize, "FSTRING_END", -1)
+    # f-strings (3.12) and template strings (3.14) are token SPANS, not STRING tokens.
+    fstring_start = (getattr(tokenize, "FSTRING_START", -1), getattr(tokenize, "TSTRING_START", -1))
+    fstring_end = (getattr(tokenize, "FSTRING_END", -1), getattr(tokenize, "TSTRING_END", -1))
     try:
         for tok in tokenize.generate_tokens(io.StringIO(text).readline):
             if tok.type == tokenize.STRING:
                 delim = _quote_of(tok.string)
                 for row in range(tok.start[0] + 1, tok.end[0] + 1):
                     rows.setdefault(row, delim)
-            elif tok.type == fstring_start:
+            elif tok.type in fstring_start:
                 open_fstrings.append((tok.start[0], _quote_of(tok.string)))
-            elif tok.type == fstring_end and open_fstrings:
+            elif tok.type in fstring_end and open_fstrings:
                 start_row, delim = open_fstrings.pop()
                 for row in range(start_row + 1, tok.end[0] + 1):
                     rows.setdefault(row, delim)
-    except (tokenize.TokenError, SyntaxError, ValueError, RecursionError, MemoryError):
+    except Exception:  # noqa: BLE001 - tokenize raises SystemError on a NUL after an
+        # indented line (CPython 3.12.10), IndentationError, TokenError, ...: anything means
+        # it cannot say, and the hand lexer answers instead.
         rows = None  # type: ignore[assignment]
     return rows
 
@@ -851,7 +993,7 @@ def _parse_params(param_str: str) -> list[_Param]:
 
     try:
         tree = ast.parse("def _f(" + param_str + "):\n    pass\n")
-    except (SyntaxError, ValueError, RecursionError, MemoryError) as exc:
+    except Exception as exc:  # noqa: BLE001 - any parser failure is 'not a parameter list'
         # MemoryError is real: ast.parse raises it ("Parser stack overflowed") for a
         # pathologically nested line, 50,000 `not` operators for instance, rather than
         # the RecursionError one would expect.
@@ -998,12 +1140,14 @@ class _Memo:
     tree: Any = None
     code_of: str | None = None
     code: str = ""
+    facts_of: str | None = None
+    facts: Any = None
 
     @classmethod
     def reset(cls, active: bool) -> None:
         cls.active = active
-        cls.tree_of = cls.code_of = None
-        cls.tree, cls.code = None, ""
+        cls.tree_of = cls.code_of = cls.facts_of = None
+        cls.tree, cls.code, cls.facts = None, "", None
 
 
 def _parsed_tree(text: str):
@@ -1014,7 +1158,7 @@ def _parsed_tree(text: str):
         return _Memo.tree
     try:
         tree = ast.parse(text)
-    except (SyntaxError, ValueError, RecursionError, MemoryError):
+    except Exception:  # noqa: BLE001 - not parseable Python, whatever the parser raises
         tree = None
     if _Memo.active:
         _Memo.tree_of, _Memo.tree = text, tree
@@ -1034,11 +1178,14 @@ def _code_only_of(text: str) -> str:
 def _introspection_text_re(name: str):
     """Textual stand-in for `_inspects_symbol` when the file is not parseable Python: an
     introspection call whose arguments name the function, or an introspection attribute
-    read off it. One level of nested parentheses is allowed in the arguments."""
+    read off it. The name may be nested in the arguments to any depth, within 200 characters."""
     n = re.escape(name)
     calls = "|".join(sorted(_INTROSPECTION_CALLS))
     attrs = "|".join(sorted(_INTROSPECTION_ATTRS))
-    arg = r"(?:[^()]|\([^()]*\))*?"
+    # The name may sit at any depth of the call's arguments (`signature(getattr(m, "name"))`):
+    # up to 200 characters on the same line, a bound that keeps it linear and its false
+    # positives (`signature(x); f(name)`) to a file that does not even parse.
+    arg = r"[^\n]{0,200}?"
     return re.compile(rf"(?:{calls})\s*\({arg}(?<!\w){n}\b|(?<!\w){n}\s*\.\s*(?:{attrs})\b")
 
 
@@ -1168,6 +1315,178 @@ def _introspection_callables(tree: Any, nodes: list[Any]) -> set[str]:
     return names
 
 
+class _Introspection:
+    """Everything a caller file says about introspection, independent of any one name.
+
+    ``sites`` is the union of the identifiers mentioned by every introspection site (an
+    introspection call's arguments, the owner of an introspection attribute, the owner of a
+    ``getattr(x, "<dunder>")``). ``index`` maps an identifier to the bindings that mention it
+    and ``aliases`` an imported name to its ``as`` names, so a changed name asks only "what is
+    reachable from me, and does it meet a site", never "walk the file again"."""
+
+    def __init__(self, tree: Any) -> None:
+        import ast  # function-local: see _parse_params
+
+        self.unparseable = tree is None
+        self.sites: set[str] = set()
+        self.index: dict[str, list[int]] = {}
+        self.bindings: list[tuple[set[str], set[str] | None, list[str]]] = []
+        self.aliases: dict[str, set[str]] = {}
+        if tree is None:
+            return
+        nodes = list(ast.walk(tree))
+        call_names = _introspection_callables(tree, nodes)
+        for node in nodes:
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                for a in node.names:
+                    if a.asname:
+                        self.aliases.setdefault(a.name.split(".")[-1], set()).add(a.asname)
+        self.bindings = _ast_bindings(nodes)
+        for position, (mentioned, _, _) in enumerate(self.bindings):
+            for word in mentioned:
+                self.index.setdefault(word, []).append(position)
+        for node in nodes:
+            if isinstance(node, ast.Call):
+                func = node.func
+                called = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+                if called in call_names:
+                    for a in [*node.args, *(k.value for k in node.keywords)]:
+                        self.sites |= _ast_idents(a)
+                if (
+                    called == "getattr"
+                    and len(node.args) >= 2
+                    and isinstance(node.args[1], ast.Constant)
+                    and node.args[1].value in _INTROSPECTION_ATTRS
+                ):
+                    self.sites |= _ast_idents(node.args[0])
+            elif isinstance(node, ast.Attribute) and node.attr in _INTROSPECTION_ATTRS:
+                self.sites |= _ast_idents(node.value)
+
+    def reaches_a_site(self, name: str) -> bool:
+        """Is ``name``, or a variable bound from it (to a fixed point), at an introspection
+        site? A worklist over the binding index: linear in what is reachable."""
+        names = {name} | self.aliases.get(name, set())
+        queue = list(names)
+        while queue:
+            word = queue.pop()
+            for position in self.index.get(word, ()):
+                _, callee_mentions, targets = self.bindings[position]
+                if callee_mentions is not None and callee_mentions & names:
+                    continue  # `result = do_work(1)` binds what the function RETURNS
+                for target in targets:
+                    if target not in names:
+                        names.add(target)
+                        queue.append(target)
+        return bool(names & self.sites)
+
+
+_PATCH_STRING_RE = re.compile(r"""patch[\w.]*\(\s*['"]([\w.]*)""")
+_SETATTR_CALL_RE = re.compile(r"(?:setattr|delattr|patch\.object)\s*\(([^)]*)")
+_QUOTED_RE = re.compile(r"""['"]([^'"]*)['"]""")
+_ALIAS_RE = re.compile(r"\b(\w+)\s+as\s+(\w+)\b")
+
+
+class _FileFacts:
+    """Name-independent facts about ONE caller file, each computed at most once.
+
+    The detector asks the same file about every changed name. Each answer used to cost a
+    scan of the whole file per name (a regex for the call site, one for a patch target, one
+    for `setattr`, an alias search, an AST walk): 2000 changed names against a 20,000-line
+    test file took 71 s. The facts are indexed once, so a name costs a set lookup and, for
+    introspection, the part of the file reachable from it."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self._cache: dict[str, Any] = {}
+
+    def _once(self, key: str, make):
+        if key not in self._cache:
+            self._cache[key] = make()
+        return self._cache[key]
+
+    @property
+    def raw_idents(self) -> set[str]:
+        """Every identifier-shaped token anywhere in the file (strings and comments too)."""
+        return self._once("raw", lambda: set(_IDENT_RE.findall(self.text)))
+
+    @property
+    def code_idents(self) -> set[str]:
+        """The same, with comments and string contents blanked: a CALL SITE."""
+        return self._once("code", lambda: set(_IDENT_RE.findall(_code_only_of(self.text))))
+
+    @property
+    def patch_segments(self) -> set[str]:
+        """Dotted-path segments of every ``patch("a.b.c")`` target: `c` is a patched name."""
+        return self._once(
+            "patch",
+            lambda: {
+                seg
+                for m in _PATCH_STRING_RE.finditer(self.text)
+                for seg in m.group(1).split(".")
+                if seg
+            },
+        )
+
+    @property
+    def setattr_strings(self) -> set[str]:
+        """Every string handed to ``setattr`` / ``delattr`` / ``patch.object``."""
+        return self._once(
+            "setattr",
+            lambda: {
+                s
+                for m in _SETATTR_CALL_RE.finditer(self.text)
+                for s in _QUOTED_RE.findall(m.group(1))
+            },
+        )
+
+    @property
+    def alias_first(self) -> dict[str, str]:
+        """``X as Y`` imports in code: Y -> the first X it was bound from."""
+
+        def build() -> dict[str, str]:
+            first: dict[str, str] = {}
+            for m in _ALIAS_RE.finditer(_code_only_of(self.text)):
+                first.setdefault(m.group(2), m.group(1))
+            return first
+
+        return self._once("alias", build)
+
+    @property
+    def has_mock_assertion(self) -> bool:
+        return self._once("mock", lambda: bool(_MOCK_ASSERTION_RE.search(_code_only_of(self.text))))
+
+    @property
+    def introspection(self) -> _Introspection | None:
+        """None when the file holds no introspection token at all (nothing to parse)."""
+
+        def build() -> _Introspection | None:
+            if not _INTROSPECTION_HINT_RE.search(self.text):
+                return None
+            return _Introspection(_parsed_tree(self.text))
+
+        return self._once("introspection", build)
+
+    def inspects(self, name: str) -> bool:
+        if name not in self.raw_idents:
+            return False
+        intro = self.introspection
+        if intro is None:
+            return False
+        if intro.unparseable:
+            return bool(_introspection_text_re(name).search(self.text))
+        return intro.reaches_a_site(name)
+
+
+def _facts_of(text: str) -> _FileFacts:
+    """The facts of ``text``, built once per file during a detector run (see `_Memo`)."""
+    if _Memo.facts_of is text:
+        return _Memo.facts
+    facts = _FileFacts(text)
+    if _Memo.active:
+        _Memo.facts_of, _Memo.facts = text, facts
+    return facts
+
+
 def _inspects_symbol(text: str, name: str) -> bool:
     """Does this file READ THE PARAMETERS of ``name``?
 
@@ -1190,67 +1509,19 @@ def _inspects_symbol(text: str, name: str) -> bool:
     ``from mod import name as alias``. The introspection CALL may itself be aliased:
     ``from inspect import signature as sig``, ``sig = inspect.signature``, or a helper
     ``def get(fn): return inspect.signature(fn)``. A file that is not parseable Python gets
-    the textual equivalent (no alias following, no getattr form).
+    the textual equivalent (one level of nested parentheses in the arguments; no alias
+    following, no getattr form).
+
+    THE FILE IS INDEXED ONCE (`_FileFacts`, `_Introspection`): the sites and the bindings
+    are collected in one walk and a changed name only follows its own reachable bindings,
+    so the cost is O(file + names), not O(file x names).
 
     NOT DETECTED, because no static reading can tie them to the function: a computed name
     (``getattr(Cls, method)``), a computed attribute (``getattr(fn, attr)``,
     ``operator.attrgetter``), ``vars()`` / ``__dict__`` access, and a stub or fake handed in
     without the name appearing in the file at all.
     """
-    if name not in text or not _INTROSPECTION_HINT_RE.search(text):
-        return False
-    import ast  # function-local: see _parse_params
-
-    tree = _parsed_tree(text)
-    if tree is None:
-        return bool(_introspection_text_re(name).search(text))
-
-    nodes = list(ast.walk(tree))
-    call_names = _introspection_callables(tree, nodes)
-    names = {name}
-    for node in nodes:
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            names.update(a.asname for a in node.names if a.asname and a.name.split(".")[-1] == name)
-
-    # Variables bound from the function, by a worklist over an index from each mentioned
-    # name to the bindings that mention it: every binding is looked at once per name that
-    # reaches it, so a 5000-link chain is 5000 steps, not 5000 x 5000.
-    bindings = _ast_bindings(nodes)
-    index: dict[str, list[int]] = {}
-    for position, (mentioned, _, _) in enumerate(bindings):
-        for word in mentioned:
-            index.setdefault(word, []).append(position)
-    queue = list(names)
-    while queue:
-        word = queue.pop()
-        for position in index.get(word, ()):
-            _, callee_mentions, targets = bindings[position]
-            if callee_mentions is not None and callee_mentions & names:
-                continue  # `result = do_work(1)` binds what the function RETURNS
-            for target in targets:
-                if target not in names:
-                    names.add(target)
-                    queue.append(target)
-
-    for node in nodes:
-        if isinstance(node, ast.Call):
-            func = node.func
-            called = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
-            arguments = [*node.args, *(k.value for k in node.keywords)]
-            if called in call_names and any(_ast_idents(a) & names for a in arguments):
-                return True
-            if (
-                called == "getattr"
-                and len(node.args) >= 2
-                and isinstance(node.args[1], ast.Constant)
-                and node.args[1].value in _INTROSPECTION_ATTRS
-                and _ast_idents(node.args[0]) & names
-            ):
-                return True
-        elif isinstance(node, ast.Attribute):
-            if node.attr in _INTROSPECTION_ATTRS and _ast_idents(node.value) & names:
-                return True
-    return False
+    return _facts_of(text).inspects(name)
 
 
 def _string_reference(text: str, name: str) -> bool:
@@ -1258,7 +1529,8 @@ def _string_reference(text: str, name: str) -> bool:
     ``setattr`` / ``delattr`` / ``patch.object`` target, or introspection by a string name.
     Reported for ANY signature change, compatible or not: a string patch target is a
     dependency whichever way the signature moved."""
-    return bool(_SETATTR_TARGET_RE(name).search(text)) or _inspects_symbol(text, name)
+    facts = _facts_of(text)
+    return name in facts.setattr_strings or facts.inspects(name)
 
 
 def _mocks_symbol(
@@ -1274,13 +1546,15 @@ def _mocks_symbol(
     the function as a patch target, hands its name to ``setattr`` / ``patch.object``,
     introspects its signature (`_inspects_symbol`), or references it in code alongside mock
     call assertions -- and for no other file. ``string_ref`` hands over an answer the caller
-    already computed for `_string_reference`.
+    already computed for `_string_reference`. A patch target names the function as a WHOLE
+    dotted segment (``"pkg.mod.name"``).
     """
-    if _PATCH_TARGET_RE(name).search(text):
+    facts = _facts_of(text)
+    if name in facts.patch_segments:
         return True
     if _string_reference(text, name) if string_ref is None else string_ref:
         return True
-    return referenced_in_code and bool(_MOCK_ASSERTION_RE.search(_code_only_of(text)))
+    return referenced_in_code and facts.has_mock_assertion
 
 
 def _slice(lines: list[str], start: tuple[int, int], end: tuple[int, int]) -> str:
@@ -1324,7 +1598,7 @@ def _code_only(text: str) -> str:
     import tokenize as _tokenize
 
     try:
-        lines = text.splitlines(keepends=True)
+        lines = io.StringIO(text).readlines()  # by LF only, like the readline below
         pieces: list[str] = []
         previous_end = (1, 0)
         for tok in _tokenize.generate_tokens(io.StringIO(text).readline):
@@ -1336,7 +1610,8 @@ def _code_only(text: str) -> str:
                 pieces.append(raw)
             previous_end = tok.end
         return "".join(pieces)
-    except (_tokenize.TokenError, SyntaxError, IndentationError, ValueError):
+    except Exception:  # noqa: BLE001 - tokenize can raise SystemError (a NUL), not only
+        # TokenError and SyntaxError: any failure means it cannot tell code from prose.
         return text
 
 
@@ -1351,8 +1626,8 @@ def _PATCH_TARGET_RE(name: str):
     return re.compile(r"patch[\w.]*\(\s*['\"][\w.]*(?<![\w])" + re.escape(name) + r"[^'\"]*['\"]")
 
 
-_DEF_NAME_RE = re.compile(r"^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(", re.M)
-_IDENT_RE = re.compile(r"[A-Za-z_]\w*")
+_DEF_NAME_RE = re.compile(r"^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*[(\[]", re.M)
+_IDENT_RE = re.compile(r"\w+")
 
 
 def _definition_counts(files: Iterable[tuple[str, str]], names: set[str]) -> dict[str, int]:
@@ -1411,8 +1686,8 @@ def _aliased_to_a_different_name(text: str, name: str) -> bool:
     origin symbol to this name is not calling the changed one, whichever
     module actually changed.
     """
-    m = re.search(r"\b(\w+)\s+as\s+" + re.escape(name) + r"\b", _code_only_of(text))
-    return bool(m) and m.group(1) != name
+    first = _facts_of(text).alias_first.get(name)
+    return first is not None and first != name
 
 
 def _classify_pair(old_item: tuple[str, bool], new_item: tuple[str, bool]):
@@ -1555,11 +1830,26 @@ def detect_changed_signature_callers(
     tests/unit/test_blast_radius_py_strings.py runs the whole check over every tracked
     ``.py`` file.
 
-    KNOWN LIMIT, unchanged: ``_SIG_RE`` reads one line and stops at the first ``)``, so a
-    multi-line ``def`` or a default containing a call is not extracted whole. A one-line def
-    rewritten across lines therefore produces NO finding, whatever it changed
-    (tests/unit/test_blast_radius_signature_hardening.py pins this; widening detection is a
-    separate change).
+    PYTHON PARAMETER LISTS are read whole (`_python_signatures`): the closing paren is found by
+    a balanced scan that skips strings, so ``b=g(1)`` is one default; PEP 695 type parameters
+    (``def f[T](x)``) are allowed; and a list that continues on later lines is JOINED, comments
+    removed, across at most 300 lines / 20,000 characters and a work budget linear in the stream
+    (a re-wrapped def, ``def f(`` / ``a,`` / ``b,`` / ``):``, is read). LIMITS: only the
+    stream's own lines are joined, so a def whose header is unchanged context and whose
+    parameter lines changed is not seen, and a JS ``function`` is read from one line
+    (``_SIG_RE`` stops at the first ``)``).
+
+    THE DIFF IS SPLIT ON LF ONLY (`_parse_diff`) and the gate reads git's output as bytes
+    (`blast_radius._git`): CR, VT, FF, FS, GS, RS, NEL, U+2028 and U+2029 are CHARACTERS of a
+    changed line, and splitting at them miscounts a hunk and disables the trusted-copy check
+    on it. Paths are listed with ``core.quotepath=off`` so a non-ASCII name is not quoted
+    out of the diff.
+
+    COST: every per-file answer is indexed once (`_FileFacts`): call sites, patch targets,
+    ``setattr`` strings, aliases, mock assertions and introspection sites. A changed name is a
+    set lookup (and, for introspection, the part of the file reachable from it), so N names
+    against an M-line file cost O(M + N), not O(M x N). A patch target names the function as a
+    whole dotted segment.
     """
     root = Path(repo_root)
     files = _parse_diff(diff_text, repo_root=root)
@@ -1581,14 +1871,17 @@ def detect_changed_signature_callers(
         removed_skip, added_skip = (
             _py_ignorable_lines(f, root, file_reader) if is_py else (set(), set())
         )
-        for idx, ln in enumerate(f["removed"]):
-            sig = None if idx in removed_skip else _signature_on_line(ln, is_py=is_py, style=style)
-            if sig:
-                old.setdefault(sig[0], []).append((sig[1], sig[2]))
-        for idx, ln in enumerate(f["added"]):
-            sig = None if idx in added_skip else _signature_on_line(ln, is_py=is_py, style=style)
-            if sig:
-                new.setdefault(sig[0], []).append((sig[1], sig[2]))
+        for side, lines, skip in ((old, f["removed"], removed_skip), (new, f["added"], added_skip)):
+            if is_py:
+                sigs = _python_signatures(lines, skip)
+            else:
+                sigs = [
+                    sig
+                    for idx, ln in enumerate(lines)
+                    if idx not in skip and (sig := _signature_on_line(ln, is_py=False, style=style))
+                ]
+            for sig in sigs:
+                side.setdefault(sig[0], []).append((sig[1], sig[2]))
         for name in set(old) & set(new):
             change = _classify_changes(old[name], new[name])
             if change is None:
@@ -1610,10 +1903,6 @@ def detect_changed_signature_callers(
     definitions = _definition_counts(files_in_tree, set(changed_sigs))
     _ambiguous = {name: count > 1 for name, count in definitions.items()}
 
-    # Match the name as a whole word, but ALLOW a leading "." so attribute and
-    # patch-target references (e.g. monitor._write_handoff_packet_to_db, the real
-    # #353 caller) are caught — only a leading word char rules out a match.
-    ref_res: dict[str, re.Pattern[str]] = {}
     wanted = set(changed_sigs)
     findings: list[Finding] = []
     _Memo.reset(True)
@@ -1626,11 +1915,9 @@ def detect_changed_signature_callers(
             # argument. One pass over the file finds the changed names it holds; a file
             # holding none is skipped before anything is tokenized or parsed (the old
             # per-name substring test was files x names: 100k names timed out).
-            held = wanted.intersection(_IDENT_RE.findall(text))
+            facts = _facts_of(text)
+            held = wanted.intersection(facts.raw_idents)
             for name in sorted(held):
-                pat = ref_res.get(name)
-                if pat is None:
-                    pat = ref_res[name] = re.compile(r"(?<!\w)" + re.escape(name) + r"\b")
                 # AN AMBIGUOUS NAME NEEDS ITS MODULE NAMED. `main` and `run` are defined in
                 # dozens of modules here, so matching them bare finds every unrelated mention
                 # -- 720 findings on one PR, 682 for those two names. A name defined ONCE (the
@@ -1657,14 +1944,17 @@ def detect_changed_signature_callers(
                 # Code first (cheap, no false positives), then the raw text restricted to
                 # quoted patch targets. A quoted dotted path ending in the changed symbol is
                 # a dependency by any reading; prose does not contain one by accident.
-                in_code = bool(pat.search(_code_only_of(text)))
+                # A call site: the name as a whole identifier in the code with comments and
+                # string contents blanked. A leading `.` is allowed (`mod.name`, the #353
+                # shape): the identifier is `name` there too.
+                in_code = name in facts.code_idents
                 old_p, new_p, mock_only = changed_sigs[name]
                 string_ref: bool | None = None
                 if mock_only or not in_code:
                     # A call site already decides an incompatible change: nothing below can
                     # change that verdict, so it is not computed. Everything else asks
                     # whether the file patches, mocks or introspects the function, once.
-                    in_patch_target = bool(_PATCH_TARGET_RE(name).search(text))
+                    in_patch_target = name in facts.patch_segments
                     # A string target or string-named introspection is a reference for ANY
                     # change.
                     string_ref = _string_reference(text, name)

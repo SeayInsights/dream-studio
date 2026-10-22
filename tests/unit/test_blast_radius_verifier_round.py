@@ -855,8 +855,8 @@ def test_getattr_needs_a_dunder_that_is_in_the_introspection_set(tmp_path: Path)
 def test_every_hash_style_suffix_is_a_hash_file() -> None:
     for suffix in hd._HASH_COMMENT_SUFFIXES:
         assert hd._comment_style("dir/file" + suffix) == "hash", suffix
-    assert ".ps1" in hd._HASH_COMMENT_SUFFIXES
-    assert hd._comment_style("tools/build.ps1") == "hash"
+    assert ".ps1" not in hd._HASH_COMMENT_SUFFIXES  # PowerShell has its own style
+    assert hd._comment_style("tools/build.ps1") == "ps"
     assert hd._comment_style("lib/Thing.pm") == "hash"
     assert hd._comment_style("lib/thing.pl") == "hash"
     assert hd._comment_style("build/rules.mk") == "hash"
