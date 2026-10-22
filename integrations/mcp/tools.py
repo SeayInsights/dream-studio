@@ -29,7 +29,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 from core.config.paths import code_root
-from core.work_orders.type_registry import work_order_type_names
+from core.work_orders.type_registry import (
+    PackManifestError,
+    builtin_work_order_type_names,
+    work_order_type_names,
+)
 
 from .auth import Identity
 
@@ -93,7 +97,20 @@ class Tool:
             return self.input_schema
         schema = copy.deepcopy(self.input_schema)
         for prop, current in self.live_enums.items():
-            schema["properties"][prop]["enum"] = list(current())
+            node = schema["properties"][prop]
+            try:
+                node["enum"] = list(current())
+            except PackManifestError as exc:
+                # A pack manifest that does not load must not take tool DISCOVERY down with it
+                # (this is what `tools/list` calls, and an unhandled error here was a bare HTTP
+                # 500). Advertise the built-in types, say plainly why the pack's are missing,
+                # and let every other tool carry on. A call that needs the full set fails in
+                # the handler, with the loader's message, as a JSON-RPC tool error.
+                node["enum"] = list(builtin_work_order_type_names())
+                node["description"] = (
+                    f"{node.get('description', '')} UNAVAILABLE: types declared by packs are not"
+                    f" listed because the pack manifest does not load: {str(exc)[:300]}"
+                ).strip()
         return schema
 
 
