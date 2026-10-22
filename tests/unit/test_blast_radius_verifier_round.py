@@ -147,6 +147,16 @@ def test_a_copy_with_fewer_lines_than_the_hunk_is_not_trusted(tmp_path: Path) ->
     assert _py_ignorable_lines(f, tmp_path) == (set(), set())
 
 
+def test_trailing_whitespace_is_part_of_the_line_when_a_copy_is_compared(tmp_path: Path) -> None:
+    """Only a CR is forgiven at a line's end: a copy whose line differs by trailing spaces is
+    a different line, and a copy that matches them exactly is trusted."""
+    _write(tmp_path / "core" / "x.py", "S = '''   \ndef do_work(a, b):   \n'''\n")
+    same = _record("core/x.py", (2, [("-", "def do_work(a):   "), ("+", "def do_work(a, b):   ")]))
+    assert _py_ignorable_lines(same, tmp_path) == ({0}, {0})
+    different = _record("core/x.py", (2, [("-", "def do_work(a):"), ("+", "def do_work(a, b):")]))
+    assert _py_ignorable_lines(different, tmp_path) == (set(), set())
+
+
 def test_a_deleted_file_has_no_copy_and_starts_in_code(tmp_path: Path) -> None:
     f = _record("core/gone.py", (1, [("-", "def a(p):")]))
     assert _py_ignorable_lines(f, tmp_path) == (set(), set())
