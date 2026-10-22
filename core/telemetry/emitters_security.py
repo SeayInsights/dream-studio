@@ -16,20 +16,27 @@ hoisting them to module level would break the patch target.
 
 from __future__ import annotations
 
+import json
+import logging
 import sqlite3
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from core.findings.model import encode_honesty
 from core.telemetry.execution_spine import (
+    FINDING_DUPLICATE,
+    FINDING_NOT_FOUND,
     record_execution_event,
     record_security_finding,
-    resolve_security_finding,
+    resolve_security_finding_reason,
+    spool_execution_event,
 )
 
 from .emitters_shared import (
     MODE_BEST_EFFORT,
+    MODE_STRICT,
     TelemetryContext,
     TelemetryEmitResult,
     _context,
@@ -39,6 +46,8 @@ from .emitters_shared import (
     _status,
     _text,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def emit_security_finding(
@@ -61,11 +70,18 @@ def emit_security_finding(
     source_refs: Sequence[str] | None = None,
     evidence_refs: Sequence[str] | None = None,
     metadata: Mapping[str, Any] | None = None,
+    confidence: str | None = None,
+    coverage: str | None = None,
+    limitations: Sequence[str] | None = None,
     db_path: Path | str | None = None,
     mode: str = MODE_BEST_EFFORT,
 ) -> TelemetryEmitResult:
-    """Dual-write security findings with deterministic idempotency."""
+    """Dual-write security findings with deterministic idempotency.
 
+    confidence / coverage / limitations are optional and stored on the security_events row
+    only when valid (see core.findings.model.encode_honesty); otherwise the columns stay
+    NULL and the finding reads as unknown. They do not enter the finding id.
+    """
     ctx = _context(context)
     normalized_severity = _severity(severity)
     normalized_status = _status(status)
@@ -80,6 +96,8 @@ def emit_security_finding(
         end_line=normalized_end_line,
         severity=normalized_severity,
     )
+
+    announcements: list[Callable[[], None]] = []
 
     def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
         existing = conn.execute(
@@ -106,20 +124,22 @@ def emit_security_finding(
             "status": normalized_status,
             "metadata": dict(metadata or {}),
         }
-        record_execution_event(
-            conn,
+        event_values = {
             **ctx.scope(),
-            event_id=event_id,
-            event_type="security.finding_recorded",
-            event_name=f"Security finding: {rule_id or category or normalized_severity}",
-            actor_type="system",
-            actor_id="security",
-            source_refs=merged_source_refs,
-            evidence_refs=merged_evidence_refs,
-            metadata=event_metadata,
-            outcome_status=normalized_status,
-        )
-        record_security_finding(
+            "event_id": event_id,
+            "event_type": "security.finding_recorded",
+            "event_name": f"Security finding: {rule_id or category or normalized_severity}",
+            "actor_type": "system",
+            "actor_id": "security",
+            "source_refs": merged_source_refs,
+            "evidence_refs": merged_evidence_refs,
+            "metadata": event_metadata,
+            "outcome_status": normalized_status,
+        }
+        # The row only: the spool envelope waits until the finding row is stored and the
+        # transaction has committed, so nothing is announced for a finding that was not.
+        record_execution_event(conn, spool=False, **event_values)
+        reason = record_security_finding(
             conn,
             **ctx.scope(),
             finding_id=finding_id,
@@ -138,15 +158,32 @@ def emit_security_finding(
             introduced_by_workflow_id=introduced_by_workflow_id,
             introduced_by_hook_id=introduced_by_hook_id,
             evidence_refs=merged_evidence_refs,
+            confidence=confidence,
+            coverage=coverage,
+            limitations=limitations,
         )
-        try:
-            from canonical.events.envelope import CanonicalEventEnvelope
-            from canonical.events.redactor import redact_file_path as _redact
-            from spool.writer import write_event as _write_event
+        if reason == FINDING_DUPLICATE:
+            # Lost a race with another writer of the same finding id: a skip, as above.
+            conn.rollback()
+            return TelemetryEmitResult(
+                False, record_id=finding_id, error="duplicate security finding skipped"
+            )
+        if reason is not None:
+            # No security_events row, so the execution event written above would describe a
+            # finding that is not stored, and the spool must not announce one.
+            conn.rollback()
+            message = f"security finding write failed: {reason}"
+            if mode == MODE_STRICT:
+                raise RuntimeError(message)
+            return TelemetryEmitResult(False, record_id=finding_id, error=message, failed=True)
 
-            _envelope = CanonicalEventEnvelope(
-                event_type="security.finding.logged",
-                payload={
+        def _announce_logged() -> None:
+            try:
+                from canonical.events.envelope import CanonicalEventEnvelope
+                from canonical.events.redactor import redact_file_path as _redact
+                from spool.writer import write_event as _write_event
+
+                _logged_payload = {
                     "finding_id": finding_id,
                     "project_id": ctx.project_id or "",
                     "severity": normalized_severity,
@@ -157,14 +194,27 @@ def emit_security_finding(
                     "file_path": _redact(file_path or ""),
                     "start_line": normalized_start_line,
                     "end_line": normalized_end_line,
-                },
-                project_id=ctx.project_id,
-                session_id=None,
-                confidence="high",
-            )
-            _write_event(_envelope.to_dict(), root=None)
-        except Exception:
-            pass  # fail-open; SQLite write already succeeded
+                }
+                # Observability copy of what the row stored; an absent key means unknown.
+                _stored = encode_honesty(confidence, coverage, limitations)
+                for _key in ("confidence", "coverage"):
+                    if _stored[_key]:
+                        _logged_payload[_key] = _stored[_key]
+                if _stored["limitations"] is not None:
+                    _logged_payload["limitations"] = json.loads(_stored["limitations"])
+                _envelope = CanonicalEventEnvelope(
+                    event_type="security.finding.logged",
+                    payload=_logged_payload,
+                    project_id=ctx.project_id,
+                    session_id=None,
+                    confidence="high",
+                )
+                _write_event(_envelope.to_dict(), root=None)
+            except Exception:
+                pass  # fail-open; the finding is already committed
+
+        announcements.append(lambda: spool_execution_event(**event_values))
+        announcements.append(_announce_logged)
         # WO-AI-SPINE (migration 139): the dashboard_attention_items write that used
         # to live here was removed — pure duplication of the execution_events row
         # above (0 production rows). Attention-worthy findings (critical/high
@@ -174,12 +224,19 @@ def emit_security_finding(
         # read time, see core/findings/current_status.py).
         return TelemetryEmitResult(True, event_id=event_id, record_id=finding_id)
 
-    return _emit(
+    result = _emit(
         _write,
         db_path=db_path,
         mode=mode,
         required_tables=("execution_events", "security_events"),
     )
+    # Spool only what was committed. The execution-event envelope used to be written before
+    # the finding row, so a finding that failed to store was still announced, and ingest
+    # would have made a canonical event for it.
+    if result.emitted:
+        for announce in announcements:
+            announce()
+    return result
 
 
 def emit_security_finding_resolved(
@@ -197,40 +254,56 @@ def emit_security_finding_resolved(
     ctx = _context(context)
     effective_project_id = project_id or ctx.project_id or ""
 
+    announcements: list[Callable[[], None]] = []
+
     def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
-        updated = resolve_security_finding(conn, finding_id=finding_id, resolution=resolution)
-        if not updated:
+        reason = resolve_security_finding_reason(conn, finding_id=finding_id, resolution=resolution)
+        if reason == FINDING_NOT_FOUND:
             return TelemetryEmitResult(False, error=f"security finding not found: {finding_id}")
+        if reason is not None:
+            # A failure, not a missing finding: reported as one, and never announced. The
+            # failed statement wrote nothing, so there is nothing to roll back.
+            logger.warning("security finding resolution was not written: %s", reason)
+            message = f"security finding resolve failed: {reason}"
+            if mode == MODE_STRICT:
+                raise RuntimeError(message)
+            return TelemetryEmitResult(False, record_id=finding_id, error=message, failed=True)
 
-        try:
-            from canonical.events.envelope import CanonicalEventEnvelope
-            from spool.writer import write_event as _write_event
+        def _announce_resolved() -> None:
+            try:
+                from canonical.events.envelope import CanonicalEventEnvelope
+                from spool.writer import write_event as _write_event
 
-            _envelope = CanonicalEventEnvelope(
-                event_type="security.finding.resolved",
-                payload={
-                    "finding_id": finding_id,
-                    "project_id": effective_project_id,
-                    "resolution": resolution,
-                    "resolved_by_agent_id": resolved_by_agent_id,
-                    "resolved_by_skill_id": resolved_by_skill_id,
-                },
-                project_id=effective_project_id or None,
-                session_id=None,
-                confidence="high",
-            )
-            _write_event(_envelope.to_dict(), root=None)
-        except Exception:
-            pass  # fail-open; SQLite update already succeeded
+                _envelope = CanonicalEventEnvelope(
+                    event_type="security.finding.resolved",
+                    payload={
+                        "finding_id": finding_id,
+                        "project_id": effective_project_id,
+                        "resolution": resolution,
+                        "resolved_by_agent_id": resolved_by_agent_id,
+                        "resolved_by_skill_id": resolved_by_skill_id,
+                    },
+                    project_id=effective_project_id or None,
+                    session_id=None,
+                    confidence="high",
+                )
+                _write_event(_envelope.to_dict(), root=None)
+            except Exception:
+                pass  # fail-open; the resolution is already committed
 
+        announcements.append(_announce_resolved)
         return TelemetryEmitResult(True, record_id=finding_id)
 
-    return _emit(
+    result = _emit(
         _write,
         db_path=db_path,
         mode=mode,
         required_tables=("security_events",),
     )
+    if result.emitted:
+        for announce in announcements:
+            announce()
+    return result
 
 
 def _severity(value: Any) -> str:
