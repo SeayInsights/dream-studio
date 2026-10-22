@@ -97,7 +97,7 @@ Pure operator actions. Route to `business_canonical_events`. Drive all SDLC proj
 
 | Event type | String value | Description |
 |-----------|-------------|-------------|
-| `GATE_BYPASSED` | `gate.bypassed` | Gate check bypassed with `--force` |
+| `GATE_BYPASSED` | `gate.bypassed` | Gate check bypassed (`--force`, or an escape hatch such as `MIGRATION_RISK_ACKNOWLEDGED=1`); one event per gate run, with `branch`, `head_sha`, `base_ref` and `invocation` on the migration-risk and docs-drift events (see [gates](gates.md#bypass-ledger-gatebypassed)) |
 | `GATE_PRE_PUSH_FAILED` | `gate.pre_push.failed` | Pre-push gate failed |
 | `SKILL_INVOKED` | `skill.invoked` | Dream Studio skill invoked via CLI |
 

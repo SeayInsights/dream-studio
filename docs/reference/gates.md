@@ -62,6 +62,20 @@ core/config/schema_coherence.py  ← aspirational-schema audit
 
 **Why this exists:** Migration files historically pass local tests but fail on macOS/Windows in the remote matrix (Phase 18.x regressions: migrations 081, 082, near-miss 18.4.6).
 
+### Bypass ledger (`gate.bypassed`)
+
+A gate escape hatch that fires leaves one `gate.bypassed` event, and each event is one **run** of the gate that took the hatch, not one bypass: a pre-push retry, a manual replay, or a stacked branch that inherits an earlier `Docs-Reviewed-No-Change` trailer is another run and another event. The `migration_risk` and `docs_drift_reviewed_no_change` events say which run, in addition to `gate`, `reason` and the gate's own fields (`risk_files`, `domains`):
+
+| Field | Meaning |
+|-------|---------|
+| `branch` | Checked-out branch; `null` on a detached HEAD |
+| `head_sha` | `HEAD` when the gate ran |
+| `base_ref` / `base_sha` | The ref the diff was taken against, and the commit it pointed at; `null` when no base was named or it did not resolve |
+| `trailer_commits` | (`docs_drift_reviewed_no_change` only) shas of the commits in `base_ref..HEAD` whose `Docs-Reviewed-No-Change` trailer cleared a listed domain, oldest first; empty when the domain was cleared by flag or environment variable |
+| `invocation` | Who started the gate: `pre_push_hook` (`hooks/git/pre-push`), `pre_push_runner` (`core.gates.pre_push` or `ds workflow run pre-push` without the hook), `ci_gate` (`interfaces/cli/ci_gate.py`), `github_actions`, or `direct` (run on its own; nothing says by whom). A launcher declares itself through `DREAM_STUDIO_GATE_INVOCATION`; the gate never guesses, and a value outside that list is ignored. A git hook installed before this field existed does not declare itself, so its runs read `pre_push_runner` until the hook is reinstalled. |
+
+Events written before these fields existed have none of them. They are still counted, as unattributed.
+
 ---
 
 ## Work Order Close Gates

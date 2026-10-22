@@ -22,5 +22,6 @@ else
     PY=python
 fi
 
-"$PY" -m interfaces.cli.ds workflow run pre-push --non-interactive
+# Declare this launcher so a gate that records a bypass can say it ran from the hook.
+DREAM_STUDIO_GATE_INVOCATION=pre_push_hook "$PY" -m interfaces.cli.ds workflow run pre-push --non-interactive
 exit $?

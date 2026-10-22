@@ -95,12 +95,23 @@ def main(argv: list[str] | None = None) -> None:
         if d.get("freshness_status") == "docs_reviewed_no_change_needed"
     ]
     if consumed:
-        from core.gates.bypass_event import record_gate_bypass
+        from core.gates.bypass_event import record_gate_bypass, run_context
+        from interfaces.cli._gate_review_context import trailer_commits
 
+        # WHICH run, not just that one happened: without branch / HEAD / base the ledger
+        # counted every pre-push retry and every stacked branch inheriting an earlier trailer
+        # as a separate bypass and could not tell them apart (#927).
+        base_ref = resolve_base_ref(args.base_ref)
         record_gate_bypass(
             "docs_drift_reviewed_no_change",
             "Docs-Reviewed-No-Change cleared impacted domains without doc changes",
-            extra={"domains": consumed},
+            extra={
+                "domains": consumed,
+                **run_context(REPO_ROOT, base_ref),
+                "trailer_commits": trailer_commits(
+                    repo_root=REPO_ROOT, base_ref=base_ref, domains=consumed
+                ),
+            },
         )
 
     print(json.dumps(report, indent=2, sort_keys=True))

@@ -66,22 +66,44 @@ def reviewed_no_change_domains(
     return sorted({item for item in domains if item})
 
 
-def _trailer_domains(*, repo_root: Path, base_ref: str | None) -> list[str]:
+def _trailer_entries(*, repo_root: Path, base_ref: str | None) -> list[tuple[str, str]]:
+    """``(commit sha, domain id)`` for every Docs-Reviewed-No-Change trailer in range."""
     base_ref = resolve_base_ref(base_ref)
     log_range = [f"{base_ref}..HEAD"] if base_ref else ["-1", "HEAD"]
-    domains: list[str] = []
-    for message in _git_log_messages(repo_root, log_range):
+    entries: list[tuple[str, str]] = []
+    for sha, message in _git_log_entries(repo_root, log_range):
         for line in message.splitlines():
             stripped = line.strip()
             if stripped.lower().startswith("docs-reviewed-no-change:"):
-                domains.extend(split_ids(stripped.split(":", 1)[1]))
-    return domains
+                entries.extend((sha, d) for d in split_ids(stripped.split(":", 1)[1]))
+    return entries
 
 
-def _git_log_messages(repo_root: Path, range_args: list[str]) -> list[str]:
+def _trailer_domains(*, repo_root: Path, base_ref: str | None) -> list[str]:
+    return [d for _sha, d in _trailer_entries(repo_root=repo_root, base_ref=base_ref)]
+
+
+def trailer_commits(
+    *, repo_root: Path, base_ref: str | None, domains: list[str] | set[str]
+) -> list[str]:
+    """Shas of the commits whose trailer names one of ``domains``, oldest first.
+
+    A domain cleared through the CLI flag or the env var has no commit, so it adds none:
+    an empty list means "no trailer commit accounts for these", not "unknown".
+    """
+    wanted = set(domains)
+    shas: list[str] = []
+    for sha, domain in _trailer_entries(repo_root=repo_root, base_ref=base_ref):
+        if domain in wanted and sha not in shas:
+            shas.append(sha)
+    return list(reversed(shas))
+
+
+def _git_log_entries(repo_root: Path, range_args: list[str]) -> list[tuple[str, str]]:
+    """``(sha, full message)`` per commit in range, newest first."""
     try:
         result = subprocess.run(
-            ["git", "log", "--format=%B%x00", *range_args],
+            ["git", "log", "--format=%H%x01%B%x00", *range_args],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -93,4 +115,9 @@ def _git_log_messages(repo_root: Path, range_args: list[str]) -> list[str]:
         return []
     if result.returncode != 0:
         return []
-    return [chunk for chunk in result.stdout.split("\x00") if chunk.strip()]
+    entries: list[tuple[str, str]] = []
+    for chunk in result.stdout.split("\x00"):
+        sha, sep, message = chunk.strip().partition("\x01")
+        if sep and message.strip():
+            entries.append((sha.strip(), message))
+    return entries

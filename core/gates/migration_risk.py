@@ -215,12 +215,12 @@ def main() -> int:
         print(f"{ACK_ENV}={ACK_VALUE} - bypassing block.")
         # WO-BYPASS-TELEMETRY: the acknowledgment still works, but it is recorded —
         # previously this env var left no trace anywhere.
-        from core.gates.bypass_event import record_gate_bypass
+        from core.gates.bypass_event import record_gate_bypass, run_context
 
         record_gate_bypass(
             "migration_risk",
             f"{ACK_ENV}={ACK_VALUE} - matrix-watch reminder bypassed at push",
-            extra={"risk_files": risk_files},
+            extra={"risk_files": risk_files, **run_context(REPO_ROOT, base_ref)},
         )
         return 0
 

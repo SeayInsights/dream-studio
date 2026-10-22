@@ -104,6 +104,9 @@ def _isolated_check_env() -> dict[str, str]:
     env["DREAM_STUDIO_HOME"] = str(dream_studio_home)
     env["DREAM_STUDIO_DB_PATH"] = str(state_dir / "studio.db")
     env["GITHUB_ACTIONS"] = env.get("GITHUB_ACTIONS", "true")
+    # The checks below are started by this runner, not by a person: say so, so a gate that
+    # records a bypass is attributed to it rather than to "direct".
+    env["DREAM_STUDIO_GATE_INVOCATION"] = "ci_gate"
     env["HOME"] = str(isolated_home)
     env["USERPROFILE"] = str(isolated_home)
     # contract-docs-drift honors DREAM_STUDIO_CHANGED_FILES as an override that

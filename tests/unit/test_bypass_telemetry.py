@@ -255,8 +255,10 @@ def test_trailer_consumption_records_bypass(monkeypatch, capsys):
         gate.main()
     assert exc.value.code == 0
     capsys.readouterr()
-    assert recorded == [
-        ("docs_drift_reviewed_no_change", {"domains": ["release_publication_gate"]})
+    # The run's attribution rides along (pinned against a real repository in
+    # test_gate_bypass_attribution.py); here only that the domain list is intact.
+    assert [(g, e["domains"]) for g, e in recorded] == [
+        ("docs_drift_reviewed_no_change", ["release_publication_gate"])
     ]
 
     # No domain cleared: nothing recorded.
