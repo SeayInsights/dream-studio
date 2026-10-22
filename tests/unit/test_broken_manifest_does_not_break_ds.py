@@ -183,3 +183,46 @@ def test_a_manifest_that_does_not_load_is_attention_required_on_its_own(kwargs, 
         has_warnings=False,
     )
     assert _overall_status(**{**clean, **kwargs}) == expected
+
+
+#: Every shape of unusable packs.yaml that crashed the doctor, as the bytes it holds. `ds doctor` is
+#: the command an operator runs to find out what is wrong, so none of these may crash it.
+_UNUSABLE_MANIFESTS = {
+    "syntax-error": b"packs: [unclosed",
+    "not-utf8-cp1252": b"schema_version: 2\n# caf\xe9\n",
+    "utf-16": "packs: {}\n".encode("utf-16"),
+    "top-level-list": b"- a\n- b\n",
+    "packs-is-a-string": b"packs: nope\n",
+    "directory": None,
+}
+
+
+@pytest.mark.parametrize("label", sorted(_UNUSABLE_MANIFESTS))
+def test_doctor_reports_an_unusable_packs_yaml_instead_of_crashing(label, tmp_path, monkeypatch):
+    """`_check_pack_mode_coverage` called safe_load and caught only OSError, and it runs before
+    the manifest check: a syntax error or a non-UTF-8 file was a traceback out of the doctor."""
+    from core.health.doctor_main import run_doctor_checks
+    from core.work_orders import type_manifest, type_registry
+
+    root = tmp_path / "root"
+    root.mkdir()
+    target = root / "packs.yaml"
+    raw = _UNUSABLE_MANIFESTS[label]
+    if raw is None:
+        target.mkdir()
+    else:
+        target.write_bytes(raw)
+    builtins = {
+        n: t
+        for n, t in type_registry._REGISTRY.items()
+        if n in type_registry.builtin_work_order_type_names()
+    }
+    monkeypatch.setattr(type_registry, "_REGISTRY", builtins)
+    monkeypatch.setattr(type_registry, "_STATE", {"loaded": False, "loading": False})
+    monkeypatch.setattr(type_manifest, "default_manifest_path", lambda: target)
+
+    report = run_doctor_checks(source_root=root, dream_studio_home=tmp_path / "home")
+
+    check = report["checks"]["pack_work_order_types"]
+    assert check["ok"] is False and str(target) in check["error"], check
+    assert report["status"] in ("attention_required", "fail")

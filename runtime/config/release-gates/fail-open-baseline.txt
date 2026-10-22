@@ -332,8 +332,8 @@ core/health/doctor_checks.py|36|falsy-return
 core/health/doctor_main.py|272|bare-except-pass
 core/health/doctor_skill_sync.py|187|falsy-return
 core/health/doctor_skill_sync.py|191|falsy-return
-core/health/doctor_skill_sync.py|252|falsy-return
-core/health/doctor_skill_sync.py|282|falsy-return
+core/health/doctor_skill_sync.py|258|falsy-return
+core/health/doctor_skill_sync.py|288|falsy-return
 core/health/main_ci.py|110|falsy-return
 core/health/main_ci.py|122|falsy-return
 core/health/main_ci.py|152|bare-except-pass
