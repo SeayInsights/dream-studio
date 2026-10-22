@@ -197,10 +197,6 @@ core/config/state.py|355|bare-except-pass
 core/config/state.py|363|falsy-return
 core/config/state.py|83|falsy-return
 core/decisions/emitter.py|166|falsy-return
-core/design_briefs/mutations.py|147|bare-except-pass
-core/design_briefs/mutations.py|199|bare-except-pass
-core/design_briefs/mutations.py|257|bare-except-pass
-core/design_briefs/mutations.py|86|bare-except-pass
 core/eval/baseline.py|146|falsy-return
 core/eval/baseline.py|158|falsy-return
 core/eval/baseline.py|160|falsy-return
@@ -459,7 +455,7 @@ core/skills/invocation.py|176|bare-except-pass
 core/skills/invocation.py|183|falsy-return
 core/skills/invocation.py|279|bare-except-pass
 core/skills/invocation.py|281|bare-except-pass
-core/skills/invocation.py|404|bare-except-pass
+core/skills/invocation.py|405|bare-except-pass
 core/skills/queries.py|23|falsy-return
 core/skills/queries.py|69|bare-except-pass
 core/skills/queries.py|85|bare-except-pass
@@ -534,9 +530,9 @@ core/work_orders/artifacts.py|357|falsy-return
 core/work_orders/artifacts.py|368|falsy-return
 core/work_orders/carry_over.py|370|bare-except-pass
 core/work_orders/close_gates.py|217|bare-except-pass
-core/work_orders/close_gates.py|773|falsy-return
-core/work_orders/close_gates.py|788|falsy-return
-core/work_orders/close_gates.py|852|falsy-return
+core/work_orders/close_gates.py|777|falsy-return
+core/work_orders/close_gates.py|792|falsy-return
+core/work_orders/close_gates.py|856|falsy-return
 core/work_orders/close_main.py|1109|bare-except-pass
 core/work_orders/close_main.py|1139|bare-except-pass
 core/work_orders/close_main.py|1232|bare-except-pass
