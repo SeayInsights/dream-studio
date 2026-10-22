@@ -863,9 +863,16 @@ def guard_real_homedir(tmp_path, monkeypatch, request):
     # scrubbed they would check ~/.claude whatever the shell said, and report a second identity
     # healthy because the first one is (a decoy root that said "nothing here" still passed).
     # They are never collected by default, so exempting them leaves every other test scrubbed.
+    #
+    # ONLY THE CONFIG ROOT is exempt: it is the one variable an install check reads
+    # (claude_config_root()). The plugin root and the transcripts directory name where a
+    # running Claude Code session keeps its plugin and its history, which no install check asks
+    # about, so they are scrubbed for every test.
+    _scrubbed = ("CLAUDE_PLUGIN_ROOT", "CLAUDE_PROJECTS_DIR")
     if request.node.get_closest_marker("install_check") is None:
-        for _ambient in ("CLAUDE_CONFIG_DIR", "CLAUDE_PLUGIN_ROOT", "CLAUDE_PROJECTS_DIR"):
-            monkeypatch.delenv(_ambient, raising=False)
+        _scrubbed = ("CLAUDE_CONFIG_DIR", *_scrubbed)
+    for _ambient in _scrubbed:
+        monkeypatch.delenv(_ambient, raising=False)
 
     # Reset machine_id process-level cache so each test gets a fresh hermetic ID.
     try:

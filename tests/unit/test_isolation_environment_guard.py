@@ -194,6 +194,12 @@ pytestmark = pytest.mark.install_check
 
 def test_an_install_check_sees_the_operators_config_root():
     assert os.environ.get("CLAUDE_CONFIG_DIR") == os.environ["EXPECTED_CONFIG_DIR"]
+
+
+def test_an_install_check_still_does_not_see_the_session_plugin_or_transcripts():
+    # Only the config root is exempt: it is all an install check reads.
+    assert "CLAUDE_PLUGIN_ROOT" not in os.environ
+    assert "CLAUDE_PROJECTS_DIR" not in os.environ
 """
 
 _NOT_AN_INSTALL_CHECK = """
@@ -208,14 +214,19 @@ def test_an_ordinary_test_in_the_same_session_does_not():
 def test_an_install_check_sees_the_operators_config_root_and_no_other_test_does(tmp_path):
     """The scrub must not blind the tests whose whole job is to check the operator's install."""
     identity = str(tmp_path / "another-identity")
-    extra_env = {"CLAUDE_CONFIG_DIR": identity, "EXPECTED_CONFIG_DIR": identity}
+    extra_env = {
+        "CLAUDE_CONFIG_DIR": identity,
+        "EXPECTED_CONFIG_DIR": identity,
+        "CLAUDE_PLUGIN_ROOT": str(tmp_path / "a-plugin"),
+        "CLAUDE_PROJECTS_DIR": str(tmp_path / "projects"),
+    }
     checked = _session(
         tmp_path / "a",
         _INSTALL_CHECK_AMBIENT,
         extra_env=extra_env,
         pytest_args=("-m", "install_check"),
     )
-    assert "1 passed" in checked, checked
+    assert "2 passed" in checked, checked
     ordinary = _session(tmp_path / "b", _NOT_AN_INSTALL_CHECK, extra_env=extra_env)
     assert "1 passed" in ordinary, ordinary
 
