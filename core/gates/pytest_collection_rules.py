@@ -10,8 +10,8 @@ they live in three places this module reads:
   * the repo's pytest config (`pytest.toml`, `.pytest.toml`, `pytest.ini`, `.pytest.ini`,
     `pyproject.toml`, `tox.ini`, `setup.cfg`, in pytest's order of precedence): the three name
     patterns, `testpaths`, `norecursedirs` (pytest's default set when the repo names none),
-    `collect_imported_tests`, and the `--ignore`, `--ignore-glob` and `--deselect` options in
-    `addopts`;
+    `collect_imported_tests`, the `--ignore`, `--ignore-glob` and `--deselect` options in
+    `addopts`, and a bare path in `addopts`, which is an argument and replaces `testpaths`;
   * `conftest.py` files, read with `ast` and never imported: `collect_ignore` and
     `collect_ignore_glob`, where only the NEAREST conftest that defines the name is read, as
     pytest reads it, so a sub-directory conftest masks its parent's list;
@@ -24,15 +24,23 @@ else that touches the name (a conditional assignment, `os.path.join`, a comprehe
 import) is `Unevaluable`, and a reference under that conftest fails saying so. Accepting it
 would be accepting on doubt, the fail-open this gate exists to remove. The same refusal applies
 to a conftest that defines a hook which changes what is collected (`pytest_collect_file` and its
-relatives), names `pytest_plugins`, or reaches for `config.pluginmanager`: the resolver models
-pytest's stock collection, and answering for a different one would be a guess.
+relatives), names `pytest_plugins`, reaches for `config.pluginmanager`, or assigns to
+`config.option` or calls `addinivalue_line` on a collection setting: the resolver models pytest's
+stock collection, and answering for a different one would be a guess. A conftest that always
+raises when pytest loads it (a top-level `raise`, `sys.exit`, a false `assert`) collects nothing
+from anything under it, and says so.
+
+EVERYTHING IS JUDGED AS A LINUX CHECKOUT WOULD: patterns match case-sensitively with `/`
+separators on every platform. pytest's own matcher folds case on Windows, so a Windows push
+could pass a path that fails the Linux CI that follows it.
 
 NOT MODELLED, deliberately: `PYTEST_ADDOPTS` and command-line options (they belong to one
 developer's shell; the repo's own `addopts` is what every run shares), plugins installed in the
 environment, `-k` / `-m` / `--noconftest` / `--confcutdir` / `--pyargs` / `--import-mode` /
-`-p <plugin>` in `addopts` (each changes collection in a way that needs evaluating marks or
-importing, so a repo that sets one gets a configuration error rather than a guess), and a
-`collect_ignore` assigned through `globals()` or `setattr`.
+`--rootdir` / `-p <plugin>` and a node id in `addopts` (each changes collection in a way that
+needs evaluating marks or importing, or a different rootdir, so a repo that sets one gets a
+configuration error rather than a guess), a `setup.cfg` with a `[pytest]` section (pytest refuses
+it, and so does this), and a `collect_ignore` assigned through `globals()` or `setattr`.
 """
 
 from __future__ import annotations
@@ -43,7 +51,6 @@ import fnmatch
 import glob
 import os
 import shlex
-import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path, PurePath
@@ -78,7 +85,17 @@ COLLECTION_HOOKS = frozenset(
         "pytest_collect_directory",
         "pytest_collection",
         "pytest_make_collect_report",
+        "pytest_sessionstart",
+        "pytest_addoption",
+        "pytest_cmdline_main",
+        "pytest_cmdline_parse",
+        "pytest_load_initial_conftests",
     }
+)
+
+#: ini options a conftest could change while pytest is configuring
+_COLLECTION_INI = frozenset(
+    {"norecursedirs", "testpaths", "python_files", "python_classes", "python_functions"}
 )
 
 _CONFTEST_LISTS = ("collect_ignore", "collect_ignore_glob")
@@ -90,7 +107,19 @@ _PLUGIN_REGISTRATION = frozenset({"register", "import_plugin", "consider_module"
 #: `addopts` options that change what is collected in a way that cannot be evaluated from
 #: source. Each takes a value except those in _FLAG_ONLY.
 _UNMODELLED_OPTIONS = frozenset(
-    {"-k", "-m", "--noconftest", "--confcutdir", "--pyargs", "--import-mode", "--rootdir"}
+    {
+        "-k",
+        "-m",
+        "--noconftest",
+        "--confcutdir",
+        "--pyargs",
+        "--import-mode",
+        "--rootdir",
+        "--lf",
+        "--last-failed",
+        "--sw",
+        "--stepwise",
+    }
 )
 _FLAG_ONLY = frozenset({"--noconftest", "--pyargs"})
 
@@ -158,6 +187,15 @@ def _options_from(path: Path) -> dict[str, Any] | None:
         return dict(legacy) if isinstance(legacy, dict) else None
 
     parser = _read_ini(path)
+    if (
+        path.name == "setup.cfg"
+        and parser.has_section("pytest")
+        and not parser.has_section("tool:pytest")
+    ):
+        raise CollectionConfigError(
+            "cannot read pytest config setup.cfg: it has a [pytest] section, which pytest "
+            "refuses (the section is [tool:pytest])"
+        )
     if path.name in ("pytest.ini", ".pytest.ini"):  # always the source, even when empty
         return dict(parser["pytest"]) if parser.has_section("pytest") else {}
     section = "tool:pytest" if path.name == "setup.cfg" else "pytest"
@@ -207,11 +245,45 @@ class _Addopts:
     ignore_glob: tuple[str, ...] = ()
     deselect: tuple[str, ...] = ()
     collect_in_virtualenv: bool = False
+    paths: tuple[str, ...] = ()
 
 
-def _parse_addopts(tokens: tuple[str, ...], source: str) -> _Addopts:
+#: Options pytest reads a separate value for. Their value must not be mistaken for a path.
+_VALUE_OPTIONS = frozenset(
+    {
+        "-W",
+        "-o",
+        "-c",
+        "-n",
+        "-r",
+        "--tb",
+        "--durations",
+        "--durations-min",
+        "--maxfail",
+        "--override-ini",
+        "--config-file",
+        "--junitxml",
+        "--junit-xml",
+        "--log-level",
+        "--log-cli-level",
+        "--basetemp",
+        "--capture",
+        "--color",
+        "--show-capture",
+        "--numprocesses",
+        "--dist",
+        "--cov",
+        "--cov-report",
+        "--timeout",
+        "--asyncio-mode",
+    }
+)
+
+
+def _parse_addopts(tokens: tuple[str, ...], source: str, root: Path | None = None) -> _Addopts:
     found: dict[str, list[str]] = {"--ignore": [], "--ignore-glob": [], "--deselect": []}
     parsed = _Addopts()
+    paths: list[str] = []
     index = 0
 
     def refuse(token: str) -> CollectionConfigError:
@@ -243,7 +315,17 @@ def _parse_addopts(tokens: tuple[str, ...], source: str) -> _Addopts:
                 index += 1
             if not plugin.startswith("no:"):
                 raise refuse("-p " + plugin)
+        elif token in _VALUE_OPTIONS or (name in _VALUE_OPTIONS and not equals):
+            index += 1  # a separate value (`--tb short`): not a path
+        elif not token.startswith("-"):
+            # a bare word is a path pytest is run on (which replaces testpaths) or the value of an
+            # option this does not know; it is a path when it names something in the repository
+            if "::" in token:
+                raise refuse(token)
+            if root is not None and (root / token).exists():
+                paths.append(token)
         index += 1
+    parsed.paths = tuple(paths)
     parsed.ignore = tuple(found["--ignore"])
     parsed.ignore_glob = tuple(found["--ignore-glob"])
     parsed.deselect = tuple(found["--deselect"])
@@ -257,21 +339,30 @@ def _parse_addopts(tokens: tuple[str, ...], source: str) -> _Addopts:
 
 def fnmatch_ex(pattern: str, path: str | os.PathLike[str]) -> bool:
     """pytest's `fnmatch_ex`: a pattern with no separator matches the final name, one with a
-    separator matches the whole path (with `*/` put in front when the pattern is relative)."""
+    separator matches the whole path (with `*/` put in front when the pattern is relative).
+
+    Judged as a POSIX checkout would, whatever platform this runs on: separators are `/` and
+    case matters. pytest's own matcher folds case on Windows, so `tests/Test_c.py` matches
+    `test_*.py` there and not on Linux, which is where CI runs; a gate that passed on the first
+    and failed on the second would be a push that goes red after the fact."""
     path = PurePath(path)
-    if sys.platform.startswith("win") and os.sep not in pattern and "/" in pattern:
-        pattern = pattern.replace("/", os.sep)
-    if os.sep not in pattern:
+    pattern = pattern.replace("\\", "/")
+    if "/" not in pattern:
         name = path.name
     else:
-        name = str(path)
-        if path.is_absolute() and not os.path.isabs(pattern):
-            pattern = f"*{os.sep}{pattern}"
-    return fnmatch.fnmatch(name, pattern)
+        name = path.as_posix()
+        if path.is_absolute() and not pattern.startswith("/") and pattern[1:2] != ":":
+            pattern = f"*/{pattern}"
+    return fnmatch.fnmatchcase(name, pattern)
 
 
 def _absolute(base: Path, value: str) -> Path:
     return Path(os.path.abspath(base / value.replace("/", os.sep)))
+
+
+def _same_path(a: Path, b: Path) -> bool:
+    """Paths are equal as a POSIX checkout sees them: separators folded, case kept."""
+    return a.as_posix() == b.as_posix()
 
 
 # --------------------------------------------------------------------------
@@ -410,6 +501,38 @@ def collection_hook_problem(tree: ast.Module) -> str | None:
             and "pluginmanager" in ast.unparse(node.func)
         ):
             return f"registers a plugin through `{ast.unparse(node.func)}` (`pluginmanager`)"
+        if isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if any(".option" in ast.unparse(target) for target in targets):
+                return "assigns to `config.option`, which can change what is collected"
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "addinivalue_line"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value in _COLLECTION_INI
+        ):
+            return f"changes `{node.args[0].value}` through `addinivalue_line`"
+    return None
+
+
+def conftest_raise_problem(tree: ast.Module) -> str | None:
+    """A top-level statement of a conftest that always raises: pytest then fails to load it and
+    collects nothing from anything under it."""
+    for stmt in tree.body:
+        if isinstance(stmt, ast.Raise):
+            return "always raises when pytest loads it"
+        if (
+            isinstance(stmt, ast.Assert)
+            and isinstance(stmt.test, ast.Constant)
+            and not stmt.test.value
+        ):
+            return "always fails an assert when pytest loads it"
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+            called = ast.unparse(stmt.value.func)
+            if called in ("sys.exit", "exit", "quit", "pytest.exit", "pytest.fail", "pytest.skip"):
+                return f"always calls `{called}` when pytest loads it"
     return None
 
 
@@ -421,7 +544,7 @@ def conftest_collection_problem(path: Path) -> str | None:
         return f"does not parse (line {exc.lineno})"
     except (ValueError, UnicodeDecodeError, OSError, MemoryError, RecursionError):
         return "is not readable as python source"
-    return collection_hook_problem(tree)
+    return conftest_raise_problem(tree) or collection_hook_problem(tree)
 
 
 @dataclass
@@ -451,14 +574,16 @@ class CollectionRules:
         self.testpaths = _args(options, "testpaths", ())
         self.collect_imported_tests = _flag(options, "collect_imported_tests", True)
         addopts = _parse_addopts(
-            _args(options, "addopts", ()), self.config_file or "pytest configuration"
+            _args(options, "addopts", ()), self.config_file or "pytest configuration", root
         )
+        self.positional = addopts.paths
         self.ignore = addopts.ignore
         self.ignore_glob = addopts.ignore_glob
         self.deselect = addopts.deselect
         self.collect_in_virtualenv = addopts.collect_in_virtualenv
         self._conftests: dict[Path, _Conftest | None] = {}
         self._roots: list[Path] | None = None
+        self._collected: list[Path] | None = None
 
     # -- conftest files ---------------------------------------------------
 
@@ -477,6 +602,7 @@ class CollectionRules:
                 else:
                     found.lists = string_lists(tree, _CONFTEST_LISTS)
                     found.hook_problem = collection_hook_problem(tree)
+                    found.error = conftest_raise_problem(tree)
             self._conftests[directory] = found
         return self._conftests[directory]
 
@@ -532,11 +658,38 @@ class CollectionRules:
         Testpaths that match nothing make pytest fall back to the whole tree."""
         if self._roots is None:
             found: list[Path] = []
-            for pattern in self.testpaths:
-                for match in sorted(glob.glob(pattern, root_dir=self.root, recursive=True)):
-                    found.append(Path(os.path.abspath(self.root / match)))
+            if self.positional:  # paths in addopts are arguments, which replace testpaths
+                found = [Path(os.path.abspath(self.root / p)) for p in self.positional]
+            else:
+                for pattern in self.testpaths:
+                    for match in sorted(glob.glob(pattern, root_dir=self.root, recursive=True)):
+                        found.append(Path(os.path.abspath(self.root / match)))
             self._roots = found or [self.root]
         return self._roots
+
+    def collected_files(self) -> list[Path]:
+        """Every file a bare run collects, in the order it collects them (pytest scans each
+        directory's entries sorted by name, files and directories together)."""
+        if self._collected is None:
+            found: list[Path] = []
+            for start in self.roots():
+                if start.is_file():
+                    found.append(start)
+                    continue
+                for directory, subdirs, names in os.walk(start):
+                    here = Path(directory)
+                    subdirs[:] = [d for d in subdirs if self._ignored(here / d, True) is None]
+                    for name in names:
+                        path = here / name
+                        if (
+                            name.endswith(".py")
+                            and any(fnmatch_ex(p, path) for p in self.python_files)
+                            and self._ignored(path, False) is None
+                        ):
+                            found.append(path)
+            found.sort(key=lambda p: p.relative_to(self.root).parts)
+            self._collected = found
+        return self._collected
 
     def under_a_root(self, path: Path) -> bool:
         """Whether a bare run starts at `path` or above it."""
@@ -545,7 +698,8 @@ class CollectionRules:
     def explicit(self, path: Path) -> bool:
         """True when `path` is itself a testpath: an explicit argument, so `python_files` and
         the exclusions do not apply to it."""
-        return self.testpaths != () and path in self.roots() and path != self.root
+        given = bool(self.positional or self.testpaths)
+        return given and path in self.roots() and path != self.root
 
     def _ignored(self, entry: Path, is_dir: bool) -> str | None:
         rel = self._rel(entry)
@@ -562,10 +716,10 @@ class CollectionRules:
                     f"({value.why}), so it cannot say whether pytest collects {rel}"
                 )
             for item in value:
-                if _absolute(conftest.path.parent, item) == entry:
+                if _same_path(_absolute(conftest.path.parent, item), entry):
                     return f"`collect_ignore` in {where} names `{item}`, which excludes {rel}"
         for item in self.ignore:
-            if _absolute(self.root, item) == entry:
+            if _same_path(_absolute(self.root, item), entry):
                 return f"`--ignore {item}` in addopts ({self.config_file}) excludes {rel}"
 
         globbed = self._nearest(entry.parent, "collect_ignore_glob")
@@ -578,10 +732,12 @@ class CollectionRules:
                     f"({value.why}), so it cannot say whether pytest collects {rel}"
                 )
             for item in value:
-                if fnmatch.fnmatch(str(entry), str(_absolute(conftest.path.parent, item))):
+                if fnmatch.fnmatchcase(
+                    entry.as_posix(), _absolute(conftest.path.parent, item).as_posix()
+                ):
                     return f"`collect_ignore_glob` in {where} has `{item}`, which excludes {rel}"
         for item in self.ignore_glob:
-            if fnmatch.fnmatch(str(entry), str(_absolute(self.root, item))):
+            if fnmatch.fnmatchcase(entry.as_posix(), _absolute(self.root, item).as_posix()):
                 return f"`--ignore-glob {item}` in addopts ({self.config_file}) excludes {rel}"
 
         if is_dir:
@@ -628,6 +784,11 @@ class CollectionRules:
                 reasons.append(why)
         if reasons:
             return reasons[0]
+        if self.positional:
+            return (
+                f"{self._rel(path)} is outside the paths addopts gives pytest "
+                f"({', '.join(self.positional)}), which is all a bare `pytest` run collects"
+            )
         return (
             f"{self._rel(path)} is outside testpaths ({', '.join(self.testpaths)}), which is "
             "where a bare `pytest` run starts"

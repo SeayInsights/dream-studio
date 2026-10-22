@@ -37,6 +37,7 @@ from tests.helpers.resolver_cases import (
     _CANDIDATES,
     _CASES,
     _CASES_FOLLOWUP,
+    _CASES_VERIFIER2,
     _CASES_ITEM3,
     _CASES_MORE,
     _FOLLOWUP_CANDIDATES,
@@ -51,12 +52,14 @@ from tests.helpers.resolver_cases import (
     _STAR_HELPER,
     _STAR_NOLIST,
     _SUFFIX_FILE,
+    _VERIFIER2_CANDIDATES,
+    _YIELD_FIXTURE,
 )
 from tests.helpers.resolver_cases import write_tree as _tree
 
 
-def _collected(root: Path, target: str, config: Path) -> set[str]:
-    """What pytest itself collects under `target`: node ids with parameters dropped."""
+def _collected(root: Path, target: str, config: Path, keep_params: bool = False) -> set[str]:
+    """What pytest itself collects under `target`: node ids, parameters dropped unless asked."""
     result = subprocess.run(
         [
             sys.executable,
@@ -104,6 +107,8 @@ def test_the_resolver_agrees_with_pytest_collection_on_every_candidate(tmp_path)
             "tests/test_more.py": _CASES_MORE,
             "tests/test_item3.py": _CASES_ITEM3,
             "tests/test_followup.py": _CASES_FOLLOWUP,
+            "tests/test_verifier2.py": _CASES_VERIFIER2,
+            "tests/test_yield_fixture.py": _YIELD_FIXTURE,
             "tests/star_helper.py": _STAR_HELPER,
             "tests/star_nolist.py": _STAR_NOLIST,
             **{name: body for name, (body, _) in _IMPORT_FILES.items()},
@@ -127,6 +132,8 @@ def test_the_resolver_agrees_with_pytest_collection_on_every_candidate(tmp_path)
         ("tests/test_more.py", _MORE_CANDIDATES),
         ("tests/test_item3.py", _ITEM3_CANDIDATES),
         ("tests/test_followup.py", _FOLLOWUP_CANDIDATES),
+        ("tests/test_verifier2.py", _VERIFIER2_CANDIDATES),
+        ("tests/test_yield_fixture.py", ["test_f"]),
         *((name, names) for name, (_, names) in _IMPORT_FILES.items()),
         *((name, names) for name, (_, names) in _POISONED.items()),
         ("tests/pkgrel/test_ok_rel.py", ["test_in_rel"]),
@@ -274,11 +281,15 @@ def test_the_known_limits_of_the_resolver_are_still_limits(tmp_path):
         files.update(case_files)
     root = _tree(tmp_path, files)
     collected = _collected(root, "tests", root / "pytest.ini")
+    with_ids = _collected(root, "tests", root / "pytest.ini", keep_params=True)
     resolver = NodeResolver(root)
 
     stale = []
     for name, (kind, _, node) in _KNOWN_LIMITS.items():
-        pytest_collects = node in collected or any(c.startswith(node + "::") for c in collected)
+        if "[" in node:  # a parametrized id is compared whole
+            pytest_collects = node in with_ids
+        else:
+            pytest_collects = node in collected or any(c.startswith(node + "::") for c in collected)
         resolver_accepts = resolver.resolve(node) is None
         holds = (
             (resolver_accepts and not pytest_collects)
@@ -294,3 +305,66 @@ def test_the_known_limits_of_the_resolver_are_still_limits(tmp_path):
     assert not stale, "\n".join(stale)
     kinds = {kind for kind, _, _ in _KNOWN_LIMITS.values()}
     assert kinds == {"accept", "refuse"}
+
+
+#: Limits that need a configuration or a conftest of their own, so they cannot share the tree
+#: above: a conftest that cannot be imported aborts pytest's whole session, and doctest items
+#: exist only under `--doctest-modules`.
+_ISOLATED_LIMITS = {
+    "a product module that raises when imported": (
+        "accept",
+        {
+            "pytest.ini": "[pytest]\ntestpaths = tests\n",
+            "core/__init__.py": "",
+            "core/boom.py": "raise RuntimeError('x')\n",
+            "tests/test_a.py": "import core.boom\n\n\ndef test_ok():\n    pass\n",
+        },
+        "tests/test_a.py::test_ok",
+    ),
+    "a conftest that imports a module missing from the environment": (
+        "accept",
+        {
+            "pytest.ini": "[pytest]\n",
+            "tests/conftest.py": "import not_installed_zzz\n",
+            "tests/test_a.py": "def test_ok():\n    pass\n",
+        },
+        "tests/test_a.py::test_ok",
+    ),
+    "a doctest item collected under --doctest-modules": (
+        "refuse",
+        {
+            "pytest.ini": "[pytest]\naddopts = --doctest-modules\n",
+            "tests/lib.py": 'def f():\n    """\n    >>> 1\n    1\n    """\n',
+            "tests/test_a.py": "def test_ok():\n    pass\n",
+        },
+        "tests/lib.py::lib.f",
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_ISOLATED_LIMITS))
+def test_the_limits_that_need_their_own_configuration_are_still_limits(tmp_path, name):
+    kind, files, node = _ISOLATED_LIMITS[name]
+    root = _tree(tmp_path, files)
+    env = {k: v for k, v in os.environ.items() if k != "PYTEST_ADDOPTS"}
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"]
+        + ["--rootdir", str(root), "-c", str(root / "pytest.ini")],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=120,
+        env=env,
+    )
+    collected = {
+        line.strip()
+        for line in result.stdout.splitlines()
+        if "::" in line and not line.startswith((" ", "="))
+    }
+    pytest_collects = node in collected
+    resolver_accepts = NodeResolver(root).resolve(node) is None
+    if kind == "accept":
+        assert resolver_accepts and not pytest_collects, (result.stdout, result.stderr)
+    else:
+        assert pytest_collects and not resolver_accepts, (result.stdout, result.stderr)

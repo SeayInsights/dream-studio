@@ -26,6 +26,7 @@ one definition of how CI isolates a pytest run from the operator's home.
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
 import subprocess
@@ -128,18 +129,42 @@ def _register_test_files(root: Path) -> frozenset[str] | set[str]:
     """The test files `canonical/rules.yml` names as enforcers, or `_REGISTER_UNREADABLE`."""
     import yaml
 
+    from core.gates.pytest_collection_rules import CollectionConfigError, CollectionRules
+
     try:
+        rules_config = CollectionRules(root)
         data = yaml.safe_load((root / REGISTER).read_text(encoding="utf-8"))
         rules = data["rules"] if isinstance(data, dict) else data
         named: set[str] = set()
         for rule in rules:
             for ref in rule.get("enforced_by") or []:
                 file_part = str(ref).split("::", 1)[0].strip()
-                if file_part.endswith(".py") and file_part.startswith("tests/"):
+                if file_part.endswith(".py") and _is_a_test_file(file_part, rules_config):
                     named.add(file_part)
         return named
-    except (OSError, UnicodeDecodeError, yaml.YAMLError, KeyError, TypeError, AttributeError):
+    except (
+        OSError,
+        UnicodeDecodeError,
+        yaml.YAMLError,
+        CollectionConfigError,
+        KeyError,
+        TypeError,
+        AttributeError,
+    ):
         return _REGISTER_UNREADABLE
+
+
+def _is_a_test_file(path: str, rules: Any) -> bool:
+    """A path the register names that pytest's own configuration treats as a test file: under
+    `testpaths` when the repo sets them (globs included, whether or not the directory exists
+    yet), else named like one. `core/gates/x.py` is an enforcer module, not a test."""
+    if rules.testpaths:
+        return any(
+            path == tp or fnmatch.fnmatchcase(path, tp.rstrip("/") + "/*") for tp in rules.testpaths
+        )
+    from core.gates.pytest_collection_rules import fnmatch_ex
+
+    return any(fnmatch_ex(pattern, path) for pattern in rules.python_files)
 
 
 def rule_enforcement_tests(

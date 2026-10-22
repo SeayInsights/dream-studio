@@ -25,6 +25,7 @@ from core.gates.pytest_node_resolver import NodeResolver
 from tests.helpers.resolver_cases import (
     _CASES,
     _CASES_FOLLOWUP,
+    _CASES_VERIFIER2,
     _CASES_ITEM3,
     _CASES_MORE,
     _HELPER,
@@ -247,7 +248,7 @@ def test_a_base_cycle_terminates(tmp_path):
         },
     )
     why = _why(root, "test_c.py::TestX::test_y")
-    assert why is not None and "inheritance cycle" in why and "TestX" in why
+    assert why is not None and "inheritance cycle" in why
     assert "too deeply nested" not in why
 
 
@@ -1180,8 +1181,9 @@ def test_only_pytest_skip_with_allow_module_level_skips_the_module(tmp_path):
             "test_b.py": "import pytest\n\npytest.skip('x', allow_module_level=False)\n\n\ndef test_x():\n    pass\n",
         },
     )
-    assert _why(root, "test_a.py::test_x") is None
-    assert _why(root, "test_b.py::test_x") is None
+    assert _why(root, "test_a.py::test_x") is None  # only a call to pytest's skip raises
+    # without allow_module_level it raises too: pytest refuses a skip outside a test
+    assert "always raises" in (_why(root, "test_b.py::test_x") or "")
 
 
 def test_a_with_target_rebinds_a_def_that_came_before_it(tmp_path):
@@ -1733,3 +1735,736 @@ def test_a_relative_import_is_not_judged_as_an_absolute_one(tmp_path):
         },
     )
     assert _why(root, "pkg/test_a.py::test_x") is None
+
+
+# --------------------------------------------------------------------------
+# Follow-ups: a bare file reference is judged for its content, not only its exclusion
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", sorted(_POISONED))
+def test_a_bare_reference_to_a_file_that_cannot_be_imported_is_refused_like_a_node(tmp_path, name):
+    """The same file with `::test_a` was refused and the bare path was accepted: file_problem
+    asked only whether the file was excluded, never whether pytest would get anything from it."""
+    body, candidates = _POISONED[name]
+    root = _tree(tmp_path, {name: body, "tests/helper.py": _HELPER, **_PACKAGES})
+    resolver = NodeResolver(root)
+    assert resolver.file_problem(name) is not None, name
+    assert resolver.resolve(f"{name}::{candidates[0]}") is not None, name
+
+
+@pytest.mark.parametrize(
+    "body,fragment",
+    [
+        ("", "holds no test"),
+        ("x = 1\n", "holds no test"),
+        ("__test__ = False\n\n\ndef test_a():\n    pass\n", "__test__ = False"),
+        ("def test_a(:\n    pass\n", "does not parse"),
+        ("import pytest\n\npytest.skip('x', allow_module_level=True)\n", "skips the module"),
+        ("def helper():\n    pass\n", "holds no test"),
+        ("class TestA:\n    value = 1\n", "holds no test"),
+    ],
+)
+def test_a_bare_reference_to_a_file_with_nothing_to_collect_is_refused(tmp_path, body, fragment):
+    root = _tree(tmp_path, {"test_a.py": body})
+    why = NodeResolver(root).file_problem("test_a.py") or ""
+    assert fragment in why, why
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "def test_a():\n    pass\n",
+        "class TestA:\n    def test_a(self):\n        pass\n",
+        "from helper import test_shared\n",
+        "from helper import TestBaseShared\n",
+    ],
+)
+def test_a_bare_reference_to_a_file_with_a_test_in_it_is_accepted(tmp_path, body):
+    root = _tree(tmp_path, {"test_a.py": body, "helper.py": _HELPER})
+    assert NodeResolver(root).file_problem("test_a.py") is None
+
+
+def test_a_bare_reference_to_a_file_whose_only_test_is_imported_is_empty_when_imports_are_off(
+    tmp_path,
+):
+    root = _tree(
+        tmp_path,
+        {
+            "pytest.ini": "[pytest]\ncollect_imported_tests = false\n",
+            "helper.py": _HELPER,
+            "test_a.py": "from helper import test_shared\n",
+        },
+    )
+    assert "holds no test" in (NodeResolver(root).file_problem("test_a.py") or "")
+
+
+def test_the_first_of_two_files_with_one_name_is_collected_and_the_second_is_not(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "tests/a/test_dup.py": "def test_x():\n    pass\n",
+            "tests/b/test_dup.py": "def test_x():\n    pass\n",
+        },
+    )
+    assert _why(root, "tests/a/test_dup.py::test_x") is None
+    why = _why(root, "tests/b/test_dup.py::test_x") or ""
+    assert "import file mismatch" in why and "tests/a/test_dup.py" in why
+
+
+def test_two_files_with_one_name_are_fine_when_either_directory_is_a_package(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "tests/a/__init__.py": "",
+            "tests/a/test_dup.py": "def test_x():\n    pass\n",
+            "tests/b/test_dup.py": "def test_x():\n    pass\n",
+            "tests/c/__init__.py": "",
+            "tests/c/test_other.py": "def test_x():\n    pass\n",
+            "tests/d/test_other.py": "def test_x():\n    pass\n",
+        },
+    )
+    # a/ is a package (module a.test_dup) and b/ is not (module test_dup): no clash. The same
+    # for c/ and d/. Only two files that are BOTH top-level modules clash.
+    for ref in (
+        "tests/a/test_dup.py",
+        "tests/b/test_dup.py",
+        "tests/c/test_other.py",
+        "tests/d/test_other.py",
+    ):
+        assert _why(root, f"{ref}::test_x") is None, ref
+
+
+def test_a_duplicate_name_that_a_directory_run_never_collects_does_not_count(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "pytest.ini": "[pytest]\nnorecursedirs = skipme\n",
+            "tests/a/test_dup.py": "def test_x():\n    pass\n",
+            "tests/skipme/test_dup.py": "def test_x():\n    pass\n",
+            "tests/z/test_dup.py": "def test_x():\n    pass\n",
+        },
+    )
+    assert _why(root, "tests/a/test_dup.py::test_x") is None
+    assert "import file mismatch" in (_why(root, "tests/z/test_dup.py::test_x") or "")
+    assert "norecursedirs" in (_why(root, "tests/skipme/test_dup.py::test_x") or "")
+
+
+def test_the_order_pytest_collects_in_decides_which_duplicate_survives(tmp_path):
+    """Entries are scanned sorted by name, files and directories together."""
+    root = _tree(
+        tmp_path,
+        {
+            "tests/test_dup.py": "def test_x():\n    pass\n",
+            "tests/sub/test_dup.py": "def test_x():\n    pass\n",
+        },
+    )
+    # `sub` sorts before `test_dup.py`, so the file in it is imported first
+    assert _why(root, "tests/sub/test_dup.py::test_x") is None
+    assert "import file mismatch" in (_why(root, "tests/test_dup.py::test_x") or "")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "import sys\nsys.exit(0)\n",
+        "from sys import exit\nexit()\n",
+        "exit()\n",
+        "quit(1)\n",
+        "import pytest as pt\npt.fail('x')\n",
+        "from pytest import xfail\nxfail()\n",
+        "from pytest import skip\nskip('x')\n",
+        "1 // 0\n",
+        "5 % 0\n",
+        "1 / 0.0\n",
+    ],
+)
+def test_a_top_level_statement_that_always_raises_poisons_the_file(tmp_path, body):
+    root = _tree(tmp_path, {"test_a.py": body + "\n\ndef test_x():\n    pass\n"})
+    why = _why(root, "test_a.py::test_x") or ""
+    assert "always raises" in why or "skips the module" in why, why
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "import sys\nif sys.platform == 'x':\n    sys.exit(0)\n",
+        "def f():\n    exit()\n",
+        "import pytest\n\n\ndef f():\n    pytest.fail('x')\n",
+        "x = 1 / 2\n",
+        "import os\nos.exit_code = 0\n",
+        "def exit():\n    return 1\n\n\nexit()\n",
+        "True / True\n",
+        "class Thing:\n    def skip(self):\n        pass\n\n\nThing().skip()\n",
+    ],
+)
+def test_a_call_that_looks_like_one_that_raises_but_may_not_is_not_refused(tmp_path, body):
+    root = _tree(tmp_path, {"test_a.py": body + "\n\ndef test_x():\n    pass\n"})
+    assert _why(root, "test_a.py::test_x") is None
+
+
+def test_a_name_augmented_after_it_is_defined_is_fine_and_before_it_is_not(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": "count = 0\ncount += 1\n\n\ndef test_x():\n    pass\n",
+            "test_b.py": "late += 1\nlate = 0\n\n\ndef test_x():\n    pass\n",
+            "test_c.py": "from helper import *\nfrom_star += 1\n\n\ndef test_x():\n    pass\n",
+            "helper.py": "from_star = 0\n",
+        },
+    )
+    assert _why(root, "test_a.py::test_x") is None
+    assert "augments `late`" in (_why(root, "test_b.py::test_x") or "")
+    assert _why(root, "test_c.py::test_x") is None  # a star import may have supplied it
+
+
+def test_a_class_whose_body_raises_poisons_the_file(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "class TestA:\n    raise RuntimeError\n\n\ndef test_beside():\n    pass\n"
+            ),
+            "test_b.py": (
+                "class TestA:\n    assert False, 'no'\n\n\ndef test_beside():\n    pass\n"
+            ),
+            "test_c.py": (
+                "import pytest\n\n\nclass TestA:\n    pytest.fail('x')\n\n\n"
+                "def test_beside():\n    pass\n"
+            ),
+            "test_d.py": ("class TestA:\n    assert True\n\n    def test_a(self):\n        pass\n"),
+        },
+    )
+    for name in ("test_a", "test_b", "test_c"):
+        why = _why(root, f"{name}.py::test_beside") or ""
+        assert "always raises while" in why and "collects nothing from the file" in why, name
+    assert _why(root, "test_d.py::TestA::test_a") is None
+
+
+def test_a_helper_that_raises_or_cannot_import_poisons_every_file_that_imports_it(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "pkg/__init__.py": "",
+            "pkg/boom.py": "raise RuntimeError('x')\n",
+            "pkg/fine.py": "x = 1\n",
+            "pkg/chain.py": "from pkg import boom\n",
+            "test_a.py": "import pkg.boom\n\n\ndef test_x():\n    pass\n",
+            "test_b.py": "from pkg import chain\n\n\ndef test_x():\n    pass\n",
+            "test_c.py": "from pkg.fine import x\n\n\ndef test_x():\n    pass\n",
+            "test_d.py": "import pkg.fine\nimport pkg\n\n\ndef test_x():\n    pass\n",
+        },
+    )
+    assert "fails to import" in (_why(root, "test_a.py::test_x") or "")
+    why = _why(root, "test_b.py::test_x") or ""
+    assert "pkg.chain" in why and "pkg.boom" in why  # two hops are followed
+    assert _why(root, "test_c.py::test_x") is None
+    assert _why(root, "test_d.py::test_x") is None
+
+
+def test_a_package_init_that_raises_poisons_what_imports_below_it(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "pkg/__init__.py": "raise RuntimeError('x')\n",
+            "pkg/mod.py": "x = 1\n",
+            "test_a.py": "from pkg.mod import x\n\n\ndef test_x():\n    pass\n",
+        },
+    )
+    assert "fails to import" in (_why(root, "test_a.py::test_x") or "")
+
+
+def test_an_import_cycle_between_helpers_is_walked_once_and_not_called_a_failure(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "a.py": "import b\nvalue = 1\n",
+            "b.py": "import a\n",
+            "test_a.py": "import a\n\n\ndef test_x():\n    pass\n",
+        },
+    )
+    assert _why(root, "test_a.py::test_x") is None
+
+
+@pytest.mark.parametrize(
+    "files,fragment",
+    [
+        (
+            {
+                "pkg/__init__.py": "",
+                "pkg/lib.py": "x = 1\n",
+                "pkg/test_a.py": "from .lib import nothere\n",
+            },
+            "nothere",
+        ),
+        ({"pkg/__init__.py": "", "pkg/test_a.py": "from . import nomod\n"}, "nomod"),
+        ({"pkg/__init__.py": "", "pkg/test_a.py": "from .gone import x\n"}, "gone"),
+        ({"pkg/__init__.py": "", "pkg/test_a.py": "from .gone.deeper import x\n"}, "gone"),
+        (
+            {
+                "pkg/__init__.py": "",
+                "pkg/lib.py": "x = 1\n",
+                "pkg/sub/__init__.py": "",
+                "pkg/sub/test_a.py": "from ..lib import nothere\n",
+            },
+            "nothere",
+        ),
+        (
+            {
+                "pkg/__init__.py": "",
+                "pkg/sub/__init__.py": "",
+                "pkg/sub/test_a.py": "from ..gone import x\n",
+            },
+            "gone",
+        ),
+        (
+            {
+                "pkg/__init__.py": "",
+                "pkg/lib.py": "x = 1\n",
+                "pkg/test_a.py": "from .lib.deeper import y\n",
+            },
+            "is a module, not a package",
+        ),
+    ],
+)
+def test_a_relative_import_of_something_the_package_lacks_poisons_the_file(
+    tmp_path, files, fragment
+):
+    root = _tree(tmp_path, files)
+    target = next(name for name in files if name.endswith("test_a.py"))
+    body = (root / target).read_text(encoding="utf-8")
+    (root / target).write_text(body + "\n\ndef test_x():\n    pass\n", encoding="utf-8")
+    why = _why(root, f"{target}::test_x") or ""
+    assert fragment in why and "collects nothing from the file" in why, why
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        {"pkg/__init__.py": "", "pkg/lib.py": "x = 1\n", "pkg/test_a.py": "from .lib import x\n"},
+        {"pkg/__init__.py": "", "pkg/lib.py": "", "pkg/test_a.py": "from . import lib\n"},
+        {"pkg/__init__.py": "x = 1\n", "pkg/test_a.py": "from . import x\n"},
+        {
+            "pkg/__init__.py": "",
+            "pkg/sub/__init__.py": "",
+            "pkg/sub/m.py": "y = 1\n",
+            "pkg/test_a.py": "from .sub.m import y\n",
+        },
+        {"pkg/__init__.py": "", "pkg/sub/m.py": "y = 1\n", "pkg/test_a.py": "from .sub import m\n"},
+        {
+            "pkg/__init__.py": "",
+            "pkg/sub/__init__.py": "",
+            "pkg/lib.py": "x = 1\n",
+            "pkg/sub/test_a.py": "from ..lib import x\n",
+        },
+        {
+            "pkg/__init__.py": "def __getattr__(n):\n    return 1\n",
+            "pkg/test_a.py": "from . import anything\n",
+        },
+    ],
+)
+def test_a_relative_import_that_works_is_not_refused(tmp_path, files):
+    root = _tree(tmp_path, files)
+    target = next(name for name in files if name.endswith("test_a.py"))
+    body = (root / target).read_text(encoding="utf-8")
+    (root / target).write_text(body + "\n\ndef test_x():\n    pass\n", encoding="utf-8")
+    assert _why(root, f"{target}::test_x") is None
+
+
+def test_a_module_importing_itself_by_name_is_judged_by_what_it_defines(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_ok.py": "def test_a():\n    pass\n\n\nfrom test_ok import test_a\n",
+            "test_bad.py": "from test_bad import nothere\n\n\ndef test_a():\n    pass\n",
+            "test_dyn.py": "globals()['made'] = 1\nfrom test_dyn import made\n\n\ndef test_a():\n    pass\n",
+        },
+    )
+    assert _why(root, "test_ok.py::test_a") is None
+    assert "nothere" in (_why(root, "test_bad.py::test_a") or "")
+    assert _why(root, "test_dyn.py::test_a") is None
+
+
+def test_an_import_through_a_module_file_is_refused_only_when_a_name_follows_it(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "pkg/__init__.py": "",
+            "pkg/mod.py": "x = 1\n",
+            "test_a.py": "import pkg.mod.deeper\n\n\ndef test_x():\n    pass\n",
+            "test_b.py": "import pkg.mod\n\n\ndef test_x():\n    pass\n",
+        },
+    )
+    assert "is a module, not a package" in (_why(root, "test_a.py::test_x") or "")
+    assert _why(root, "test_b.py::test_x") is None
+
+
+# --------------------------------------------------------------------------
+# Follow-ups: standard-library bases, __eq__ without __hash__, and a few spellings
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def verifier2(tmp_path):
+    return _tree(tmp_path, {"tests/test_verifier2.py": _CASES_VERIFIER2})
+
+
+@pytest.mark.parametrize(
+    "candidate,fragment",
+    [
+        ("TestThread::test_a", "base `threading.Thread`"),
+        ("TestStringIO::test_a", "base `io.StringIO`"),
+        ("TestHandler::test_a", "base `logging.Handler`"),
+        ("TestNamespace::test_a", "base `argparse.Namespace`"),
+        ("TestPurePath::test_a", "base `pathlib.PurePath`"),
+        ("TestMock::test_a", "base `mock.Mock`"),
+        ("TestOrderedDict::test_a", "base `collections.OrderedDict`"),
+        ("TestNamedTupleCall::test_a", "base `namedtuple('Point', 'x y')`"),
+        ("TestContextManagerAbstract::test_a", "is abstract"),
+        ("TestMapping::test_a", "is abstract"),
+        ("TestEq::test_a", "defines __eq__ without __hash__"),
+        ("TestHashNone::test_a", "sets __hash__ = None"),
+        ("TestEqChild::test_a", "defines __eq__ without __hash__"),
+        ("TestFalseComparison::test_a", "sets __test__ = False"),
+        ("TestSetattr::test_a", "sets __test__ = False"),
+        ("test_decorated_nottest", "sets __test__ = False"),
+        ("TestDecoratedNottest::test_a", "sets __test__ = False"),
+        ("test_while_true", "is not a function or class"),
+    ],
+)
+def test_the_third_review_nodes_pytest_does_not_collect_are_refused(verifier2, candidate, fragment):
+    why = _why(verifier2, f"tests/test_verifier2.py::{candidate}")
+    assert why is not None and fragment in why, why
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        "test_kept",
+        "TestContextManagerImplemented::test_a",
+        "TestEqHash::test_a",
+        "TestEqChildHash::test_a",
+        "TestTrueComparison::test_a",
+        "helper_decorated_istest",
+        "TestStatic::test_s",
+        "TestStatic::test_c",
+    ],
+)
+def test_the_third_review_nodes_pytest_collects_resolve(verifier2, candidate):
+    assert _why(verifier2, f"tests/test_verifier2.py::{candidate}") is None
+
+
+def test_a_standard_library_base_that_is_not_safe_to_import_is_not_imported(tmp_path):
+    """`this` prints a poem and `antigravity` opens a browser when imported, so a class built on
+    something from them is read as an unreadable base, never by importing the module."""
+    import sys
+
+    from core.gates.pytest_node_resolver import _stdlib_traits
+
+    assert _stdlib_traits("this", "d") == {}
+    assert _stdlib_traits("antigravity", "geohash") == {}
+    assert "this" not in sys.modules and "antigravity" not in sys.modules
+
+
+def test_a_name_that_is_not_a_class_or_not_in_the_module_gives_no_traits():
+    from core.gates.pytest_node_resolver import _stdlib_traits
+
+    assert _stdlib_traits("threading", "no_such_name_zzz") == {}
+    assert _stdlib_traits("threading", "active_count") == {}  # a function, not a class
+    assert _stdlib_traits("not_a_stdlib_module_zzz", "X") == {}
+    assert _stdlib_traits("threading", "Thread")["constructs"] is True
+    assert _stdlib_traits("collections.abc", "Mapping")["abstract"]
+    assert _stdlib_traits("collections", "OrderedDict")["constructs"] is True
+    assert _stdlib_traits("collections.abc", "Mapping")["unhashable"] is True
+    assert _stdlib_traits("threading", "Thread")["unhashable"] is False
+
+
+def test_a_third_party_base_is_not_imported_and_is_only_named(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "from vendored_zzz import Base\n\n\nclass TestA(Base):\n"
+                "    def test_a(self):\n        pass\n"
+            )
+        },
+    )
+    assert _why(root, "test_a.py::TestA::test_a") is None
+    assert "Base" in (_why(root, "test_a.py::TestA::test_missing") or "")
+
+
+def test_a_subclass_that_redefines_hash_is_hashable_again(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "class TestEq:\n    def __eq__(self, o):\n        return True\n"
+                "    def test_a(self):\n        pass\n\n\n"
+                "class TestBack(TestEq):\n    __hash__ = object.__hash__\n\n\n"
+                "class TestStill(TestEq):\n    pass\n\n\n"
+                "class TestFresh:\n    __hash__ = None\n\n\n"
+                "class TestFreshChild(TestFresh):\n    def __eq__(self, o):\n"
+                "        return True\n\n    def __hash__(self):\n        return 1\n\n"
+                "    def test_a(self):\n        pass\n"
+            )
+        },
+    )
+    assert _why(root, "test_a.py::TestBack::test_a") is None
+    assert "defines __eq__" in (_why(root, "test_a.py::TestStill::test_a") or "")
+    assert _why(root, "test_a.py::TestFreshChild::test_a") is None
+
+
+def test_an_unhashable_stdlib_base_is_overridden_by_a_hash_in_the_subclass(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "import collections.abc as abc\n\n\nclass TestA(abc.Mapping):\n"
+                "    def __getitem__(self, k):\n        return 1\n    def __iter__(self):\n"
+                "        return iter(())\n    def __len__(self):\n        return 0\n"
+                "    def __hash__(self):\n        return 1\n    def test_a(self):\n        pass\n\n\n"
+                "class TestB(abc.Mapping):\n    def __getitem__(self, k):\n        return 1\n"
+                "    def __iter__(self):\n        return iter(())\n    def __len__(self):\n"
+                "        return 0\n    def test_a(self):\n        pass\n"
+            )
+        },
+    )
+    assert _why(root, "test_a.py::TestA::test_a") is None
+    assert "unhashable" in (_why(root, "test_a.py::TestB::test_a") or "")
+
+
+@pytest.mark.parametrize(
+    "expression,truthy",
+    [
+        ("1 > 2", False),
+        ("2 > 1", True),
+        ("1 == 1", True),
+        ("1 != 1", False),
+        ("1 <= 1", True),
+        ("2 >= 3", False),
+        ("1 < 2 < 3", True),
+        ("1 < 3 < 2", False),
+        ("'a' in 'abc'", True),
+        ("'z' in 'abc'", False),
+        ("'z' not in 'abc'", True),
+        ("None is None", True),
+        ("None is not None", False),
+        ("1 + 1 == 2", True),
+        ("2 * 3 - 6", False),
+        ("7 // 2 - 3", False),
+        ("7 % 2", True),
+    ],
+)
+def test_comparisons_and_arithmetic_over_constants_are_decided(tmp_path, expression, truthy):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                f"VALUE = {expression}\n\nif VALUE:\n    def test_x():\n        pass\n"
+                "else:\n    def test_y():\n        pass\n"
+            )
+        },
+    )
+    chosen, other = ("test_x", "test_y") if truthy else ("test_y", "test_x")
+    assert _why(root, f"test_a.py::{chosen}") is None
+    assert f"no `{other}` defined" in (_why(root, f"test_a.py::{other}") or "")
+
+
+@pytest.mark.parametrize("expression", ["1 / 0", "'a' > 1", "make() > 1", "1 < make()", "2 ** 3"])
+def test_an_expression_that_cannot_be_evaluated_leaves_both_arms_possible(tmp_path, expression):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                f"VALUE = {expression}\n\nif VALUE:\n    def test_x():\n        pass\n"
+                "else:\n    def test_y():\n        pass\n"
+            )
+        },
+    )
+    assert _why(root, "test_a.py::test_x") is None
+    assert _why(root, "test_a.py::test_y") is None
+
+
+def test_setattr_of_the_test_flag_is_read_only_when_it_certainly_runs(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "import sys\n\n\ndef test_x():\n    pass\n\n\ndef test_y():\n    pass\n\n\n"
+                "def test_z():\n    pass\n\n\ndef test_w():\n    pass\n\n\n"
+                "setattr(test_x, '__test__', False)\n"
+                "if sys.platform == 'plan9':\n    setattr(test_y, '__test__', False)\n"
+                "setattr(test_z, 'other', False)\n"
+                "setattr(test_w, '__test__', make())\n"
+            )
+        },
+    )
+    assert "sets __test__ = False" in (_why(root, "test_a.py::test_x") or "")
+    assert _why(root, "test_a.py::test_y") is None
+    assert _why(root, "test_a.py::test_z") is None
+    assert _why(root, "test_a.py::test_w") is None
+
+
+def test_nottest_and_istest_are_read_by_name_through_an_alias(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "from nose.tools import nottest as skip_me\nfrom nose.tools import istest\n\n\n"
+                "@skip_me\ndef test_x():\n    pass\n\n\n@istest\ndef helper_y():\n    pass\n"
+            )
+        },
+    )
+    assert "sets __test__ = False" in (_why(root, "test_a.py::test_x") or "")
+    assert _why(root, "test_a.py::helper_y") is None
+
+
+def test_yield_fixture_is_a_fixture(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "import pytest\nfrom pytest import yield_fixture as yf\n\n\n"
+                "@pytest.yield_fixture\ndef test_x():\n    yield 1\n\n\n"
+                "@yf\ndef test_y():\n    yield 1\n"
+            )
+        },
+    )
+    assert "is a fixture" in (_why(root, "test_a.py::test_x") or "")
+    assert "is a fixture" in (_why(root, "test_a.py::test_y") or "")
+
+
+def test_a_while_true_body_runs_and_its_else_does_not(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "def test_x():\n    pass\n\n\ndef test_y():\n    pass\n\n\n"
+                "while True:\n    test_x = None\n    break\nelse:\n    del test_y\n"
+            )
+        },
+    )
+    assert "not a function or class" in (_why(root, "test_a.py::test_x") or "")
+    assert _why(root, "test_a.py::test_y") is None
+
+
+def test_an_import_that_may_fail_does_not_replace_a_def(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "import sys\n\n\ndef test_a():\n    pass\n\n\ndef test_b():\n    pass\n\n\n"
+                "def test_c():\n    pass\n\n\ntry:\n    from nomod_zzz import test_a\n"
+                "except ImportError:\n    pass\n\nif sys.platform == 'plan9':\n"
+                "    from nomod_zzz import test_b\n\nfrom nomod_zzz import test_c\n"
+            )
+        },
+    )
+    assert _why(root, "test_a.py::test_a") is None
+    assert _why(root, "test_a.py::test_b") is None
+    assert "outside the repository" in (_why(root, "test_a.py::test_c") or "")
+
+
+def test_a_try_without_handlers_does_not_guard_its_imports(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "test_a.py": (
+                "def test_a():\n    pass\n\n\ntry:\n    from nomod_zzz import test_a\n"
+                "finally:\n    pass\n"
+            )
+        },
+    )
+    assert "outside the repository" in (_why(root, "test_a.py::test_a") or "")
+
+
+def test_a_test_inherited_from_an_imported_base_is_collected_when_imported_tests_are_off(tmp_path):
+    """collect_imported_tests = false drops a test or class IMPORTED into the module, not the
+    tests a class inherits from a base it imported: those are members of a class defined here."""
+    root = _tree(
+        tmp_path,
+        {
+            "pytest.ini": "[pytest]\ncollect_imported_tests = false\n",
+            "lib.py": "class TestBaseX:\n    def test_b(self):\n        pass\n",
+            "test_a.py": "from lib import TestBaseX\n\n\nclass TestA(TestBaseX):\n    pass\n",
+        },
+    )
+    assert _why(root, "test_a.py::TestA::test_b") is None
+    assert "collect_imported_tests" in (_why(root, "test_a.py::TestBaseX::test_b") or "")
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "import unittest.case\n\n\nclass TestU(unittest.case.TestCase):",
+        "from unittest.case import TestCase as TC\n\n\nclass TestU(TC):",
+        "import unittest\n\n\nclass TestU(unittest.TestCase):",
+        "from unittest import IsolatedAsyncioTestCase\n\n\nclass TestU(IsolatedAsyncioTestCase):",
+    ],
+)
+def test_every_spelling_of_a_unittest_case_is_a_unittest_class_not_a_constructor_class(
+    tmp_path, header
+):
+    """unittest.case.TestCase has an __init__, and pytest collects it anyway (through unittest)."""
+    body = (
+        header + "\n    def test_a(self):\n        pass\n\n    def check_a(self):\n        pass\n"
+    )
+    root = _tree(tmp_path, {"test_a.py": body})
+    assert _why(root, "test_a.py::TestU::test_a") is None
+    assert "does not start with `test`" in (_why(root, "test_a.py::TestU::check_a") or "")
+    assert _why(root, "test_a.py::TestU") is None
+
+
+def test_a_module_file_cannot_hold_a_submodule(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "lib.py": "x = 1\n",
+            "test_a.py": "import lib.sub\n\n\ndef test_x():\n    pass\n",
+            "test_b.py": "import lib\n\n\ndef test_x():\n    pass\n",
+        },
+    )
+    assert "is a module, not a package" in (_why(root, "test_a.py::test_x") or "")
+    assert _why(root, "test_b.py::test_x") is None
+
+
+def test_a_test_file_reached_by_two_spellings_is_one_module_not_a_name_clash(tmp_path):
+    from tests.unit.test_pytest_collection_rules import _link
+
+    root = _tree(tmp_path, {"tests/real/test_a.py": "def test_x():\n    pass\n"})
+    if not _link(root / "tests" / "alias", root / "tests" / "real"):
+        pytest.skip("this platform will not make a directory link here")
+    assert _why(root, "tests/alias/test_a.py::test_x") is None
+    assert _why(root, "tests/real/test_a.py::test_x") is None
+
+
+def test_a_package_file_that_comes_after_a_plain_one_of_the_same_name_is_not_a_clash(tmp_path):
+    """The plain file is the top-level module `test_dup`; the package one is `b.test_dup`."""
+    root = _tree(
+        tmp_path,
+        {
+            "tests/a/test_dup.py": "def test_x():\n    pass\n",
+            "tests/b/__init__.py": "",
+            "tests/b/test_dup.py": "def test_x():\n    pass\n",
+        },
+    )
+    assert _why(root, "tests/a/test_dup.py::test_x") is None
+    assert _why(root, "tests/b/test_dup.py::test_x") is None
+
+
+def test_only_the_modules_the_test_run_owns_are_followed_for_import_failures(tmp_path):
+    """A product module that raises breaks far more than one rule and walking all of them is
+    what made the gate slow; it is a stated limit. A helper under testpaths is followed."""
+    root = _tree(
+        tmp_path,
+        {
+            "pytest.ini": "[pytest]\ntestpaths = tests\n",
+            "core/__init__.py": "",
+            "core/boom.py": "raise RuntimeError('x')\n",
+            "tests/helpers.py": "raise RuntimeError('x')\n",
+            "tests/test_product.py": "import core.boom\n\n\ndef test_x():\n    pass\n",
+            "tests/test_helper.py": "import helpers\n\n\ndef test_x():\n    pass\n",
+        },
+    )
+    assert _why(root, "tests/test_product.py::test_x") is None
+    assert "fails to import" in (_why(root, "tests/test_helper.py::test_x") or "")

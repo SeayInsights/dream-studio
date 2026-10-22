@@ -421,3 +421,73 @@ def test_the_cost_of_the_rule_selection_is_bounded():
 def test_the_log_names_why_a_rule_test_was_selected():
     source = Path(gate.__file__).read_text(encoding="utf-8")
     assert '"rule-enforcement"' in source and 'selection["rule_enforcement_tests"]' in source
+
+
+def test_a_register_named_test_under_any_testpath_selects_them(tmp_path):
+    """The code once required a `tests/` prefix while testpaths also names `analytics/tests`,
+    so a register-named test there changed and nothing was selected."""
+    (tmp_path / "canonical").mkdir()
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.pytest.ini_options]\ntestpaths = ["tests", "analytics/tests", "pkg/*/checks"]\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "canonical" / "rules.yml").write_text(
+        "rules:\n"
+        "  - id: a-rule\n"
+        "    enforced_by:\n"
+        "      - analytics/tests/test_named.py::test_x\n"
+        "      - tests/test_plain.py\n"
+        "      - pkg/one/checks/test_glob.py::test_y\n"
+        "      - core/gates/enforcer.py\n"
+        "      - elsewhere/test_not_under_testpaths.py::test_z\n",
+        encoding="utf-8",
+    )
+    for named in (
+        "analytics/tests/test_named.py",
+        "tests/test_plain.py",
+        "pkg/one/checks/test_glob.py",
+    ):
+        assert gate.rule_enforcement_tests([named], tmp_path) == RULE_TESTS, named
+    for other in (
+        "core/gates/enforcer.py",
+        "elsewhere/test_not_under_testpaths.py",
+        "analytics/tests/test_other.py",
+    ):
+        assert gate.rule_enforcement_tests([other], tmp_path) == [], other
+
+
+def test_without_testpaths_a_register_named_file_counts_only_if_it_is_named_like_a_test(tmp_path):
+    (tmp_path / "canonical").mkdir()
+    (tmp_path / "canonical" / "rules.yml").write_text(
+        "rules:\n  - id: a-rule\n    enforced_by:\n      - checks/test_a.py::t\n"
+        "      - core/gates/enforcer.py\n",
+        encoding="utf-8",
+    )
+    assert gate.rule_enforcement_tests(["checks/test_a.py"], tmp_path) == RULE_TESTS
+    assert gate.rule_enforcement_tests(["core/gates/enforcer.py"], tmp_path) == []
+
+
+def test_a_pytest_configuration_that_cannot_be_read_selects_them(tmp_path):
+    (tmp_path / "canonical").mkdir()
+    (tmp_path / "canonical" / "rules.yml").write_text("rules: []\n", encoding="utf-8")
+    (tmp_path / "pytest.ini").write_text("[pytest\n", encoding="utf-8")
+    assert gate.rule_enforcement_tests(["README.md"], tmp_path) == RULE_TESTS
+
+
+def test_an_empty_diff_selects_nothing_even_when_the_register_cannot_be_read(tmp_path):
+    (tmp_path / "canonical").mkdir()
+    (tmp_path / "canonical" / "rules.yml").write_text("rules: [unclosed\n", encoding="utf-8")
+    assert gate.rule_enforcement_tests([], tmp_path) == []
+    assert gate.rule_enforcement_tests(["README.md"], tmp_path) == RULE_TESTS
+
+
+def test_a_data_file_under_testpaths_that_the_register_names_is_not_a_test_file(tmp_path):
+    (tmp_path / "canonical").mkdir()
+    (tmp_path / "pytest.ini").write_text("[pytest]\ntestpaths = tests\n", encoding="utf-8")
+    (tmp_path / "canonical" / "rules.yml").write_text(
+        "rules:\n  - id: a-rule\n    enforced_by:\n      - tests/data/schema.json\n"
+        "      - tests/test_a.py::t\n",
+        encoding="utf-8",
+    )
+    assert gate.rule_enforcement_tests(["tests/data/schema.json"], tmp_path) == []
+    assert gate.rule_enforcement_tests(["tests/test_a.py"], tmp_path) == RULE_TESTS

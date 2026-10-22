@@ -228,7 +228,10 @@ gates:
       when imported (a top-level raise, a missing repository module or name, an undefined
       base) is refused whole. What the resolver still gets wrong, in either direction, is
       listed in its module docstring and pinned against pytest by
-      tests/unit/test_pytest_collection_agreement.py. An
+      tests/unit/test_pytest_collection_agreement.py. A file named without a test is judged
+      for content too (it must hold a test pytest would collect), and every pattern is matched
+      as a Linux checkout matches it on any platform, since CI is Linux. The gate reads the
+      import graph of the tests and takes about 0.8 s. An
       empty or unreadable register fails. The register exists to separate the
       statements something enforces from the ones nothing does; its previous checker
       (core/gates/rule_registry.py) was culled in the same sweep that removed several of

@@ -730,6 +730,10 @@ _PACKAGES = {
     "tests/pkgmiss/__init__.py": "",
     "tests/pkgmiss/present.py": "def test_in_present():\n    pass\n",
     "tests/broken_helper.py": "def broken(:\n    pass\n",
+    "tests/helper_raises.py": "raise RuntimeError('at import')\n",
+    "tests/helper_imports_missing.py": "from pkgmiss.gone import thing\n",
+    # the FIRST of two files with one name: pytest imports it, so it is collected
+    "tests/dupx/test_dup.py": "def test_a():\n    pass\n",
 }
 
 # More files that raise when imported, each from a cause a static read can PROVE: a statement
@@ -761,6 +765,78 @@ _POISONED.update(
             "import broken_helper\n\n\ndef test_beside_the_cause():\n    pass\n",
             ["test_beside_the_cause"],
         ),
+        # relative imports inside a package: a name, a submodule, a package member, two levels up
+        "tests/pkgrel/test_rel_missing_name.py": (
+            "from .helper_rel import nothere\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/pkgrel/test_rel_missing_member.py": (
+            "from . import nomod\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/pkgrel/test_rel_missing_sub.py": (
+            "from .gone import x\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/pkgrel/sub/test_rel_up_missing.py": (
+            "from ..helper_rel import nothere\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        # a top-level call that always raises
+        "tests/test_skip_plain.py": (
+            "import pytest\n\npytest.skip('x')\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_skip_false.py": (
+            "import pytest\n\npytest.skip('x', allow_module_level=False)\n\n\n"
+            "def test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_xfail_call.py": (
+            "import pytest\n\npytest.xfail('x')\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_fail_call.py": (
+            "import pytest\n\npytest.fail('x')\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_zero_division.py": (
+            "1 / 0\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        # a class body that raises, a name augmented before it exists
+        "tests/test_class_raises.py": (
+            "class TestA:\n    raise RuntimeError('in the body')\n\n    def test_a(self):\n"
+            "        pass\n",
+            ["TestA::test_a"],
+        ),
+        "tests/test_class_asserts.py": (
+            "class TestA:\n    assert False\n\n    def test_a(self):\n        pass\n",
+            ["TestA::test_a"],
+        ),
+        "tests/test_augment_undefined.py": (
+            "nothere += 1\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        # a helper the file imports raises, imports what is not there, or is not a package
+        "tests/test_helper_raises.py": (
+            "import helper_raises\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_helper_imports_missing.py": (
+            "import helper_imports_missing\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_not_a_package.py": (
+            "import pkgmiss.present.deeper\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        "tests/test_self_import.py": (
+            "from test_self_import import nothere\n\n\ndef test_beside_the_cause():\n    pass\n",
+            ["test_beside_the_cause"],
+        ),
+        # the second of two files with one name in directories that are not packages
+        "tests/dupy/test_dup.py": ("def test_a():\n    pass\n", ["test_a"]),
     }
 )
 
@@ -770,6 +846,11 @@ _IMPORT_FILES = {
         "try:\n    from pkgmiss.gone import thing\nexcept ImportError:\n    thing = None\n\n\n"
         "def test_guarded():\n    pass\n",
         ["test_guarded"],
+    ),
+    # importing itself by name works for what it has defined above the import
+    "tests/test_self_ok.py": (
+        "def test_a():\n    pass\n\n\nfrom test_self_ok import test_a  # noqa: E402,F401\n",
+        ["test_a"],
     ),
     "tests/test_import_ok.py": (
         "import pkgmiss.present\nfrom pkgmiss import present\n"
@@ -1049,6 +1130,226 @@ _FOLLOWUP_CANDIDATES = [
     "test_partial",
     "test_partial_attr",
     "TestClassAlias::test_from_outer",
+]
+
+# The third review: standard-library bases that bring a constructor, a missing hash or abstract
+# methods of their own; `__eq__` without `__hash__`; constants that are comparisons; the setattr,
+# nottest and staticmethod spellings; and `while True`, which always runs its body.
+_CASES_VERIFIER2 = """\
+import argparse
+import collections
+import collections.abc
+import contextlib
+import io
+import logging
+import pathlib
+import threading
+import unittest.case
+from collections import namedtuple
+from unittest import mock
+
+try:
+    from nomod_zzz import test_kept
+except ImportError:
+    pass
+
+
+def test_kept():
+    pass
+
+
+def nottest(obj):
+    obj.__test__ = False
+    return obj
+
+
+def istest(obj):
+    obj.__test__ = True
+    return obj
+
+
+class TestThread(threading.Thread):
+    def test_a(self):
+        pass
+
+
+class TestStringIO(io.StringIO):
+    def test_a(self):
+        pass
+
+
+class TestHandler(logging.Handler):
+    def test_a(self):
+        pass
+
+
+class TestNamespace(argparse.Namespace):
+    def test_a(self):
+        pass
+
+
+class TestPurePath(pathlib.PurePath):
+    def test_a(self):
+        pass
+
+
+class TestMock(mock.Mock):
+    def test_a(self):
+        pass
+
+
+class TestOrderedDict(collections.OrderedDict):
+    def test_a(self):
+        pass
+
+
+class TestNamedTupleCall(namedtuple("Point", "x y")):
+    def test_a(self):
+        pass
+
+
+class TestContextManagerAbstract(contextlib.AbstractContextManager):
+    def test_a(self):
+        pass
+
+
+class TestContextManagerImplemented(contextlib.AbstractContextManager):
+    def __exit__(self, *exc):
+        return None
+
+    def test_a(self):
+        pass
+
+
+class TestMapping(collections.abc.Mapping):
+    def test_a(self):
+        pass
+
+
+class TestEq:
+    def __eq__(self, other):
+        return True
+
+    def test_a(self):
+        pass
+
+
+class TestEqHash:
+    def __eq__(self, other):
+        return True
+
+    def __hash__(self):
+        return 1
+
+    def test_a(self):
+        pass
+
+
+class TestHashNone:
+    __hash__ = None
+
+    def test_a(self):
+        pass
+
+
+class TestEqChild(TestEq):
+    pass
+
+
+class TestEqChildHash(TestEq):
+    def __hash__(self):
+        return 2
+
+
+class TestFalseComparison:
+    __test__ = 1 > 2
+
+    def test_a(self):
+        pass
+
+
+class TestTrueComparison:
+    __test__ = 1 < 2
+
+    def test_a(self):
+        pass
+
+
+class TestSetattr:
+    def test_a(self):
+        pass
+
+
+setattr(TestSetattr, "__test__", False)
+
+
+@nottest
+def test_decorated_nottest():
+    pass
+
+
+@nottest
+class TestDecoratedNottest:
+    def test_a(self):
+        pass
+
+
+@istest
+def helper_decorated_istest():
+    pass
+
+
+class TestUnitCase(unittest.case.TestCase):
+    def test_a(self):
+        pass
+
+
+class TestStatic:
+    test_s = staticmethod(lambda: None)
+    test_c = classmethod(lambda cls: None)
+
+
+def test_while_true():
+    pass
+
+
+while True:
+    test_while_true = None
+    break
+"""
+
+# a fixture spelled yield_fixture: either pytest still has it and it is a fixture, or it does not and
+# the file does not import; pytest collects nothing from it either way
+_YIELD_FIXTURE = "import pytest\n\n\n@pytest.yield_fixture\ndef test_f():\n    yield 1\n"
+
+_VERIFIER2_CANDIDATES = [
+    "test_kept",
+    "TestThread::test_a",
+    "TestStringIO::test_a",
+    "TestHandler::test_a",
+    "TestNamespace::test_a",
+    "TestPurePath::test_a",
+    "TestMock::test_a",
+    "TestOrderedDict::test_a",
+    "TestNamedTupleCall::test_a",
+    "TestContextManagerAbstract::test_a",
+    "TestContextManagerImplemented::test_a",
+    "TestMapping::test_a",
+    "TestEq::test_a",
+    "TestEqHash::test_a",
+    "TestHashNone::test_a",
+    "TestEqChild::test_a",
+    "TestEqChildHash::test_a",
+    "TestFalseComparison::test_a",
+    "TestTrueComparison::test_a",
+    "TestSetattr::test_a",
+    "test_decorated_nottest",
+    "TestDecoratedNottest::test_a",
+    "helper_decorated_istest",
+    "TestUnitCase::test_a",
+    "TestStatic::test_s",
+    "TestStatic::test_c",
+    "test_while_true",
 ]
 
 # Node ids to ask both pytest and the resolver about. Every one names something, or
@@ -1338,7 +1639,7 @@ _KNOWN_LIMITS = {
     "a circular import": (
         "accept",
         {
-            "tests/circ_a.py": "import circ_b\n",
+            "tests/circ_a.py": "import circ_b\nthing = 1\n",
             "tests/circ_b.py": "from circ_a import thing\n",
             "tests/test_lim_circ.py": "import circ_a\n\n\ndef test_x():\n    pass\n",
         },
@@ -1485,3 +1786,243 @@ _KNOWN_LIMITS = {
         "tests/test_lim_setattr.py::test_made",
     ),
 }
+
+# The third review's findings that stay limits: a branch only the run can decide, a name rebound
+# on a path only the run takes, a parametrized id (the resolver cannot know a decorator's ids), a
+# base from outside the standard library, and two refusals that need an import to be settled.
+_KNOWN_LIMITS.update(
+    {
+        "a def under a branch decided only at run time": (
+            "accept",
+            {
+                "tests/test_lim_branch.py": (
+                    "import sys\n\nif sys.version_info < (3, 0):\n\n    def test_x():\n"
+                    "        pass\n"
+                )
+            },
+            "tests/test_lim_branch.py::test_x",
+        ),
+        "a def in an except handler that never runs": (
+            "accept",
+            {
+                "tests/test_lim_except.py": (
+                    "try:\n    pass\nexcept Exception:\n\n    def test_x():\n        pass\n"
+                )
+            },
+            "tests/test_lim_except.py::test_x",
+        ),
+        "a def in a match case that never matches": (
+            "accept",
+            {
+                "tests/test_lim_match.py": (
+                    "match 1:\n    case 2:\n\n        def test_x():\n            pass\n"
+                )
+            },
+            "tests/test_lim_match.py::test_x",
+        ),
+        "a name rebound by a loop over an iterable only the run knows": (
+            "accept",
+            {
+                "tests/test_lim_loop.py": (
+                    "def test_x():\n    pass\n\n\nfor test_x in sorted(['a']):\n    pass\n"
+                )
+            },
+            "tests/test_lim_loop.py::test_x",
+        ),
+        "a name rebound through global": (
+            "accept",
+            {
+                "tests/test_lim_rebind.py": (
+                    "def test_x():\n    pass\n\n\ndef rebind():\n    global test_x\n"
+                    "    test_x = 1\n\n\nrebind()\n"
+                )
+            },
+            "tests/test_lim_rebind.py::test_x",
+        ),
+        "an except-as name that deletes a def": (
+            "accept",
+            {
+                "tests/test_lim_exceptas.py": (
+                    "def test_x():\n    pass\n\n\ntry:\n    raise ValueError\n"
+                    "except ValueError as test_x:\n    pass\n"
+                )
+            },
+            "tests/test_lim_exceptas.py::test_x",
+        ),
+        "a star import after a def whose module redefines the name": (
+            "accept",
+            {
+                "tests/lim_star.py": "test_x = None\n",
+                "tests/test_lim_star.py": "def test_x():\n    pass\n\n\nfrom lim_star import *\n",
+            },
+            "tests/test_lim_star.py::test_x",
+        ),
+        "a base from a third-party package that defines __init__": (
+            "accept",
+            {
+                "tests/test_lim_third.py": (
+                    "from _pytest.outcomes import OutcomeException\n\n\n"
+                    "class TestA(OutcomeException):\n    def test_a(self):\n        pass\n"
+                )
+            },
+            "tests/test_lim_third.py::TestA::test_a",
+        ),
+        "a parametrized id that does not exist": (
+            "accept",
+            {
+                "tests/test_lim_param.py": (
+                    "import pytest\n\n\n@pytest.mark.parametrize('a', [1, 2])\n"
+                    "def test_p(a):\n    pass\n"
+                )
+            },
+            "tests/test_lim_param.py::test_p[nonexistent]",
+        ),
+        "a test assigned by tuple unpacking": (
+            "refuse",
+            {"tests/test_lim_tuple.py": "test_x, = [lambda: None]\n"},
+            "tests/test_lim_tuple.py::test_x",
+        ),
+        "a star import that overrides a base class defined above it": (
+            "refuse",
+            {
+                "tests/lim_base.py": "class TestBase:\n    def test_b(self):\n        pass\n",
+                "tests/test_lim_override.py": (
+                    "class TestBase:\n    def test_a(self):\n        pass\n\n\n"
+                    "from lim_base import *\n\n\nclass TestA(TestBase):\n    pass\n"
+                ),
+            },
+            "tests/test_lim_override.py::TestA::test_b",
+        ),
+        "a base defined in each arm of a run-time if": (
+            "refuse",
+            {
+                "tests/test_lim_arms.py": (
+                    "import sys\n\nif sys.version_info >= (3, 0):\n\n    class TestBase:\n"
+                    "        def test_a(self):\n            pass\n\nelse:\n\n"
+                    "    class TestBase:\n        def test_b(self):\n            pass\n\n\n"
+                    "class TestA(TestBase):\n    pass\n"
+                )
+            },
+            "tests/test_lim_arms.py::TestA::test_a",
+        ),
+    }
+)
+
+# Found by replaying the reviewer's harness against pytest: more names a run-time condition or a
+# NameError decides, an outside star import, a metaclass, and names made by code the resolver does
+# not run.
+_KNOWN_LIMITS.update(
+    {
+        "an import of a name a module defines only under a run-time condition": (
+            "accept",
+            {
+                "tests/lim_cond.py": "import os\n\nif os.name == 'zzz':\n    nothere = 1\n",
+                "tests/test_lim_cond.py": "from lim_cond import nothere\n\n\ndef test_x():\n    pass\n",
+            },
+            "tests/test_lim_cond.py::test_x",
+        ),
+        "a NameError in a default argument": (
+            "accept",
+            {"tests/test_lim_default.py": "def test_x(a=undefined_name):\n    pass\n"},
+            "tests/test_lim_default.py::test_x",
+        ),
+        "a NameError in a decorator or annotation": (
+            "accept",
+            {"tests/test_lim_deco.py": ("@undefined_decorator\ndef test_x():\n    pass\n")},
+            "tests/test_lim_deco.py::test_x",
+        ),
+        "a NameError in a class keyword": (
+            "accept",
+            {
+                "tests/test_lim_kw.py": (
+                    "class TestA(metaclass=Undefined):\n    def test_a(self):\n        pass\n"
+                )
+            },
+            "tests/test_lim_kw.py::TestA::test_a",
+        ),
+        "a base that an outside star import was meant to supply": (
+            "accept",
+            {
+                "tests/test_lim_outer.py": (
+                    "from os.path import *\n\n\nclass TestA(Unknown):\n"
+                    "    def test_a(self):\n        pass\n"
+                )
+            },
+            "tests/test_lim_outer.py::TestA::test_a",
+        ),
+        "a metaclass that changes how the class is called": (
+            "accept",
+            {
+                "tests/test_lim_meta.py": (
+                    "class M(type):\n    def __call__(cls):\n        return 1\n\n\n"
+                    "class TestA(metaclass=M):\n    def test_a(self):\n        pass\n"
+                )
+            },
+            "tests/test_lim_meta.py::TestA::test_a",
+        ),
+        "a star import whose __all__ is computed": (
+            "refuse",
+            {
+                "tests/lim_allc.py": (
+                    "names = ['test_lib']\n__all__ = [n for n in names]\n\n\n"
+                    "def test_lib():\n    pass\n"
+                ),
+                "tests/test_lim_allc.py": "from lim_allc import *\n",
+            },
+            "tests/test_lim_allc.py::test_lib",
+        ),
+        "a test made by writing into globals()": (
+            "refuse",
+            {"tests/test_lim_globals.py": "globals()['test_g'] = lambda: None\n"},
+            "tests/test_lim_globals.py::test_g",
+        ),
+        "a class made by type()": (
+            "refuse",
+            {
+                "tests/test_lim_type.py": (
+                    "TestT = type('TestT', (), {'test_a': lambda self: None})\n"
+                )
+            },
+            "tests/test_lim_type.py::TestT::test_a",
+        ),
+        "a tuple of tests made by a comprehension": (
+            "refuse",
+            {"tests/test_lim_comp.py": ("test_x, test_y = [lambda: None for _ in range(2)]\n")},
+            "tests/test_lim_comp.py::test_x",
+        ),
+    }
+)
+
+# The last of what the replay left: names made on a path the resolver does not follow, and a base
+# that is a call to something undefined.
+_KNOWN_LIMITS.update(
+    {
+        "a base that is a call to something undefined": (
+            "accept",
+            {
+                "tests/test_lim_callbase.py": (
+                    "class TestA(undefined_factory()):\n    def test_a(self):\n        pass\n"
+                )
+            },
+            "tests/test_lim_callbase.py::TestA::test_a",
+        ),
+        "an imported name a module makes through global": (
+            "refuse",
+            {
+                "tests/lim_global.py": (
+                    "def make():\n    global test_made\n    test_made = lambda: None\n\n\nmake()\n"
+                ),
+                "tests/test_lim_importglobal.py": "from lim_global import test_made\n",
+            },
+            "tests/test_lim_importglobal.py::test_made",
+        ),
+        "an imported name a module makes with a match capture": (
+            "refuse",
+            {
+                "tests/lim_capture.py": "match (lambda: None):\n    case test_captured:\n        pass\n",
+                "tests/test_lim_importcapture.py": "from lim_capture import test_captured\n",
+            },
+            "tests/test_lim_importcapture.py::test_captured",
+        ),
+    }
+)

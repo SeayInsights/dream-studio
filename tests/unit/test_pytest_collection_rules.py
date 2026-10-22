@@ -338,6 +338,11 @@ _HOOKS = [
     "pytest_collect_directory",
     "pytest_collection",
     "pytest_make_collect_report",
+    "pytest_sessionstart",
+    "pytest_addoption",
+    "pytest_cmdline_main",
+    "pytest_cmdline_parse",
+    "pytest_load_initial_conftests",
 ]
 
 
@@ -571,9 +576,19 @@ def test_a_pyproject_with_no_pytest_table_and_a_tox_without_a_pytest_section_fal
     assert NodeResolver(tmp_path).rules.python_functions == (_marker("setup.cfg"),)
 
 
-def test_a_pytest_ini_with_no_pytest_section_still_wins_over_every_later_file(tmp_path):
-    (tmp_path / "pytest.ini").write_text("# nothing here\n", encoding="utf-8")
+@pytest.mark.parametrize("name", ["pytest.ini", ".pytest.ini"])
+def test_a_pytest_ini_with_no_pytest_section_still_wins_over_every_later_file(tmp_path, name):
+    (tmp_path / name).write_text("# nothing here\n", encoding="utf-8")
     (tmp_path / "pyproject.toml").write_text(_marker_config("pyproject.toml"), encoding="utf-8")
+    (tmp_path / "tox.ini").write_text(_marker_config("tox.ini"), encoding="utf-8")
+    rules = NodeResolver(tmp_path).rules
+    assert rules.python_functions == ("test",)
+    assert rules.config_file == name
+
+
+def test_a_pytest_toml_with_no_pytest_table_still_wins_over_every_later_file(tmp_path):
+    (tmp_path / "pytest.toml").write_text("# nothing here\n", encoding="utf-8")
+    (tmp_path / "pytest.ini").write_text(_marker_config("pytest.ini"), encoding="utf-8")
     assert NodeResolver(tmp_path).rules.python_functions == ("test",)
 
 
@@ -621,6 +636,10 @@ def test_a_native_toml_bool_is_read(tmp_path):
     [
         ("-mslow", "-m"),
         ("-kfoo", "-k"),
+        ("--lf", "--lf"),
+        ("--last-failed", "--last-failed"),
+        ("--sw", "--sw"),
+        ("--stepwise", "--stepwise"),
         ("--rootdir=sub", "--rootdir"),
         ("--rootdir sub", "--rootdir"),
         ("-pplugin_x", "-p"),
@@ -644,8 +663,9 @@ def test_options_that_do_not_change_collection_are_not_refused(tmp_path, tokens)
     assert NodeResolver(tmp_path).rules.ignore == ()
 
 
-def test_ignore_glob_is_as_case_sensitive_as_fnmatch_is_on_this_platform(tmp_path):
-    """pytest matches with `fnmatch.fnmatch`, which folds case on Windows and not elsewhere."""
+def test_ignore_glob_is_case_sensitive_on_every_platform(tmp_path):
+    """pytest matches with `fnmatch.fnmatch`, which folds case on Windows and not on Linux. CI is
+    Linux, so a Windows push must not pass what Linux would fail: the case rule is Linux's."""
     _tree(
         tmp_path,
         {
@@ -654,9 +674,186 @@ def test_ignore_glob_is_as_case_sensitive_as_fnmatch_is_on_this_platform(tmp_pat
             "sub/SKIP_b_test.py": _OK,
         },
     )
-    folds = os.path.normcase("A") == "a"
-    assert (_why(tmp_path, "sub/skip_a_test.py::test_ok") is not None) is folds
-    assert _why(tmp_path, "sub/SKIP_b_test.py::test_ok") is not None
+    assert _why(tmp_path, "sub/skip_a_test.py::test_ok") is None
+    assert "--ignore-glob" in (_why(tmp_path, "sub/SKIP_b_test.py::test_ok") or "")
+
+
+def test_python_files_and_collect_ignore_are_case_sensitive_everywhere(tmp_path):
+    _tree(
+        tmp_path,
+        {
+            "pytest.ini": "[pytest]\n",
+            "tests/Test_c.py": _OK,
+            "tests/test_c2.py": _OK,
+            "tests/TEST_f_test.py": _OK,
+            "conftest.py": "collect_ignore = ['tests/test_c2.PY']\n",
+        },
+    )
+    assert "python_files" in (_why(tmp_path, "tests/Test_c.py::test_ok") or "")
+    assert "python_files" not in (_why(tmp_path, "tests/TEST_f_test.py::test_ok") or "")
+    assert _why(tmp_path, "tests/test_c2.py::test_ok") is None  # `.PY` is not the name on disk
+
+
+def test_norecursedirs_is_case_sensitive_everywhere(tmp_path):
+    ini = "[pytest]\nnorecursedirs = Build\n"
+    lower = _tree(tmp_path / "lower", {"pytest.ini": ini, "build/test_d.py": _OK})
+    upper = _tree(tmp_path / "upper", {"pytest.ini": ini, "Build/test_e.py": _OK})
+    assert _why(lower, "build/test_d.py::test_ok") is None  # a directory `build` is not `Build`
+    assert "norecursedirs" in (_why(upper, "Build/test_e.py::test_ok") or "")
+
+
+def test_a_pattern_with_a_backslash_is_read_with_a_slash(tmp_path):
+    """Only a TOML string can carry a backslash through (an ini value is split like a shell
+    line, which eats it); `a\\b` there is the pattern `a/b`."""
+    _tree(
+        tmp_path,
+        {
+            "pytest.toml": '[pytest]\nnorecursedirs = ["a\\\\b"]\n',
+            "a/b/test_x.py": _OK,
+            "a/test_y.py": _OK,
+        },
+    )
+    assert "norecursedirs" in (_why(tmp_path, "a/b/test_x.py::test_ok") or "")
+    assert _why(tmp_path, "a/test_y.py::test_ok") is None
+
+
+# --------------------------------------------------------------------------
+# Follow-ups: paths in addopts, a [pytest] section in setup.cfg, and what a conftest can do
+# --------------------------------------------------------------------------
+
+
+def test_a_path_in_addopts_narrows_the_run_and_replaces_testpaths(tmp_path):
+    _tree(
+        tmp_path,
+        {
+            "pytest.ini": "[pytest]\ntestpaths = other\naddopts = -q --tb short tests/unit\n",
+            "tests/unit/test_a.py": _OK,
+            "tests/integration/test_b.py": _OK,
+            "other/test_c.py": _OK,
+        },
+    )
+    assert _why(tmp_path, "tests/unit/test_a.py::test_ok") is None
+    for ref in ("tests/integration/test_b.py", "other/test_c.py"):
+        why = _why(tmp_path, f"{ref}::test_ok") or ""
+        assert "outside the paths addopts gives pytest (tests/unit)" in why, why
+
+
+def test_the_value_of_an_option_in_addopts_is_not_a_path(tmp_path):
+    _tree(
+        tmp_path,
+        {
+            "pytest.ini": "[pytest]\naddopts = --tb short -W error --maxfail 2 -o foo=bar\n",
+            "short": "",
+            "test_a.py": _OK,
+        },
+    )
+    rules = NodeResolver(tmp_path).rules
+    assert rules.positional == ()
+    assert _why(tmp_path, "test_a.py::test_ok") is None
+
+
+def test_a_bare_word_that_names_nothing_in_the_repository_is_not_a_path(tmp_path):
+    _tree(tmp_path, {"pytest.ini": "[pytest]\naddopts = --weird nowhere\n", "test_a.py": _OK})
+    assert NodeResolver(tmp_path).rules.positional == ()
+    assert _why(tmp_path, "test_a.py::test_ok") is None
+
+
+def test_a_node_id_in_addopts_is_refused(tmp_path):
+    (tmp_path / "pytest.ini").write_text(
+        "[pytest]\naddopts = tests/test_a.py::test_x\n", encoding="utf-8"
+    )
+    with pytest.raises(CollectionConfigError, match="test_a.py::test_x"):
+        NodeResolver(tmp_path)
+
+
+def test_a_setup_cfg_with_a_pytest_section_is_an_error_as_it_is_in_pytest(tmp_path):
+    (tmp_path / "setup.cfg").write_text("[pytest]\npython_files = x_*.py\n", encoding="utf-8")
+    with pytest.raises(CollectionConfigError, match=r"\[pytest\] section"):
+        NodeResolver(tmp_path)
+
+
+def test_a_setup_cfg_with_both_sections_reads_the_tool_one(tmp_path):
+    (tmp_path / "setup.cfg").write_text(
+        "[pytest]\npython_files = ignored_*.py\n\n[tool:pytest]\npython_files = tool_*.py\n",
+        encoding="utf-8",
+    )
+    assert NodeResolver(tmp_path).rules.python_files == ("tool_*.py",)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "raise RuntimeError('x')\n",
+        "import sys\nsys.exit(0)\n",
+        "exit()\n",
+        "import pytest\npytest.exit('x')\n",
+        "assert False\n",
+        "assert 0, 'no'\n",
+    ],
+)
+def test_a_conftest_that_always_raises_poisons_everything_under_it(tmp_path, body):
+    root = _tree(
+        tmp_path,
+        {"tests/conftest.py": body, "tests/test_a.py": _OK, "elsewhere/test_b.py": _OK},
+    )
+    why = _why(root, "tests/test_a.py::test_ok") or ""
+    assert "conftest.py" in why and "so pytest collects nothing from anything under tests/" in why
+    assert _why(root, "elsewhere/test_b.py::test_ok") is None
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "def f():\n    raise RuntimeError\n",
+        "import sys\nif sys.platform == 'x':\n    sys.exit(0)\n",
+        "assert True\n",
+        "def pytest_configure(config):\n    config.option.verbose = 1\n    config.getoption('x')\n",
+    ][:3],
+)
+def test_a_conftest_that_may_not_raise_is_not_poison(tmp_path, body):
+    root = _tree(tmp_path, {"tests/conftest.py": body, "tests/test_a.py": _OK})
+    assert _why(root, "tests/test_a.py::test_ok") is None
+
+
+@pytest.mark.parametrize(
+    "body,fragment",
+    [
+        ("def pytest_configure(config):\n    config.option.ignore = ['x']\n", "config.option"),
+        ("def pytest_configure(config):\n    config.option.deselect += ['x']\n", "config.option"),
+        (
+            "def pytest_configure(config):\n    config.addinivalue_line('norecursedirs', 'x')\n",
+            "norecursedirs",
+        ),
+        (
+            "def pytest_configure(config):\n    config.addinivalue_line('python_files', 'x_*.py')\n",
+            "python_files",
+        ),
+        ("def pytest_sessionstart(session):\n    pass\n", "pytest_sessionstart"),
+        ("def pytest_addoption(parser):\n    pass\n", "pytest_addoption"),
+        ("def pytest_load_initial_conftests(early_config):\n    pass\n", "pytest_load"),
+    ],
+)
+def test_a_conftest_that_changes_the_collection_settings_while_configuring_is_untrusted(
+    tmp_path, body, fragment
+):
+    root = _tree(tmp_path, {"conftest.py": body, "test_a.py": _OK})
+    why = _why(root, "test_a.py::test_ok") or ""
+    assert fragment in why and "cannot evaluate" in why, why
+
+
+def test_registering_a_marker_in_configure_is_not_a_collection_change(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "conftest.py": (
+                "def pytest_configure(config):\n"
+                "    config.addinivalue_line('markers', 'slow: x')\n"
+                "    config.option.verbose\n"
+            ),
+            "test_a.py": _OK,
+        },
+    )
+    assert _why(root, "test_a.py::test_ok") is None
 
 
 # --------------------------------------------------------------------------
