@@ -346,12 +346,13 @@ gates:
       requires explicit matrix-watch confirmation before merge. Migration
       changes have historically passed local tests but failed on macOS/Windows
       in the remote 3-platform matrix. Skip with
-      MIGRATION_RISK_ACKNOWLEDGED=1 git push after confirming matrix is running.
+      MIGRATION_RISK_ACKNOWLEDGED=1 git push after confirming matrix is running
+      (the value must be exactly 1; any other value does not bypass).
     command: [py, -m, core.gates.migration_risk]
     fail_hint: >
       SQL/migration files changed. Run `gh pr checks <N> --watch` and confirm
       all three platforms (ubuntu, macos, windows) are green before merging.
-      To bypass: MIGRATION_RISK_ACKNOWLEDGED=1 git push
+      To bypass: MIGRATION_RISK_ACKNOWLEDGED=1 git push (exactly 1)
 
   - id: rule1-adapters-no-authority
     tier: blocking

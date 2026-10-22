@@ -53,6 +53,6 @@ migration. Change `ROLLBACK_ENFORCED_FROM` in
 `core/gates/migration_rollback_pairing.py::find_unpaired_migrations()` lists any
 forward migration `>= 154` missing a paired reverse. It is invoked by the
 `migration-risk` pre-push gate (`core/gates/migration_risk.py`) on any
-migration-touching push, and fails the push (hard — `MIGRATION_RISK_ACKNOWLEDGED`
+migration-touching push, and fails the push (hard — `MIGRATION_RISK_ACKNOWLEDGED=1`
 does not bypass it) until the reverse is added. Regression test:
 `tests/unit/test_migration_rollback_pairing.py`.

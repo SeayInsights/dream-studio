@@ -57,7 +57,7 @@ core/config/schema_coherence.py  ← aspirational-schema audit
    - Lists all 3 CI platforms: `ubuntu-latest`, `macos-latest`, `windows-latest`
    - Exits 1 (blocks push)
 
-**Bypass:** `MIGRATION_RISK_ACKNOWLEDGED=1 git push`  
+**Bypass:** `MIGRATION_RISK_ACKNOWLEDGED=1 git push`. The variable must equal exactly `1`: `0`, `false`, `yes`, the empty string and anything else is not an acknowledgement, the push stays blocked, and the gate says so. Nothing is recorded for a value that does not acknowledge.  
 **CI:** Always returns 0 inside GitHub Actions to avoid false positives in the matrix.
 
 **Why this exists:** Migration files historically pass local tests but fail on macOS/Windows in the remote matrix (Phase 18.x regressions: migrations 081, 082, near-miss 18.4.6).
