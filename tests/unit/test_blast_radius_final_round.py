@@ -776,3 +776,142 @@ def test_the_work_budget_stops_a_wall_of_open_lists() -> None:
 def test_a_single_line_def_does_not_consume_the_budget() -> None:
     lines = ["def f(a):"] * 20_000
     assert len(_python_signatures(lines)) == 20_000
+
+
+# --- pins for the second mutation run ---------------------------------------------------------
+
+
+def test_git_output_of_a_failed_command_is_empty(tmp_path: Path) -> None:
+    """`git diff --exit-code` fails (status 1) WITH output when there is a difference: a
+    failed command contributes nothing."""
+    try:
+        _sh(tmp_path, "init", "-q", "-b", "main")
+    except (OSError, RuntimeError):
+        pytest.skip("git is not available")
+    _sh(tmp_path, "config", "user.email", "a@b.c")
+    _sh(tmp_path, "config", "user.name", "t")
+    (tmp_path / "m.py").write_bytes(b"x = 1\n")
+    _sh(tmp_path, "add", "-A")
+    _sh(tmp_path, "commit", "-q", "-m", "x")
+    (tmp_path / "m.py").write_bytes(b"x = 2\n")
+    assert "x = 2" in br._git(["diff"], tmp_path)
+    assert br._git(["diff", "--exit-code"], tmp_path) == ""
+
+
+def test_a_slash_straight_after_an_arrow_is_a_regex() -> None:
+    assert _signature_on_line("s =>/'/.test(s); function bar(a){}", is_py=False) == BAR
+    assert _signature_on_line("s => /'/.test(s); function bar(a){}", is_py=False) == BAR
+
+
+def test_a_powershell_backtick_escapes_a_quote_outside_a_string() -> None:
+    line = 'echo `"; function f(a) { }'
+    assert _signature_on_line(line, is_py=False, style="ps") == ("f", "a", False)
+    assert _signature_on_line(line, is_py=False, style="c") is None
+
+
+def test_an_import_as_its_own_name_is_not_an_alias_of_something_else(tmp_path: Path) -> None:
+    """`from m import do_work as do_work` rebinds the name to ITSELF: the call below is a call
+    of the changed function. (Only an alias to a DIFFERENT origin is skipped.)"""
+    _write(
+        tmp_path / CALLER,
+        "from m import do_work as do_work\n\ndef test_it():\n    do_work(1)\n",
+    )
+    findings = detect_changed_signature_callers(
+        _def_diff(["def do_work(a):"], ["def do_work(a, *, e):"]), repo_root=tmp_path
+    )
+    assert CALLER in {f["path"] for f in findings}
+
+
+def test_a_file_without_an_introspection_token_is_never_parsed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cheap hint filter is a contract: no token, no parse."""
+    import ast
+
+    text = "def test_it():\n    do_work(1)\n"
+    _write(tmp_path / CALLER, text)
+    real = ast.parse
+    seen = []
+
+    def counting(source, *a, **k):
+        if source == text:
+            seen.append(1)
+        return real(source, *a, **k)
+
+    monkeypatch.setattr(ast, "parse", counting)
+    detect_changed_signature_callers(
+        _def_diff(["def do_work(a):"], ["def do_work(a, *, e=1):"]), repo_root=tmp_path
+    )
+    assert seen == []
+
+
+def test_a_name_not_in_the_file_never_builds_its_introspection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import ast
+
+    text = "import inspect\ninspect.signature(other)\n"
+    real = ast.parse
+    seen = []
+
+    def counting(source, *a, **k):
+        seen.append(1)
+        return real(source, *a, **k)
+
+    monkeypatch.setattr(ast, "parse", counting)
+    assert hd._FileFacts(text).inspects("absent_name") is False
+    assert seen == []
+    assert hd._FileFacts(text).inspects("other") is True
+    assert seen == [1]
+
+
+def test_an_import_of_a_dotted_name_as_an_alias_is_the_function(tmp_path: Path) -> None:
+    """`import pkg.do_work as dw` binds `dw` to the thing named by the LAST segment."""
+    _write(
+        tmp_path / CALLER,
+        "import inspect\nimport pkg.do_work as dw\n\ndef test_it():\n    inspect.signature(dw)\n",
+    )
+    findings = detect_changed_signature_callers(
+        _def_diff(["def do_work(a):"], ["def do_work(a, *, e=1):"]), repo_root=tmp_path
+    )
+    assert CALLER in {f["path"] for f in findings}
+
+
+def test_code_part_cuts_at_a_comment_but_not_at_a_hash_in_a_string() -> None:
+    assert hd._code_part("a,  # note") == "a,  "
+    assert hd._code_part('x = "#" + y') == 'x = "#" + y'
+    assert hd._code_part("x = '#' + y  # note") == "x = '#' + y  "
+    assert hd._code_part("x = '\\'#' # note") == "x = '\\'#' "
+    assert hd._code_part("no comment") == "no comment"
+    assert hd._code_part("# all comment") == ""
+
+
+def test_a_multi_line_list_keeps_its_line_breaks() -> None:
+    ((_, params, _),) = _python_signatures(["def f(", "    a,", "    b,", "):"])
+    assert params == "\n    a,\n    b,\n"
+
+
+def test_the_line_bound_is_exact() -> None:
+    """The closer may stand at most 300 lines below the head."""
+    at_300 = ["def f("] + ["    x,"] * 299 + ["):"]
+    at_301 = ["def f("] + ["    x,"] * 300 + ["):"]
+    assert len(_python_signatures(at_300)) == 1
+    assert _python_signatures(at_301) == []
+
+
+def test_the_parameters_on_the_head_line_are_kept() -> None:
+    ((_, params, _),) = _python_signatures(["def f(a,", "    b):"])
+    assert _param_names(params) == ("a", "b")
+
+
+def test_nested_parens_that_straddle_lines_do_not_end_the_list_early() -> None:
+    """`a=(1,` opens a paren on the head line, `2),` closes it on the next: the list is not
+    over there, and the depth must travel from line to line."""
+    ((_, params, _),) = _python_signatures(["def f(a=(1,", "    2),", "    b=3):"])
+    assert _param_names(params) == ("a", "b")
+    ((_, params, _),) = _python_signatures(["def f(a=(", "    1,", "    2),", "    b=3):"])
+    assert _param_names(params) == ("a", "b")
+    ((_, params, _),) = _python_signatures(
+        ["def f(a=((", "    1,", "    2),", "    3),", "    b=4):"]
+    )
+    assert _param_names(params) == ("a", "b")
