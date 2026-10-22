@@ -21,6 +21,7 @@ import shutil
 import sqlite3
 import time
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 
@@ -476,7 +477,7 @@ def _emit_raw(event_type, brief_id, project_id, payload):
             event_type=event_type,
             session_id=None,
             payload=payload,
-            timestamp="2026-01-02T00:00:00+00:00",
+            timestamp=datetime.now(UTC).isoformat(),
             severity="info",
             trace={
                 "domain": "sdlc",
