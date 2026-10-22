@@ -672,3 +672,107 @@ def test_a_multi_line_def_inside_a_docstring_is_text(tmp_path: Path) -> None:
     )
     _write(tmp_path / CALLER, "def test_it():\n    do_work('a')\n")
     assert detect_changed_signature_callers(diff, repo_root=tmp_path) == []
+
+
+# --- more pins (mutants of the new code) -----------------------------------------------------
+
+PRECEDERS = [
+    "x =",
+    "f(",
+    "f(1,",
+    "o = {k:",
+    "[",
+    "!",
+    "a &&",
+    "a ||",
+    "a &",
+    "a |",
+    "a ?",
+    "{",
+    "}",
+    ";",
+    "a +",
+    "a -",
+    "a *",
+    "a %",
+    "~",
+    "a ^",
+]
+
+
+@pytest.mark.parametrize("prefix", PRECEDERS)
+def test_a_slash_after_each_regex_preceder_starts_a_regex(prefix: str) -> None:
+    line = f"{prefix} /'/.test(s); function bar(a){{}}"
+    assert _signature_on_line(line, is_py=False) == BAR
+
+
+@pytest.mark.parametrize("closer", [")", "]", '"s"', "1", "a", "a.b"])
+def test_a_slash_after_a_value_is_a_division(closer: str) -> None:
+    """After a value (a closing bracket, a string, a number, a name) the slash divides, so the
+    quote after it opens a string that swallows the def."""
+    line = f"x = {closer} /'/ 2; function bar(a){{}}"
+    assert _signature_on_line(line, is_py=False) is None
+
+
+def test_code_only_counts_lines_the_way_its_tokenizer_does() -> None:
+    """`str.splitlines()` splits at a form feed or a lone CR; tokenize's readline does not, so
+    slicing by the first misaligned every blanked comment and string after it."""
+    for sep in ("\x0c", "\r", "\x0b", chr(0x2028)):
+        text = f"# a{sep}b\nx = do_work(1)  # tail\ny = 'z'\n"
+        code = hd._code_only(text)
+        assert "do_work(1)" in code, repr(sep)
+        assert "tail" not in code and "'z'" not in code, repr(sep)
+        assert len(code) == len(text), repr(sep)
+
+
+def test_the_first_alias_decides(tmp_path: Path) -> None:
+    """`X as name` is looked up by the FIRST binding of the name, as it always was."""
+    _write(
+        tmp_path / CALLER,
+        "from m1 import other as do_work\nfrom m2 import do_work as do_work\n\ndef test_it():\n    do_work(1)\n",
+    )
+    findings = detect_changed_signature_callers(
+        _def_diff(["def do_work(a):"], ["def do_work(a, *, e):"]), repo_root=tmp_path
+    )
+    assert findings == []
+
+
+def test_a_name_after_a_non_ascii_letter_is_a_different_identifier(tmp_path: Path) -> None:
+    accent = chr(0xE9)
+    _write(tmp_path / CALLER, f"def test_it():\n    {accent}do_work(1)\n    do_work{accent}(2)\n")
+    findings = detect_changed_signature_callers(
+        _def_diff(["def do_work(a):"], ["def do_work(a, *, e):"]), repo_root=tmp_path
+    )
+    assert findings == []
+
+
+def test_a_non_ascii_function_name_is_a_name(tmp_path: Path) -> None:
+    name = "do_w" + chr(0xF6) + "rk"
+    _write(tmp_path / CALLER, f"def test_it():\n    {name}(1)\n")
+    findings = detect_changed_signature_callers(
+        _def_diff([f"def {name}(a):"], [f"def {name}(a, *, e):"]), repo_root=tmp_path
+    )
+    assert CALLER in {f["path"] for f in findings}
+
+
+def test_a_list_closing_within_the_character_bound_is_read() -> None:
+    lines = ["def f("] + ["    " + "x" * 90 + ","] * 150 + ["):"]  # ~15,000 characters
+    assert len(_python_signatures(lines)) == 1
+
+
+def test_a_list_beyond_the_character_bound_is_not() -> None:
+    lines = ["def f("] + ["    " + "x" * 90 + ","] * 250 + ["):"]  # ~25,000 characters
+    assert _python_signatures(lines) == []
+
+
+def test_the_work_budget_stops_a_wall_of_open_lists() -> None:
+    """Many short unclosed heads: each would scan up to 300 lines; the budget caps the total
+    work, and a def that DOES close early is still read."""
+    lines = ["def f("] * 3000 + ["):"] + ["def g(a):"]
+    found = _python_signatures(lines)
+    assert ("g", "a", True) in found
+
+
+def test_a_single_line_def_does_not_consume_the_budget() -> None:
+    lines = ["def f(a):"] * 20_000
+    assert len(_python_signatures(lines)) == 20_000
