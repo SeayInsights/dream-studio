@@ -654,6 +654,18 @@ def test_a_rewrite_of_the_shared_config_that_leaves_core_alone_is_not_damage(tmp
         (["git", "-C", "/x", "fetch", "--update-head-ok", "origin"], True),
         (["git", "fetch", "-u", "origin", "main:work"], True),
         (["git", "fetch", "-pu", "origin", "main:work"], True),
+        (["git", "fetch", "--update-head", "origin", "+main:work"], True),
+        (["git", "fetch", "--update-hea", "origin", "+main:work"], True),
+        (["git", "fetch", "--update-h", "origin", "+main:work"], True),
+        # --update-shallow is a different option, and ``u`` inside a LONG option is no short -u:
+        # each of these only writes remote-tracking refs, and blaming them would name a test for
+        # an operator's commit.
+        (["git", "fetch", "--update-shallow", "origin"], False),
+        (["git", "fetch", "--update-", "origin"], False),
+        (["git", "fetch", "--prune", "origin"], False),
+        (["git", "fetch", "--multiple", "origin", "other"], False),
+        (["git", "fetch", "--unshallow"], False),
+        (["git", "fetch", "--depth=1", "--no-tags", "origin"], False),
         (["git", "commit", "-m", "x"], True),
         (["git", "checkout", "-b", "x"], True),
         (["git", "config", "core.bare", "true"], True),
@@ -724,10 +736,13 @@ def test_a_read_only_git_call_and_a_config_rewrite_elsewhere_do_not_abort_a_clea
 
 
 @requires_git
-def test_a_fetch_that_overwrites_the_checked_out_branch_is_blamed_on_the_test(tmp_path):
+@pytest.mark.parametrize("flag", ["--update-head-ok", "--update-head", "--update-h", "-u"])
+def test_a_fetch_that_overwrites_the_checked_out_branch_is_blamed_on_the_test(tmp_path, flag):
     """`git fetch --update-head-ok <remote> +<src>:<current branch>` really moves the tip. It
     used to count as a read because plain `fetch` is on the read-only list, so the guard called
-    the move an external change and let the run continue instead of naming the test."""
+    the move an external change and let the run continue instead of naming the test. Git takes
+    any unique prefix of the option, so the abbreviations move the tip just the same (that they
+    do is what this proves: the guard only aborts when the tip really moved)."""
     victim = _victim(tmp_path)
     current = _run(victim, "branch", "--show-current").stdout.strip()
     assert current
@@ -746,7 +761,7 @@ def test_a_fetch_that_overwrites_the_checked_out_branch_is_blamed_on_the_test(tm
         "VICTIM = Path(__file__).resolve().parent.parent\n"
         "def test_a_test_that_fetches_over_the_checked_out_branch():\n"
         "    done = subprocess.run(\n"
-        f"        ['git', 'fetch', '-q', '--update-head-ok', '.', '+ahead:{current}'],\n"
+        f"        ['git', 'fetch', '-q', {flag!r}, '.', '+ahead:{current}'],\n"
         "        cwd=str(VICTIM), capture_output=True, text=True, check=False)\n"
         "    assert done.returncode == 0, done.stderr\n",
         encoding="utf-8",
@@ -756,7 +771,7 @@ def test_a_fetch_that_overwrites_the_checked_out_branch_is_blamed_on_the_test(tm
     assert result.returncode != 0, f"a fetch over the checked-out branch passed\n{output[-3000:]}"
     assert "modified the real git repository" in output, output[-3000:]
     assert "test_a_test_that_fetches_over_the_checked_out_branch" in output, output[-3000:]
-    assert "fetch" in output and "--update-head-ok" in output, output[-3000:]
+    assert f"git fetch -q {flag} " in output, output[-3000:]
 
 
 @requires_git

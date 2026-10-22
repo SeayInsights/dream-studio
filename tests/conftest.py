@@ -453,14 +453,18 @@ def _fetch_may_update_the_current_branch(argv: list) -> bool:
 
     ``git fetch --update-head-ok origin +main:<current branch>`` moves the tip of the checked-out
     branch, which is exactly what the fingerprint compares, and without the flag git refuses to.
-    So the flag (long form, or ``-u`` alone or inside a cluster of short options such as ``-pu``)
-    is what separates the fetch that is a read from the one that is a write. A fetch that names
-    it counts, as any other verb that could have moved the state does.
+    So the flag is what separates the fetch that is a read from the one that is a write. It is
+    spelled ``-u``, alone or inside a cluster of short options such as ``-pu``, or
+    ``--update-head-ok`` -- or any unique abbreviation of it: git takes ``--update-head``, and
+    ``--update-h`` is the shortest that is not ``--update-shallow``. A fetch that names it
+    counts, as any other verb that could have moved the state does.
     """
+    long_form = "--update-head-ok"
     for token in (str(x) for x in argv[1:]):
-        if token == "--update-head-ok":
-            return True
-        if token.startswith("-") and not token.startswith("--") and "u" in token[1:]:
+        if token.startswith("--"):
+            if token.startswith("--update-h") and long_form.startswith(token):
+                return True
+        elif token.startswith("-") and "u" in token[1:]:
             return True
     return False
 
