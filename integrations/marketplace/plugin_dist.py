@@ -17,6 +17,8 @@ The output layout (plugin root):
     <out>/
       .claude-plugin/plugin.json   # build_plugin_manifest()
       skills/<skill-id>/SKILL.md    # synthesized frontmatter + canonical body (+ mode files)
+      skills/<skill-id>/<support>   # files a skill's modes run or read from outside canonical/
+                                    #   (SKILL_SUPPORT_TREES: ds-security/templates/security/)
       agents/<agent>.md
       .mcp.json
 """
@@ -25,6 +27,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from integrations.installer.claude_code_fileops import SKILL_SUPPORT_TREES  # noqa: F401
 from integrations.marketplace.plugin_manifest import build_plugin_manifest, skill_ids
 
 _THIS = Path(__file__).resolve()
@@ -180,7 +183,11 @@ def build_plugin_dist(
         if not (skill_dir / "SKILL.md").is_file():
             continue
         target_dir = out_dir / "skills" / skill_id
-        for op in _collect_skill_dir_ops(skill_dir, target_dir, skill_id, out_dir / ".backups"):
+        # Support trees (SKILL_SUPPORT_TREES): what the skill's modes run or read from outside
+        # canonical/ ride along, exactly as the installer ships them.
+        for op in _collect_skill_dir_ops(
+            skill_dir, target_dir, skill_id, out_dir / ".backups", repo_root=repo_root
+        ):
             _materialize(op)
         _normalize_pack_frontmatter(skill_id, target_dir / "SKILL.md")
 

@@ -53,7 +53,7 @@ scan:
   priority_repos: [string]        # Repos to scan first (e.g., ["vendor-portal", "api"])
   exclude_repos: [string]         # Repos to skip (e.g., ["archive-*", "poc-*"])
   semgrep_rulesets: [string]      # Community rulesets (e.g., ["p/owasp-top-ten", "p/cwe-top-25"])
-  extra_scanners: [enum]          # Additional scanners: ["trivy", "codeql", "zap"]
+  extra_scanners: [enum]          # Scanners the security-scan workflow runs besides semgrep (always on): ["bandit", "trufflehog", "pip-audit", "npm-audit", "cyclonedx"]
 
 # DAST-specific (used by: dast)
 dast:

@@ -18,6 +18,7 @@ directory.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -617,3 +618,303 @@ def test_doc_describes_unread_exactly_as_the_code_behaves():
     assert "missing, empty" not in text and "empty or malformed" not in text
     assert "missing or malformed" in text
     assert "an empty file is a result" in text
+
+
+# -- one odd Nuclei line must not drop the file (issue #908) -------------------------------------
+
+
+def _nuclei_file(tmp_path: Path, lines: list[object]) -> Path:
+    d = _scan(
+        tmp_path / "scans",
+        "web",
+        {"schema_version": 1, "steps": _steps()},
+        zap="clean",
+        nuclei="empty",
+    )
+    text = "".join((ln if isinstance(ln, str) else json.dumps(ln)) + "\n" for ln in lines)
+    (d / "nuclei-output.jsonl").write_text(text, encoding="utf-8")
+    return d
+
+
+def _nuclei(name: str, **info: object) -> dict:
+    return {
+        "template-id": name,
+        "info": {"name": name, "severity": "medium", **info},
+        "host": "https://app.example.test",
+    }
+
+
+@pytest.mark.parametrize(
+    "info",
+    [
+        {"classification": None},
+        {"tags": None},
+        {"classification": None, "tags": None},
+        {"classification": "CWE-79"},
+        {"classification": {"cwe-id": None}},
+        {"classification": {"cwe-id": "CWE-79"}},
+        {"tags": 7},
+        {"tags": ["owasp-a01", 3, None]},
+    ],
+    ids=[
+        "null-classification",
+        "null-tags",
+        "both-null",
+        "classification-string",
+        "null-cwe-list",
+        "cwe-string",
+        "numeric-tags",
+        "mixed-tags",
+    ],
+)
+def test_an_odd_classification_or_tags_value_does_not_cost_the_finding(tmp_path: Path, info: dict):
+    d = _nuclei_file(tmp_path, [_nuclei("good-one"), _nuclei("odd-one", **info)])
+    findings, coverage, stderr = _run(d, tmp_path)
+    assert {f["rule_id"] for f in findings} == {"DAST-nuc-good-one", "DAST-nuc-odd-one"}
+    assert "Traceback" not in stderr
+    assert coverage["scans"][0]["coverage"] == "complete", coverage
+
+
+def test_a_line_that_still_raises_is_named_and_the_rest_of_the_file_is_kept(tmp_path: Path):
+    bad = _nuclei("bad-one")
+    bad["response"] = 5  # not text: slicing it raises
+    d = _nuclei_file(tmp_path, [_nuclei("first"), bad, _nuclei("last")])
+    findings, coverage, _ = _run(d, tmp_path)
+    assert {f["rule_id"] for f in findings} == {"DAST-nuc-first", "DAST-nuc-last"}
+    scan = coverage["scans"][0]
+    assert scan["coverage"] == "partial" and scan["degraded_steps"] == ["nuclei"]
+    text = " ".join(scan["limitations"])
+    assert "lines 2;" in text and "nuclei-output.jsonl" in text and "first error TypeError" in text
+
+
+def test_many_failing_lines_are_counted_not_listed_without_bound(tmp_path: Path):
+    lines = []
+    for i in range(40):
+        bad = _nuclei(f"bad-{i}")
+        bad["response"] = 5
+        lines.append(bad)
+    d = _nuclei_file(tmp_path, [_nuclei("good")] + lines)
+    findings, coverage, _ = _run(d, tmp_path)
+    assert [f["rule_id"] for f in findings] == ["DAST-nuc-good"]
+    text = " ".join(coverage["scans"][0]["limitations"])
+    assert "40 line(s)" in text and "lines 2, 3, 4, 5, 6, ...;" in text and len(text) < 600
+
+
+def test_undecodable_bytes_in_a_nuclei_file_make_the_scan_partial(tmp_path: Path):
+    """The decode degradation reaches coverage through the Nuclei reader too."""
+    d = _scan(
+        tmp_path / "scans",
+        "web",
+        {"schema_version": 1, "steps": _steps()},
+        zap="clean",
+        nuclei="empty",
+    )
+    good = json.dumps(_nuclei("first")).encode("utf-8")
+    broken = (
+        json.dumps(_nuclei("second", description="caf"))
+        .encode("utf-8")
+        .replace(b'"caf"', b'"caf\xff"')
+    )
+    (d / "nuclei-output.jsonl").write_bytes(good + b"\n" + broken + b"\n")
+    findings, coverage, _ = _run(d, tmp_path)
+    assert {f["rule_id"] for f in findings} == {"DAST-nuc-first", "DAST-nuc-second"}
+    scan = coverage["scans"][0]
+    assert scan["coverage"] == "partial" and scan["degraded_steps"] == ["nuclei"]
+    assert any("1 undecodable byte(s) in nuclei-output.jsonl" in x for x in scan["limitations"])
+
+
+# -- the same finding from two scans keeps the weaker coverage (issue #908) ----------------------
+
+
+def test_a_finding_reported_by_two_scans_takes_the_weaker_coverage_and_says_so(tmp_path: Path):
+    scans = tmp_path / "scans"
+    complete = _scan(scans, "web", {"schema_version": 1, "steps": _steps()})
+    partial = scans / "web" / "2026-10-20"
+    partial.mkdir()
+    (partial / "scan-meta.json").write_text(
+        json.dumps({"schema_version": 1, "steps": _steps(nuclei="skipped")}), encoding="utf-8"
+    )
+    (partial / "zap-report.json").write_text(json.dumps(ZAP_REPORT), encoding="utf-8")
+    assert complete.is_dir()
+
+    findings, coverage, _ = _run(scans / "web", tmp_path)
+
+    zap = [f for f in findings if f["rule_id"] == "DAST-zap-10010"]
+    assert len(zap) == 1
+    assert zap[0]["coverage"] == "partial"
+    text = " ".join(zap[0]["limitations"])
+    assert "skipped: nuclei is not installed" in text
+    assert "also reported by another scan" in text
+    # the finding only the complete scan has keeps that scan's coverage
+    nuc = [f for f in findings if f["rule_id"] == "DAST-nuc-exposed-panel"]
+    assert [f["coverage"] for f in nuc] == ["complete"]
+    assert {Path(s["scan_dir"]).name: s["coverage"] for s in coverage["scans"]} == {
+        "2026-10-19": "complete",
+        "2026-10-20": "partial",
+    }
+
+
+def test_merging_is_order_independent_and_identical_stamps_are_left_alone():
+    sys.path.insert(0, str(ETL))
+    sys.path.insert(0, str(REPO_ROOT))
+    import parse_dast
+
+    def f(sev: str, cov: str, *limits: str) -> dict:
+        return {
+            "fingerprint": "fp",
+            "severity": sev,
+            "coverage": cov,
+            "limitations": list(limits),
+        }
+
+    for first, second in (
+        (f("high", "complete"), f("low", "partial", "zap skipped: x")),
+        (f("low", "partial", "zap skipped: x"), f("high", "complete")),
+    ):
+        (merged,) = parse_dast.deduplicate([first, second])
+        assert merged["severity"] == "high" and merged["coverage"] == "partial"
+        assert any("zap skipped: x" in x for x in merged["limitations"])
+    same_a, same_b = f("high", "complete"), f("high", "complete")
+    (kept,) = parse_dast.deduplicate([same_a, same_b])
+    assert kept["limitations"] == []
+    unstamped = {"fingerprint": "u", "severity": "low"}
+    (only,) = parse_dast.deduplicate([unstamped, dict(unstamped)])
+    assert "coverage" not in only
+
+
+# -- a target that was not scanned leaves a record (issue #895 item 6) ----------------------------
+#
+# `dast run` skips a target whose URL does not answer ("warn and skip"), and stops the whole
+# run when ZAP is not installed. Neither wrote anything, so `dast status` could not tell a
+# target nobody tried from one that was tried and skipped, and a stale last scan kept
+# reading CURRENT. The record is the one every other skipped step already uses: a scan
+# directory holding only a scan-meta.json whose steps are `skipped` with the reason, and
+# `outcome: not_scanned`. parse_dast reads it with no new code path, and the dashboard and
+# `dast status` get "target X not scanned: reason".
+
+UNREACHABLE = "target unreachable: curl returned 000"
+
+
+def _not_scanned(reason: str = UNREACHABLE, **override: object) -> dict:
+    meta: dict = {
+        "schema_version": 1,
+        "target": "web",
+        "target_type": "webapp",
+        "source": "local-run",
+        "outcome": "not_scanned",
+        "reason": reason,
+        "scanners": [],
+        "steps": [{"step": s, "status": "skipped", "tool": s, "reason": reason} for s in ALL_STEPS],
+    }
+    meta.update(override)
+    return meta
+
+
+def test_a_target_that_was_not_scanned_reads_partial_and_names_why(tmp_path: Path):
+    scans = tmp_path / "scans"
+    steps = [{"step": s, "status": "skipped", "tool": s, "reason": "skipped"} for s in ALL_STEPS]
+    d = _scan(scans, "web", _not_scanned(steps=steps), zap=None, nuclei=None)
+    assert [p.name for p in d.iterdir()] == ["scan-meta.json"]
+
+    findings, coverage, _ = _run(d, tmp_path, rc=1)
+
+    assert not findings
+    scan = coverage["scans"][0]
+    assert coverage["coverage"] == "partial" == scan["coverage"]
+    assert scan["skipped_steps"] == ["zap", "nuclei"]
+    text = " ".join(scan["limitations"])
+    assert "the target was not scanned" in text and UNREACHABLE in text
+
+
+@pytest.mark.parametrize("outcome", ["not_scanned", "Not_Scanned", " NOT_SCANNED "])
+def test_not_scanned_with_steps_that_say_ran_is_a_contradiction_and_reads_unknown(
+    tmp_path: Path, outcome: str
+):
+    """A record that says both cannot be trusted either way: never complete, and `unknown`
+    (the wrong-case spelling included: the outcome is read normalised)."""
+    meta = _not_scanned(outcome=outcome, steps=_steps())
+    d = _scan(tmp_path / "scans", "web", meta)
+    findings, coverage, _ = _run(d, tmp_path)
+    assert {f["coverage"] for f in findings} == {"unknown"}
+    assert "contradicts itself" in " ".join(coverage["scans"][0]["limitations"])
+
+
+def test_an_outcome_in_the_wrong_case_with_skipped_steps_is_still_not_scanned(tmp_path: Path):
+    d = _scan(tmp_path / "scans", "web", _not_scanned(outcome="Not_Scanned"), zap=None, nuclei=None)
+    _, coverage, _ = _run(d, tmp_path, rc=1)
+    assert coverage["coverage"] == "partial"
+    assert "the target was not scanned" in " ".join(coverage["scans"][0]["limitations"])
+
+
+def test_a_hostile_reason_is_bounded_and_printable(tmp_path: Path):
+    d = _scan(
+        tmp_path / "scans", "web", _not_scanned("down \x1b[31m" + "x" * 5000), zap=None, nuclei=None
+    )
+    _, coverage, _ = _run(d, tmp_path, rc=1)
+    text = " ".join(coverage["scans"][0]["limitations"])
+    assert "\x1b" not in text and len(text) < 2000
+
+
+def test_a_not_scanned_record_beside_a_same_day_real_scan_leaves_that_scan_alone(tmp_path: Path):
+    """The record goes in `{date}-not-scanned`, never into `{date}`: writing its scan-meta.json
+    into the day's scan directory would replace the real scan's run record."""
+    scans = tmp_path / "scans"
+    real = _scan(scans, "web", {"schema_version": 1, "steps": _steps()})
+    real_meta = (real / "scan-meta.json").read_bytes()
+    skipped = scans / "web" / "2026-10-19-not-scanned"  # the same day as the real scan
+    skipped.mkdir()
+    (skipped / "scan-meta.json").write_text(json.dumps(_not_scanned()), encoding="utf-8")
+
+    findings, coverage, _ = _run(scans / "web", tmp_path)
+
+    assert (real / "scan-meta.json").read_bytes() == real_meta
+    by_dir = {Path(s["scan_dir"]).name: s["coverage"] for s in coverage["scans"]}
+    assert by_dir == {"2026-10-19": "complete", "2026-10-19-not-scanned": "partial"}
+    assert findings and {f["coverage"] for f in findings} == {"complete"}  # real findings unharmed
+
+
+def test_the_doc_puts_the_record_in_its_own_directory_and_never_in_the_scan_directory():
+    text = " ".join(EXAMPLES.read_text(encoding="utf-8").split())
+    record = text.split("#### Not-scanned record")[1].split("```json")[0]
+    assert "`~/.dream-studio/security/scans/{client}/{target}/{date}-not-scanned/`" in record
+    assert "never written into `{date}`" in record and "replace" in record
+    # a scan's own directory is still `{date}` and ingest skips the record directory
+    locate = text.split("### Step I1: Locate Results")[1].split("### Step I2")[0]
+    assert "`{date}-not-scanned` directory" in locate and "skip" in locate
+
+
+def _documented_not_scanned(reason: str) -> dict:
+    text = EXAMPLES.read_text(encoding="utf-8")
+    block = next(
+        b
+        for b in re.findall(r"```json\n(.*?)```", text, re.S)
+        if '"not_scanned"' in b and '"steps"' in b
+    )
+    block = block.replace("{why}", reason)
+    block = re.sub(r'"\{[^}"]*\}"', '"x"', block)
+    return json.loads(block)
+
+
+def test_the_documented_not_scanned_record_is_the_record_the_parser_reads(tmp_path: Path):
+    meta = _documented_not_scanned(UNREACHABLE)
+    assert meta["outcome"] == "not_scanned" and meta["scanners"] == []
+    assert [s["step"] for s in meta["steps"]] == list(ALL_STEPS)
+    d = _scan(tmp_path / "scans", "web", meta, zap=None, nuclei=None)
+    _, coverage, _ = _run(d, tmp_path, rc=1)
+    assert coverage["coverage"] == "partial"
+    assert UNREACHABLE in " ".join(coverage["scans"][0]["limitations"])
+
+
+def test_the_run_steps_record_both_ways_a_target_goes_unscanned():
+    """R2 step 1 (URL does not answer: skip that target) and step 2 (ZAP missing: stop the
+    run) both write the record; the ZAP stop writes one for every target in scope, so there
+    is a single mechanism and `dast status` reads one place."""
+    text = " ".join(EXAMPLES.read_text(encoding="utf-8").split())
+    pre = text.split("### Step R2: Pre-flight Checks")[1].split("### Step R3")[0]
+    assert "skip this target, and write its not-scanned record" in pre
+    assert "**stop** the run, and write the not-scanned record" in pre
+    assert "for every target in scope that has not been scanned" in pre
+    status = text.split("## Mode: `status`")[1]
+    assert "mark the target **NOT SCANNED** with its `reason`" in status
+    assert "`outcome` is not `not_scanned`" in status
+    assert "last scan that ran" in status

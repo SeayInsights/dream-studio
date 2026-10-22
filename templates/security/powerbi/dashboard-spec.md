@@ -31,6 +31,8 @@
 
 **Note:** Findings.compliance_controls is a semicolon-delimited string. Use a calculated column to split it for M:N relationship with Compliance, or use `CONTAINSSTRING()` in measures.
 
+**Note:** Findings.coverage is `complete`, `partial` or `unknown` (how much of the scan the finding's result covers; never blank) and Findings.limitations is a JSON array of strings, one cell per finding, cut to fit a spreadsheet cell with a final "... N more limitation(s) omitted" entry. Repos.coverage and Targets.coverage are the weakest of their findings' (a target the run never scanned has a Targets row with finding_count 0 and coverage `partial`). Metadata.coverage is the weakest of the findings AND of the scan store's latest attempt per target, and Metadata.not_scanned_targets lists the targets whose latest attempt scanned nothing, with the reason. Both columns are appended after `binary_hash`, so existing column positions are unchanged. A visual that shows an org score or a finding count should show Metadata.coverage beside it: a count from a partial scan is a lower bound, not a clean result.
+
 ### Date Table (calculated)
 
 ```dax
@@ -939,7 +941,18 @@ let
         [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]
     ),
     PromotedHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
-    TypedColumns = Table.TransformColumnTypes(PromotedHeaders, {
+    // A findings.csv written before coverage existed has neither column; TransformColumnTypes
+    // errors on a missing one. An older dataset reads "unknown", never blank and never complete.
+    WithCoverage =
+        if Table.HasColumns(PromotedHeaders, "coverage") then PromotedHeaders
+        else Table.AddColumn(PromotedHeaders, "coverage", each "unknown", type text),
+    WithLimitations =
+        if Table.HasColumns(WithCoverage, "limitations") then WithCoverage
+        else Table.AddColumn(
+            WithCoverage, "limitations",
+            each "[""scan coverage was not recorded for this dataset""]", type text
+        ),
+    TypedColumns = Table.TransformColumnTypes(WithLimitations, {
         {"id", type text},
         {"repo", type text},
         {"file", type text},
@@ -955,7 +968,9 @@ let
         {"age_days", Int64.Type},
         {"scanner", type text},
         {"message", type text},
-        {"compliance_controls", type text}
+        {"compliance_controls", type text},
+        {"coverage", type text},
+        {"limitations", type text}
     })
 in
     TypedColumns
@@ -1929,10 +1944,23 @@ CALCULATE(
 ```
 
 ```dax
+DLP Not Assessed Repos =
+CALCULATE(
+    DISTINCTCOUNT(Netcompat[repo]),
+    Netcompat[dlp_risk] = "not_assessed"
+)
+```
+
+`not_assessed` means the client profile had no data classification terms (or no SARIF was read
+for the repo), so nothing was cross-referenced. It is not a low-risk result and must not be
+folded into the LOW count.
+
+```dax
 DLP Risk Summary =
 "HIGH: " & [DLP High Risk Repos] & " repos" & UNICHAR(10) &
 "MEDIUM: " & [DLP Medium Risk Repos] & " repos" & UNICHAR(10) &
-"LOW: " & [DLP Low Risk Repos] & " repos"
+"LOW: " & [DLP Low Risk Repos] & " repos" & UNICHAR(10) &
+"NOT ASSESSED: " & [DLP Not Assessed Repos] & " repos"
 ```
 
 - **Subtitle:** "Repos transmitting data terms that may trigger Zscaler DLP rules"
@@ -1953,7 +1981,7 @@ DLP Risk Summary =
 
 - **Conditional formatting:**
   - Cert Pinning: "fail" → red bg, "pass" → green bg, "not_applicable" → grey
-  - DLP Risk: "high" → red bg, "medium" → amber bg, "low" → green bg
+  - DLP Risk: "high" → red bg, "medium" → amber bg, "low" → green bg, "not_assessed" → grey
   - Score: data bars with RAG coloring
 
 #### V10.6 — Slicers

@@ -11,44 +11,44 @@ Extracted from SKILL.md to reduce context injection size.
 
 2. **Run parse_sarif.py**
    ```
-   py -3.12 templates/security/etl/parse_sarif.py --client {client}
+   py -3.12 <skill-dir>/templates/security/etl/parse_sarif.py --client {client} --scans-dir {scan_dir}
    ```
-   Reads all SARIF/JSON files from `scans/{client}/`. Normalizes across scanner outputs (Semgrep SARIF, Bandit JSON, TruffleHog JSON, pip-audit JSON). Deduplicates. Outputs normalized findings JSON to stdout.
+   Reads the result files directly in `--scans-dir` (SARIF, Bandit JSON, TruffleHog JSON Lines, pip-audit JSON) and normalizes across them. It reads one scan directory per run (`scans/{client}/{repo}/{date}`) and does not walk the client tree: pass `--scans-dir` the scan directory you want in the dataset. Which dated directory is current for each repo is a choice this step does not make, so a client with several repos is run once per scan directory. Deduplicates. Outputs normalized findings JSON to stdout.
 
 3. **Run score_findings.py**
    ```
-   py -3.12 templates/security/etl/parse_sarif.py --client {client} | \
-   py -3.12 templates/security/etl/score_findings.py --client {client}
+   py -3.12 <skill-dir>/templates/security/etl/parse_sarif.py --client {client} | \
+   py -3.12 <skill-dir>/templates/security/etl/score_findings.py --client {client}
    ```
    Reads normalized findings from stdin. Assigns CVSS scores from rule severity + CWE. Adds business impact score from client profile data classification. Calculates per-repo risk score. Outputs scored findings JSON to stdout.
 
 4. **Run map_compliance.py**
    ```
-   py -3.12 ... | py -3.12 templates/security/etl/map_compliance.py --client {client}
+   py -3.12 ... | py -3.12 <skill-dir>/templates/security/etl/map_compliance.py --client {client}
    ```
    Reads scored findings from stdin. Cross-references against compliance framework mapping YAMLs. Adds framework control IDs to each finding. Identifies gap controls (controls with no scan coverage). Outputs compliance-enriched JSON to stdout.
 
 5. **Run generate_mitigations.py**
    ```
-   py -3.12 ... | py -3.12 templates/security/etl/generate_mitigations.py --client {client}
+   py -3.12 ... | py -3.12 <skill-dir>/templates/security/etl/generate_mitigations.py --client {client}
    ```
    Reads compliance-enriched findings from stdin. Matches each finding to mitigation templates by rule ID, CWE, or OWASP category. Adds fix recommendations (code before/after, verification test, effort estimate). Outputs fully enriched JSON to stdout.
 
 6. **Run analyze_netcompat.py** (parallel with steps 3-5 if desired)
    ```
-   py -3.12 templates/security/etl/analyze_netcompat.py --client {client}
+   py -3.12 <skill-dir>/templates/security/etl/analyze_netcompat.py --client {client}
    ```
    Reads SARIF findings filtered to ZSC-* rules + client network profile. Calculates per-repo Zscaler compatibility score. Writes `netcompat.csv` directly to the datasets directory.
 
 7. **Run export_dataset.py**
    ```
-   py -3.12 ... | py -3.12 templates/security/etl/export_dataset.py --client {client}
+   py -3.12 ... | py -3.12 <skill-dir>/templates/security/etl/export_dataset.py --client {client}
    ```
    Reads fully enriched findings JSON from stdin. Exports all Power BI-ready CSVs. Calculates org risk score using weights from client profile. Writes `metadata.json` with summary statistics.
 
 ### Full pipeline command (chained)
 ```bash
-ETL="builds/dream-studio-clean/templates/security/etl"
+ETL="<skill-dir>/templates/security/etl"
 py -3.12 $ETL/parse_sarif.py --client {client} | \
 py -3.12 $ETL/score_findings.py --client {client} | \
 py -3.12 $ETL/map_compliance.py --client {client} | \
@@ -114,7 +114,7 @@ DASHBOARD REFRESHED: {client}
 
 ## Mode: `template`
 
-No `.pbit` file ships with this repo — only `templates/security/powerbi/dashboard-spec.md`,
+No `.pbit` file ships with this repo — only `<skill-dir>/templates/security/powerbi/dashboard-spec.md`,
 a markdown specification (data model, DAX measures, page layouts, M-query source
 configuration) that a human follows in Power BI Desktop to build the real `.pbit`.
 This mode hands off that spec plus the connection details needed to wire it to a
@@ -123,7 +123,7 @@ client's dataset; it does not produce a binary template itself.
 ### Orchestration Steps
 
 1. Check that the dataset directory exists: `~/.dream-studio/security/datasets/{client}/`
-2. Point the user at `templates/security/powerbi/dashboard-spec.md`.
+2. Point the user at `<skill-dir>/templates/security/powerbi/dashboard-spec.md`.
 3. Generate a connection README at `~/Downloads/enterprise-security-{client}-README.txt` containing:
    - Dataset directory path (absolute)
    - CSV file list with column descriptions
@@ -146,7 +146,7 @@ Document these relationships in the README:
 
 ```
 TEMPLATE SPEC HANDED OFF: {client}
-  Power BI spec:     templates/security/powerbi/dashboard-spec.md
+  Power BI spec:     <skill-dir>/templates/security/powerbi/dashboard-spec.md
   Connection README: ~/Downloads/enterprise-security-{client}-README.txt
   Dataset path:      ~/.dream-studio/security/datasets/{client}/
   Next step:         open Power BI Desktop, follow the spec, build the .pbit by hand
@@ -175,6 +175,8 @@ TEMPLATE SPEC HANDED OFF: {client}
 | scanner | string | Source scanner (semgrep, bandit, trufflehog, pip-audit) |
 | message | string | Finding description |
 | compliance_controls | string | Semicolon-separated framework control IDs |
+| coverage | string | `complete` / `partial` / `unknown`: how much of the scan this finding's result covers. A finding that carries no coverage reads `unknown`, never `complete` |
+| limitations | string | JSON array of strings naming what the result cannot establish (skipped steps, unread results). A finding with no recorded coverage lists that as its limitation |
 
 ### mitigations.csv
 | Column | Type | Description |
@@ -209,6 +211,8 @@ TEMPLATE SPEC HANDED OFF: {client}
 | finding_count | int | Total findings |
 | critical_count | int | Critical severity count |
 | high_count | int | High severity count |
+| low_count | int | Low severity count |
+| coverage | string | Weakest `coverage` of this repo's findings (`complete` / `partial` / `unknown`) |
 
 ### trends.csv
 | Column | Type | Description |
@@ -228,7 +232,7 @@ TEMPLATE SPEC HANDED OFF: {client}
 | repo | string | Repository name |
 | zscaler_score | float | Compatibility score (0-100) |
 | cert_pinning | string | pass / fail / not_applicable |
-| dlp_risk | string | Risk level for DLP trigger |
+| dlp_risk | string | `high` / `medium` / `low` / `not_assessed`. `not_assessed` means the profile had no data classification terms (or no SARIF was read); it is not a low-risk result |
 | port_issues | string | Non-standard port findings |
 | fixes_needed | string | Summary of required fixes |
 
@@ -247,9 +251,36 @@ TEMPLATE SPEC HANDED OFF: {client}
     "low": 59
   },
   "org_score": 62.4,
-  "frameworks": ["SOC2", "NIST-CSF", "OWASP-ASVS"]
+  "frameworks": ["SOC2", "NIST-CSF", "OWASP-ASVS"],
+  "coverage": "partial",
+  "not_scanned_targets": [
+    {"target": "legacy-admin-web", "date": "2026-04-22-not-scanned", "reason": "target unreachable: curl returned 000"}
+  ]
 }
 ```
+
+`coverage` is the weakest coverage among the exported findings AND the scan store's latest
+attempt per target (`partial` beats `unknown` beats `complete`): a `coverage.json` beside the
+newest scan of each target, and any target whose newest directory is a `{date}-not-scanned`
+record. `not_scanned_targets` lists those targets with their reason; `targets.csv` gets a
+row for each (finding_count 0, coverage `partial`), because a target nothing was scanned for
+has no finding to put it in the table. `export_dataset.py` reads `--scans-dir` (default
+`~/.dream-studio/security/scans/{client}/`, layout `{target}/{date}[-not-scanned]/`). With neither findings nor a
+sidecar it is `unknown`. `org_score` is computed from the findings that exist: when `coverage`
+is not `complete`, show it next to the score. `targets.csv` and `repos.csv` carry a `coverage`
+column (the weakest of their findings'). A `limitations` cell is cut to fit a spreadsheet cell (32,767
+characters) with a final "... N more limitation(s) omitted" entry.
+
+How the scan store is read: only directories named `{date}` or `{date}-not-scanned` are
+attempts (a directory named `latest` or `backup` is reported as `unrecognised scan directory
+<target>/<name>` in `limitations` and decides nothing). A target's latest attempt that cannot
+say what it did reads `unknown`, never `complete` and never ignored: a `scan-meta.json` that
+cannot be read, a directory with neither `scan-meta.json` nor `coverage.json`, a
+`scan-meta.json` with no `coverage.json`, a target with no recognised directory. An explicit
+`--scans-dir` that does not exist or is not a directory is an error (exit 1, nothing written);
+an absent or empty default store is `coverage: unknown` with the reason in `limitations`, so
+a typo cannot hide an unscanned target. `repos.csv` and `targets.csv` derive a name's
+`coverage` from its findings and its latest attempt, so they agree.
 
 ---
 

@@ -37,7 +37,7 @@ This skill never modifies client code directly. It outputs recommendations the u
 See `docs/security-storage-layout.md`. Uses: `scans/{client}/` (read), `datasets/{client}/mitigations.*` (write)
 
 ## Templates
-See `templates/security/README.md`. Uses: `mitigations/*.yaml` (fix templates by CWE/OWASP)
+See `<skill-dir>/templates/security/README.md`. Uses: `mitigations/*.yaml` (fix templates by CWE/OWASP)
 
 ## Client Profile
 See `docs/client-profile-schema.md`. Required: `client.name`. Optional: `data.classification`, `isolation.model`, `network.proxy.*`, `compliance.frameworks`

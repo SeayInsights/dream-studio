@@ -16,6 +16,12 @@ where generated files land, and anti-patterns.
   "date": "YYYY-MM-DD",
   "source": "github-actions | local-file",
   "run_id": "string | null",
+  "run": {"run_id": "string", "status": "completed", "conclusion": "success | failure | cancelled | ..."},
+  "planned_steps": ["semgrep", "bandit"],
+  "steps": [
+    {"step": "semgrep", "status": "ran | skipped | failed", "tool": "semgrep"},
+    {"step": "bandit", "status": "ran | skipped | failed", "tool": "bandit", "reason": "when not ran"}
+  ],
   "files": ["filename.sarif", "filename.json"],
   "finding_counts": {
     "critical": 0,
@@ -28,6 +34,12 @@ where generated files land, and anti-patterns.
 }
 ```
 
+`run`, `planned_steps` and `steps` are the run record a `github-actions` ingest writes (one
+`steps` entry per scanner the workflow ran, from the run's jobs). `parse_sarif.py` reads them:
+a run whose `conclusion` is not `success`, or a scanner that failed, was skipped or left no
+readable result, makes the scan `partial` and is named; a scan with no run record (a `--file`
+ingest) is `unknown`. Both are the vocabulary of `binary-scan` and `dast`.
+
 ### Generated workflow output location
 `~/.dream-studio/security/actions/{client}/security-scan.yml`
 
@@ -38,7 +50,7 @@ where generated files land, and anti-patterns.
 
 ## Anti-patterns
 
-- **Running scanners directly** — this skill generates configuration and ingests results. It never executes `semgrep`, `trivy`, or other tools locally. Scanning happens in GitHub Actions.
+- **Running scanners directly** — this skill generates configuration and ingests results. It never executes `semgrep`, `bandit`, or other tools locally. Scanning happens in GitHub Actions.
 - **Pushing to GitHub** — never push generated workflow or rule files. Output them for the user to commit. The user controls what goes into client repos.
 - **Inlining secrets from profile** — client profiles may contain tenant keys or API tokens. Never render these into workflow YAML or Semgrep rule files. Reference them as GitHub Actions secrets (`${{ secrets.KEY }}`).
 - **Treating stale results as current** — results older than 7 days are STALE. Do not surface stale findings to `secure` or `ship` without a freshness warning.

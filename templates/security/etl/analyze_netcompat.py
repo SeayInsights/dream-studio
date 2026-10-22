@@ -26,14 +26,13 @@ import json
 import pathlib
 import sys
 
-# This script runs in place from the repo (`py -3.12 templates/security/etl/...py`,
-# see templates/security/README.md), which puts its own directory on sys.path, not
-# the repo root -- the resolver import below needs a manual add.
-_REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+# The scripts run in place, from a checkout or from an installed plugin. etl_home.py
+# is a sibling: it resolves the Dream Studio home without the platform's `core` package.
+_ETL_DIR = pathlib.Path(__file__).resolve().parent
+if str(_ETL_DIR) not in sys.path:
+    sys.path.insert(0, str(_ETL_DIR))
 
-from core.config.paths import home_dir  # noqa: E402
+from etl_home import home_dir  # noqa: E402
 
 try:
     import yaml
@@ -71,6 +70,11 @@ DEDUCTIONS: dict[str, int] = {
 
 # Categories that only apply to Zscaler
 ZSCALER_ONLY_CATEGORIES: set[str] = {"custom_dns", "mtls_conflict"}
+
+# `dlp_risk` is high | medium | low | not_assessed. not_assessed means the DLP cross-reference
+# did not run (no data classification terms in the profile, or no scan to read); it is never
+# written as low, because low is a claim that terms were checked and not found.
+DLP_NOT_ASSESSED = "not_assessed"
 
 # CSV output columns (in order)
 CSV_COLUMNS = ["repo", "zscaler_score", "cert_pinning", "dlp_risk", "port_issues", "fixes_needed"]
@@ -283,19 +287,53 @@ def extract_location(result: dict) -> tuple[str, int]:
 # ---------------------------------------------------------------------------
 
 
+def dlp_terms_from(profile: dict) -> tuple[list[str], list[str]]:
+    """(terms, problems): the data classification terms of a client profile.
+
+    `data.critical` and `data.sensitive` are lists of strings. Anything else (the section
+    missing, null, a string where a list belongs, a number) yields no terms and, when it is
+    present but malformed, a problem to print: guessing at data classifications is the thing
+    the mode forbids, and iterating the characters of `ssn` would be a guess. Blank terms are
+    dropped.
+    """
+    problems: list[str] = []
+    data = profile.get("data")
+    if data is None:
+        data = {}
+    elif not isinstance(data, dict):
+        problems.append(f"data is not a mapping ({type(data).__name__}); ignored")
+        data = {}
+    terms: list[str] = []
+    for key in ("critical", "sensitive"):
+        value = data.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, list):
+            problems.append(f"data.{key} is not a list ({type(value).__name__}); ignored")
+            continue
+        terms.extend(t for t in value if isinstance(t, str) and t.strip())
+    return terms, problems
+
+
 def assess_dlp_risk(findings: list[dict], dlp_terms: list[str]) -> str:
     """
     Cross-reference finding messages and file paths with DLP classification terms.
 
     Returns:
-        'high'   — a data classification term appears in a finding message or file path
-        'medium' — a term appears in an adjacent/nearby pattern (heuristic match)
-        'low'    — no data terms detected near outbound connections
+        'high'         — a data classification term appears in a finding message or file path
+        'medium'       — a term appears in an adjacent/nearby pattern (heuristic match)
+        'low'          — terms were given and none were detected near outbound connections
+        'not_assessed' — the profile gave no data classification terms, so there was nothing
+                         to cross-reference. This is not 'low': it says nothing about risk.
     """
-    if not dlp_terms or not findings:
+    # A blank term is a substring of every message: it would match everything and read
+    # `high`, and a list of blanks would count as an assessment. Only real terms count.
+    lowered_terms = [t.strip().lower() for t in dlp_terms if isinstance(t, str) and t.strip()]
+    if not lowered_terms:
+        return DLP_NOT_ASSESSED
+    if not findings:
         return "low"
 
-    lowered_terms = [t.lower() for t in dlp_terms]
     high_hit = False
     medium_hit = False
 
@@ -480,8 +518,15 @@ def run_analysis(
     """
     proxy_cfg = profile.get("network", {}).get("proxy", {})
     proxy_type = proxy_cfg.get("type", "none")
-    data_cfg = profile.get("data", {})
-    dlp_terms: list[str] = data_cfg.get("critical", []) + data_cfg.get("sensitive", [])
+    dlp_terms, problems = dlp_terms_from(profile)
+    for problem in problems:
+        print(f"NOTE: {problem}", file=sys.stderr)
+    if not dlp_terms:
+        print(
+            "NOTE: DLP risk not assessed: the profile has no data.critical or data.sensitive "
+            "terms to cross-reference, so dlp_risk is written as not_assessed.",
+            file=sys.stderr,
+        )
 
     rows: list[dict] = []
     repos_processed: set[str] = set()
@@ -514,7 +559,8 @@ def run_analysis(
             rows.append(row)
             repos_processed.add(repo_name)
 
-    # Add any explicitly provided repos with no SARIF (clean score)
+    # Add any explicitly provided repos with no SARIF (clean score). No scan was read, so
+    # nothing was cross-referenced: DLP risk is not assessed, whatever the profile holds.
     for repo_name in extra_repos or []:
         if repo_name not in repos_processed:
             rows.append(
@@ -522,7 +568,7 @@ def run_analysis(
                     "repo": repo_name,
                     "zscaler_score": 100,
                     "cert_pinning": 0,
-                    "dlp_risk": "low",
+                    "dlp_risk": DLP_NOT_ASSESSED,
                     "port_issues": 0,
                     "fixes_needed": 0,
                 }

@@ -29,20 +29,13 @@ import json
 import sys
 from pathlib import Path
 
-# This script runs in place from the repo (`py -3.12 templates/security/etl/...py`,
-# see templates/security/README.md), which puts its own directory on sys.path, not
-# the repo root -- the resolver import below needs a manual add.
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
 # scan_coverage.py is a sibling of this script (shared with the other parse_* scripts).
 _ETL_DIR = Path(__file__).resolve().parent
 if str(_ETL_DIR) not in sys.path:
     sys.path.insert(0, str(_ETL_DIR))
 
 import scan_coverage  # noqa: E402
-from core.config.paths import home_dir  # noqa: E402
+from etl_home import home_dir  # noqa: E402
 
 #: Every step `binary-scan analyze` runs when all its tooling is present
 #: (examples.md A4-A7). Coverage is complete only when each one is recorded as run
@@ -166,19 +159,93 @@ def _normalize_severity(raw: str) -> str:
 # ── Parser: checksec JSON ────────────────────────────────────────────────────
 
 
-def parse_checksec_json(data: dict, target_name: str, binary_hash: str = "") -> list[dict]:
+#: A hardening check name that reads as a pass/fail result, and the markers that make a
+#: top-level entry of checksec.json "a binary's checks".
+CHECKSEC_MARKERS = ("nx", "pie", "relro", "canary", "dep", "aslr")
+
+#: How many names a limitation lists; the rest are counted.
+_NAMED = 10
+
+
+def _named(items: list[str]) -> str:
+    return ", ".join(items[:_NAMED]) + (
+        f" (and {len(items) - _NAMED} more)" if len(items) > _NAMED else ""
+    )
+
+
+def _has_listed_check(entry: dict) -> bool:
+    """Whether an object carries at least one check name this parser lists, spelled any way
+    (`NX`, `high_entropy_va`, `high-entropy-va`)."""
+    return any(
+        k in CHECKSEC_MARKERS
+        or k.lower() in CHECKSEC_CHECK_META
+        or k.lower().replace("_", "").replace("-", "") in CHECKSEC_CHECK_META
+        for k in entry
+        if isinstance(k, str)
+    )
+
+
+def parse_checksec_json(
+    data: dict,
+    target_name: str,
+    binary_hash: str = "",
+    degraded: list[str] | None = None,
+    notes: list[str] | None = None,
+) -> list[dict]:
+    """checksec.json -> findings. Nothing in the file is dropped without a trace.
+
+    Findings for valid input are what they always were. What used to be skipped silently is
+    reported: only the first binary of several is read (`degraded`, so the step is partial);
+    a hardening check whose value is neither a boolean nor a string is never read as a
+    failure, and is named (`degraded`); an unlisted check with such a value, and a
+    top-level entry that is not an object, are named in `notes`.
+    """
     findings = []
+    unreadable_known: list[str] = []
+    unreadable_other: list[str] = []
+    skipped_entries: list[str] = []
 
     file_results = None
     if "file" in data and isinstance(data["file"], dict):
         file_results = data
     elif isinstance(data, dict):
-        for key, val in data.items():
-            if isinstance(val, dict) and any(
-                k in val for k in ("nx", "pie", "relro", "canary", "dep", "aslr")
-            ):
-                file_results = {key: val}
-                break
+        binaries = {
+            key: val
+            for key, val in data.items()
+            if isinstance(val, dict) and any(k in val for k in CHECKSEC_MARKERS)
+        }
+        if binaries:
+            first = next(iter(binaries))
+            file_results = {first: binaries[first]}
+            # What sits beside the binary that was read. A sibling object carrying a listed
+            # check (cfg, safeseh, ...) is another binary that was not read; one carrying no
+            # listed check could have been a binary's checks under names this parser does not
+            # know. Both make the step partial. A sibling that is not an object is envelope
+            # metadata (a version, a note): named, not a downgrade.
+            other_binaries = [
+                key
+                for key, val in data.items()
+                if key != first and isinstance(val, dict) and _has_listed_check(val)
+            ]
+            unrecognised = [
+                key
+                for key, val in data.items()
+                if isinstance(val, dict) and key not in binaries and not _has_listed_check(val)
+            ]
+            skipped_entries.extend(
+                _clean_name(k) for k, v in data.items() if not isinstance(v, dict)
+            )
+            if other_binaries and degraded is not None:
+                names = [_clean_name(first)] + [_clean_name(k) for k in other_binaries]
+                degraded.append(
+                    f"checksec.json holds {len(names)} binaries ({_named(names)}); only "
+                    f"{_clean_name(first)} was read, the others were not"
+                )
+            if unrecognised and degraded is not None:
+                degraded.append(
+                    "checksec.json entries with no recognised check key were not read as "
+                    f"binaries: {_named([_clean_name(k) for k in unrecognised])}"
+                )
 
     if file_results is None:
         if "error" in data:
@@ -187,6 +254,7 @@ def parse_checksec_json(data: dict, target_name: str, binary_hash: str = "") -> 
 
     for binary_name, checks in file_results.items():
         if not isinstance(checks, dict):
+            skipped_entries.append(_clean_name(binary_name))
             continue
 
         for check_name, check_value in checks.items():
@@ -200,6 +268,11 @@ def parse_checksec_json(data: dict, target_name: str, binary_hash: str = "") -> 
                 is_fail = check_value.lower().strip() in fail_values
                 if check_name_lower == "relro" and check_value.lower() == "partial":
                     is_fail = True
+            else:
+                known = check_name_lower in CHECKSEC_CHECK_META or (
+                    check_name.lower() in CHECKSEC_CHECK_META
+                )
+                (unreadable_known if known else unreadable_other).append(_clean_name(check_name))
 
             if not is_fail:
                 continue
@@ -242,6 +315,20 @@ def parse_checksec_json(data: dict, target_name: str, binary_hash: str = "") -> 
                 }
             )
 
+    if unreadable_known and degraded is not None:
+        degraded.append(
+            "hardening check(s) with a value that is neither true/false nor text were not read "
+            f"as pass or fail: {_named(unreadable_known)}"
+        )
+    if unreadable_other and notes is not None:
+        notes.append(
+            "checksec.json values that are neither true/false nor text were not read as pass "
+            f"or fail: {_named(unreadable_other)}"
+        )
+    if skipped_entries and notes is not None:
+        notes.append(
+            f"checksec.json entries that are not an object were not read: {_named(skipped_entries)}"
+        )
     return findings
 
 
@@ -514,6 +601,12 @@ def parse_header_json(
             f"no recognised {fmt} check with a boolean value (expected one of {', '.join(known)})"
         )
 
+    carried = data.get("notes")
+    if isinstance(carried, list) and notes is not None:
+        # caveats the writer attached to its own checks (header_analysis.py: a signature
+        # block is present but was not verified)
+        notes.extend(scan_coverage.short(n) for n in carried if isinstance(n, str))
+
     non_boolean = [_clean_name(k) for k, v in checks.items() if not isinstance(v, bool)]
     if non_boolean and degraded is not None:
         degraded.append(
@@ -605,7 +698,7 @@ def detect_and_parse(
     if step == "header_analysis":
         return parse_header_json(data, target_name, binary_hash, degraded, notes)
     if step == "checksec":
-        return parse_checksec_json(data, target_name, binary_hash)
+        return parse_checksec_json(data, target_name, binary_hash, degraded, notes)
     if step == "yara":
         return parse_yara_json(data, target_name, binary_hash)
     if step == "strings":
@@ -657,8 +750,8 @@ def read_result_file(path: Path, target_name: str, binary_hash: str) -> scan_cov
         step = detect_step(raw, path.name)
         findings = detect_and_parse(raw, path.name, target_name, binary_hash, degraded, notes)
     if step != expected:
-        notes.append(f"{path.name} is not a {expected} result (content reads as {step or 'none'})")
-        return scan_coverage.Read(None, findings, [], notes)
+        refusal = f"{path.name} is not a {expected} result (content reads as {step or 'none'})"
+        return scan_coverage.Read(None, findings, [], notes, [refusal])
     return scan_coverage.Read(step, findings, degraded, notes)
 
 
@@ -671,17 +764,9 @@ def is_result_file(path: Path) -> bool:
 
 
 def deduplicate(findings: list[dict]) -> list[dict]:
-    best: dict[str, dict] = {}
-    for f in findings:
-        fp = f["fingerprint"]
-        if fp not in best:
-            best[fp] = f
-        else:
-            existing_rank = SEVERITY_RANK.get(best[fp]["severity"], 0)
-            new_rank = SEVERITY_RANK.get(f["severity"], 0)
-            if new_rank > existing_rank:
-                best[fp] = f
-    return list(best.values())
+    """One finding per fingerprint, the highest severity; scans that disagree about coverage
+    leave the weaker one on the merged finding (see scan_coverage.deduplicate)."""
+    return scan_coverage.deduplicate(findings, SEVERITY_RANK)
 
 
 # ── Sample data generator ────────────────────────────────────────────────────
