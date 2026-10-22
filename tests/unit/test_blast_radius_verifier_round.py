@@ -224,6 +224,7 @@ def test_the_gate_reads_the_head_object_not_the_working_tree(tmp_path: Path) -> 
     dirty = committed.replace("v2 = 2\n", "S = '''\n")
     assert dirty.count("\n") == committed.count("\n")
     _write(tmp_path / "core" / "x.py", dirty)
+    _git(tmp_path, "add", "core/x.py")  # staged too: the INDEX is not HEAD either
     diff, changed = br._resolve_diff_and_changed(tmp_path, "HEAD~1")
     assert "+def do_work(a, b):" in diff
     assert changed == ["core/x.py"]
@@ -238,6 +239,20 @@ def test_the_gate_reads_the_head_object_not_the_working_tree(tmp_path: Path) -> 
 
     assert CALLER in callers(file_reader=reader)
     assert callers() == set(), "the working-tree reader is the pinned best-effort default"
+
+
+def test_the_git_reader_keeps_a_lone_carriage_return(tmp_path: Path) -> None:
+    """The text of a blob is decoded from bytes: universal newlines would turn a bare CR into
+    a line break that git does not count and shift every line after it."""
+    try:
+        _git(tmp_path, "init", "-q")
+    except (OSError, subprocess.CalledProcessError):
+        pytest.skip("git is not available")
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "x.py").write_bytes(b"A = 1\rB = 2\r\nS = 3\n")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "base")
+    assert br._git_head_reader(tmp_path)("core/x.py") == "A = 1\rB = 2\r\nS = 3\n"
 
 
 def test_the_gate_passes_the_head_reader_to_the_detectors(
@@ -349,9 +364,15 @@ def test_a_slash_after_a_keyword_starts_a_regex(keyword: str) -> None:
     assert _signature_on_line(line, is_py=False) == BAR
 
 
-@pytest.mark.parametrize("word", ["myreturn", "return2", "x_in", "typeofx", "undo", "elsewhere"])
+@pytest.mark.parametrize(
+    "word",
+    ["myreturn", "return2", "x_in", "typeofx", "undo", "elsewhere", "a1in", "my$return", "$in"],
+)
 def test_a_slash_after_a_word_that_merely_contains_a_keyword_is_a_division(word: str) -> None:
-    line = f"x = {word} / 2 + 'it'; function bar(a){{}}"
+    """The word is read whole, back to its start: `x_in`, `a1in` and `my$return` end in a
+    keyword but are not one. Read as a keyword the slash would be a regex that runs on to
+    the slash INSIDE the string below and leaves the quote after it open."""
+    line = f"x = {word} / 2 + '/' + y; function bar(a){{}}"
     assert _signature_on_line(line, is_py=False) == BAR
 
 
@@ -375,6 +396,23 @@ def test_a_class_holding_a_slash_and_a_quote_is_one_regex() -> None:
 def test_a_slash_after_an_arrow_but_not_after_a_bare_greater_than() -> None:
     assert _signature_on_line("f = s => /'/.test(s); function bar(a){}", is_py=False) == BAR
     assert _signature_on_line("<a>/'<b> function bar(a){}", is_py=False) is None
+    # After a bare `>` the slash is a division, so the quote opens a string that swallows the
+    # def. Read as a regex it would run on to the slash of `</a>` and let the def through.
+    assert _signature_on_line("<a>/'</a> function bar(b){}", is_py=False) is None
+
+
+@pytest.mark.parametrize(
+    "line,style",
+    [
+        ("go();// function f(a)", "c"),
+        ("x = 1;// function f(a)", "c"),
+        ("select 1;-- function f(a)", "sql"),
+        ("select 1--function f(a)", "sql"),
+    ],
+)
+def test_only_a_hash_comment_needs_a_token_start(line: str, style: str) -> None:
+    """`//` and `--` start a comment wherever they stand; only `#` is held to a token."""
+    assert _signature_on_line(line, is_py=False, style=style) is None
 
 
 # --- F4: a hash comment starts a token --------------------------------------------------
@@ -437,13 +475,42 @@ def test_the_hand_lexer_follows_a_continuation_too() -> None:
     assert _py_line_end_state("S = 'abc'", None) is None
 
 
+@pytest.mark.parametrize(
+    "prefix", ["r", "R", "b", "B", "u", "U", "rb", "Rb", "bR", "BR", "f", "F", "rf", "fR", "Rf"]
+)
+def test_string_prefixes_do_not_change_the_delimiter(prefix: str) -> None:
+    source = f"S = {prefix}\"\"\"\nx\n\"\"\"\nT = {prefix}'''\ny\n'''\n"
+    states = _py_start_states(source)
+    assert states[1] == '"""' and states[2] == '"""'
+    assert states[4] == "'''" and states[5] == "'''"
+
+
+def test_a_continued_single_quote_state_is_read_by_the_hand_lexer() -> None:
+    """In the continued string `'` closes it, and what follows is code: a triple opened
+    after it is a triple."""
+    assert _py_line_end_state("abc' + '''", "'") == "'''"
+    assert _py_line_end_state("abc' + '''", None) is None  # not a continuation: it opens one
+
+
 def test_a_file_that_does_not_tokenize_falls_back_to_the_hand_lexer() -> None:
     source = "x = (\nS = '''\ndef a(p):\n'''\n"
     assert _py_start_states(source) == [None, None, "'''", "'''"]
 
 
-def test_a_lone_carriage_return_makes_the_hand_lexer_the_source() -> None:
-    assert _py_start_states("A = 1\rB = 2\nS = '''\nx\n'''\n") == [None, None, "'''", "'''"]
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("A = 1\rB = 2\nS = '''\nx\n'''\n", [None, None, "'''", "'''"]),
+        ("S = '''a\rb\nc\n'''\nT = 1\n", [None, "'''", "'''", None]),
+        ("# a\rb\nS = '''\nx\n'''\n", [None, None, "'''", "'''"]),
+        ("S = '''\r\nx\r\n'''\r\nT = 1\r\n", [None, "'''", "'''", None]),
+    ],
+    ids=["in-code", "in-a-docstring", "in-a-comment", "crlf"],
+)
+def test_a_lone_carriage_return_is_a_character_for_every_source(text: str, expected) -> None:
+    """Both sources count lines by newline: the tokenizer and the hand lexer agree."""
+    assert _py_start_states(text) == expected
+    assert hd._py_start_states_lexer(text) == expected
 
 
 def _tokenize_inside(text: str) -> dict[int, bool] | None:
@@ -661,6 +728,16 @@ FORMS = {
         "import inspect\n\ndef one(fn):\n    return inspect.signature(fn)\n\n"
         "def two(g):\n    return one(g)\n\ntwo(do_work)\n"
     ),
+    "helper-with-a-keyword-only-parameter": (
+        "import inspect\n\ndef get(*, fn):\n    return inspect.signature(fn)\n\nget(fn=do_work)\n"
+    ),
+    "helper-with-a-positional-only-parameter": (
+        "import inspect\n\ndef get(fn, /):\n    return inspect.signature(fn)\n\nget(do_work)\n"
+    ),
+    "async-for-loop": (
+        "import inspect\nREG = [do_work]\n\nasync def f():\n    async for v in REG:\n"
+        "        inspect.signature(v)\n"
+    ),
     "getmembers": "import inspect\ninspect.getmembers(do_work)\n",
     "getmembers-static": "import inspect\ninspect.getmembers_static(do_work)\n",
     "registry-loop": (
@@ -695,6 +772,16 @@ def test_more_introspection_forms_are_reported(tmp_path: Path, caller: str) -> N
 
 
 NOT_OURS = {
+    # `import inspect; inspect.signature(other)` is here so the file passes the cheap
+    # pre-filter and the getattr / helper rules themselves are what is being tested.
+    "getattr-with-one-argument": "import inspect\ninspect.signature(other)\ngetattr(do_work)\ndo_work('a')\n",
+    "getattr-of-an-ordinary-name": (
+        "import inspect\ninspect.signature(other)\ngetattr(do_work, '__name__')\ndo_work('a')\n"
+    ),
+    "helper-that-measures-its-parameter": (
+        "import inspect\ninspect.signature(other)\n\ndef size(fn):\n    return len(fn)\n\n"
+        "size(do_work)\ndo_work('a')\n"
+    ),
     "getattr-of-another": "getattr(other, '__defaults__')\ndo_work('a')\n",
     "getattr-of-an-ordinary-attribute": "getattr(do_work, '__doc__')\ndo_work('a')\n",
     "getattr-with-a-variable-name": "getattr(do_work, attr)\ndo_work('a')\n",
@@ -864,6 +951,38 @@ def test_a_name_defined_twice_is_still_ambiguous_with_the_single_pass(tmp_path: 
         _def_diff(*BREAKING, path="core/one.py"), repo_root=tmp_path
     )
     assert "elsewhere.py" not in {f["path"] for f in findings}
+
+
+def test_a_def_inside_a_string_does_not_make_a_name_ambiguous(tmp_path: Path) -> None:
+    """Only a def at the start of a line is a definition for the count."""
+    _write(tmp_path / "core" / "one.py", "def do_work(a):\n    return 1\n")
+    _write(tmp_path / "core" / "note.py", 'HELP = "call def do_work(a) like so"\n')
+    _write(tmp_path / "elsewhere.py", "def go():\n    do_work(1)\n")
+    findings = detect_changed_signature_callers(
+        _def_diff(*BREAKING, path="core/one.py"), repo_root=tmp_path
+    )
+    assert "elsewhere.py" in {f["path"] for f in findings}
+
+
+def test_an_async_def_counts_as_a_definition(tmp_path: Path) -> None:
+    _write(tmp_path / "core" / "one.py", "def do_work(a):\n    return 1\n")
+    _write(tmp_path / "core" / "two.py", "async def do_work(a):\n    return 2\n")
+    _write(tmp_path / "elsewhere.py", "def go():\n    do_work(1)\n")
+    findings = detect_changed_signature_callers(
+        _def_diff(*BREAKING, path="core/one.py"), repo_root=tmp_path
+    )
+    assert "elsewhere.py" not in {f["path"] for f in findings}
+
+
+def test_a_name_is_matched_as_an_identifier_not_as_a_substring(tmp_path: Path) -> None:
+    """A file naming only `do_work_extra` holds no reference to `do_work`. (The old per-name
+    substring test let `patch("pkg.do_work_extra")` through the patch-target pattern.)"""
+    _write(
+        tmp_path / CALLER,
+        "from unittest.mock import patch\n\ndef test_x():\n    with patch('pkg.do_work_extra'):\n        pass\n",
+    )
+    findings = detect_changed_signature_callers(_def_diff(*BREAKING), repo_root=tmp_path)
+    assert CALLER not in {f["path"] for f in findings}
 
 
 def test_a_name_defined_once_is_not_ambiguous_with_the_single_pass(tmp_path: Path) -> None:

@@ -683,21 +683,19 @@ def _tokenize_string_rows(text: str) -> dict[int, str] | None:
 
     `tokenize` is the source of truth for a file that tokenizes: it knows PEP 701 nested
     f-strings (``f"{\"\"\"x\"\"\"}"``) and backslash-continued strings that the hand lexer
-    does not. A lone CR makes its row count differ from git's, so such a file is left to
-    the hand lexer, which counts by newline.
+    does not. Rows are counted by the lines `readline` hands it, which the caller splits on
+    newline only, as git does (a lone CR is a character, not a line break).
     """
     import io  # function-local: see _parse_params
     import tokenize
 
-    if re.search(r"\r(?!\n)", text):
-        return None
     rows: dict[int, str] = {}
     open_fstrings: list[tuple[int, str]] = []
     fstring_start = getattr(tokenize, "FSTRING_START", -1)
     fstring_end = getattr(tokenize, "FSTRING_END", -1)
     try:
         for tok in tokenize.generate_tokens(io.StringIO(text).readline):
-            if tok.type == tokenize.STRING and tok.end[0] > tok.start[0]:
+            if tok.type == tokenize.STRING:
                 delim = _quote_of(tok.string)
                 for row in range(tok.start[0] + 1, tok.end[0] + 1):
                     rows.setdefault(row, delim)
@@ -772,9 +770,7 @@ def _py_ignorable_lines(
         new_side = [text.rstrip("\r") for tag, text in lines if tag != "-"]
         k = hunk["new_start"] - 1
         stop = k + len(new_side)
-        carries = (
-            bool(new_side) and k >= 0 and [x.rstrip("\r") for x in source_lines[k:stop]] == new_side
-        )
+        carries = bool(new_side) and [x.rstrip("\r") for x in source_lines[k:stop]] == new_side
         old_state = new_state = starts[k] if carries else None
         for tag, text in lines:
             if tag == "-":
@@ -1058,7 +1054,6 @@ def _ast_idents(node: Any) -> set[str]:
         elif isinstance(n, ast.Attribute):
             found.add(n.attr)
         elif isinstance(n, ast.Constant) and isinstance(n.value, str):
-            found.add(n.value)
             found.add(n.value.rsplit(".", 1)[-1])
     return found
 
@@ -1516,12 +1511,14 @@ def detect_changed_signature_callers(
     EVERY same-named def of a file is classified, not the last (``_classify_changes``):
     two classes may each define ``render``. Removed and added defs are paired in order and
     the file is reported if any pair is incompatible; with unequal counts the full
-    parameter text is compared as a multiset and a shape added more often than it was
-    removed is reported (issue #926).
+    parameter text is compared as a multiset: a shape added more often than it was removed,
+    or a removed shape that no longer exists at all, is reported; only a dropped DUPLICATE of
+    a shape that survives is silent (issue #926).
 
     NOT DETECTED, by design or for want of a signal: a fake or stub handed in without the
-    function's name appearing in the file; introspection through a computed name
-    (``getattr(Cls, method)``); and a gate ``main()`` whose parameters
+    function's name appearing in the file; introspection through a computed name or attribute
+    (``getattr(Cls, method)``, ``getattr(fn, attr)``, ``vars()``, ``__dict__``,
+    ``operator.attrgetter``); and a gate ``main()`` whose parameters
     ``core/gates/registry.py`` counts to decide whether to pass argv (``main`` is ambiguous,
     so it is matched only by its module). That last assumption is enforced by
     tests/unit/gates/test_gate_registry.py instead. A registry or dispatch table that CALLS
@@ -1539,15 +1536,22 @@ def detect_changed_signature_callers(
     A ``.py`` or ``.pyi`` file contributes only a statement-start ``def``
     (``^\\s*(?:async\\s+)?def``, a leading byte order mark allowed: exact, because Python
     cannot put a `def` anywhere else) that does not START INSIDE A MULTI-LINE STRING
-    (``_py_ignorable_lines``: the state is rebuilt per hunk from the file on disk plus the
-    hunk's own lines; with no file on disk it starts as "in code", and a PR that changes a
-    quote's balance in one hunk and edits a def inside the affected string in a later hunk
-    is the residual). Every other file type contributes the first match the single-pass
-    lexer ``_lex`` reaches IN CODE: quotes, backticks, triple quotes, the file type's line
-    comment (``//``, ``#`` for ruby/shell/yaml/toml, ``--`` for sql), ``/* */`` and, for
-    C-like files, a regex literal after ``=(,:[!&|?{};`` (closed on the line; a regex after
-    a keyword such as ``return`` is read as a division and is NOT understood, nor is a
-    template literal's ``${...}``). The walk is linear in the line length.
+    (``_py_ignorable_lines``: the state is rebuilt per hunk from the NEW file, by
+    ``tokenize`` when the file tokenizes and by a hand lexer otherwise, then by scanning the
+    hunk's lines in order). The new file is what ``file_reader(path)`` returns -- the
+    blast-radius gate hands it ``git show HEAD:path`` -- or, with no reader, the working
+    tree; a copy is trusted for a hunk only if it carries the hunk's own lines at the
+    hunk's position, otherwise (shifted, shorter, absent, a new or deleted file) the hunk
+    starts in code. RESIDUALS: a working-tree edit above a hunk that keeps the line count
+    and the hunk's lines (hence the reader), and a PR that changes a quote's balance in one
+    hunk and edits a def inside the affected string in a later hunk. Every other file type
+    contributes the first match the single-pass lexer ``_lex`` reaches IN CODE: quotes,
+    backticks, triple quotes, the file type's line comment (``//``; ``#``, starting a token
+    only, for ruby/shell/yaml/toml/powershell; ``--`` for sql), ``/* */`` and, for C-like
+    files, a regex literal told from a division by the previous token (``return /x/``,
+    ``s => /x/`` and ``a < /x/`` are regexes; ``a / b``, ``</p>`` and ``<br/>`` are not).
+    NOT understood: a template literal's ``${...}``, anything spanning lines. The walk is
+    linear in the line length.
     tests/unit/test_blast_radius_py_strings.py runs the whole check over every tracked
     ``.py`` file.
 
@@ -1623,8 +1627,6 @@ def detect_changed_signature_callers(
             # holding none is skipped before anything is tokenized or parsed (the old
             # per-name substring test was files x names: 100k names timed out).
             held = wanted.intersection(_IDENT_RE.findall(text))
-            if not held:
-                continue
             for name in sorted(held):
                 pat = ref_res.get(name)
                 if pat is None:
