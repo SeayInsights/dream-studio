@@ -131,7 +131,8 @@ def _parse_diff(diff_text: str, *, repo_root: Path | str = REPO_ROOT) -> list[di
             if cur is not None:
                 files.append(cur)
                 added_linenos.append(cur_added_lineno)
-            cur = {"path": None, "added": [], "removed": []}
+            cur = {"path": None, "added": [], "removed": [], "hunks": []}
+            cur_hunk = None
             cur_added_lineno = []
             new_lineno = None
             # Fallback path from the "diff --git a/x b/x" header.
@@ -147,13 +148,20 @@ def _parse_diff(diff_text: str, *, repo_root: Path | str = REPO_ROOT) -> list[di
             hunk = _HUNK_HEADER_RE.match(line)
             if hunk is not None:
                 new_lineno = int(hunk.group(1))
+                cur_hunk = {"new_start": new_lineno, "lines": []}
+                if cur is not None:
+                    cur["hunks"].append(cur_hunk)
             elif line.startswith("+"):
+                if cur_hunk is not None:
+                    cur_hunk["lines"].append(("+", line[1:]))
                 if cur is not None:
                     cur["added"].append(line[1:])
                     cur_added_lineno.append(new_lineno if new_lineno is not None else -1)
                 if new_lineno is not None:
                     new_lineno += 1
             elif line.startswith("-"):
+                if cur_hunk is not None:
+                    cur_hunk["lines"].append(("-", line[1:]))
                 if cur is not None:
                     cur["removed"].append(line[1:])
                 # Old-file-only line -- the new-file counter does not advance.
@@ -164,6 +172,8 @@ def _parse_diff(diff_text: str, *, repo_root: Path | str = REPO_ROOT) -> list[di
                 # recorded as added or removed. Lines before any hunk header
                 # (index/mode/similarity headers) leave new_lineno at None and
                 # are correctly ignored here.
+                if cur_hunk is not None and not line.startswith("\\"):
+                    cur_hunk["lines"].append((" ", line[1:]))
                 new_lineno += 1
     if cur is not None:
         files.append(cur)
@@ -380,72 +390,278 @@ def detect_stale_removed_symbol_tests(
 # --- (b) changed-signature callers ------------------------------------------
 
 _SIG_RE = re.compile(r"\b(?:def|function)\s+([A-Za-z_]\w*)\s*\(([^)]*)\)")
-# A Python definition STARTS a statement: nothing but indentation (and `async`) may precede
-# `def`. Anchoring is exact where quote-parity is a heuristic, which is why Python files
-# use this and every other file type uses `_SIG_RE` plus `_in_literal_or_comment`.
-_PY_DEF_RE = re.compile(r"\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(([^)]*)\)")
+# A Python definition STARTS a statement: nothing but indentation (and `async`, and a byte
+# order mark on the file's first line) may precede `def`. Anchoring is exact where lexing
+# is a heuristic, which is why Python files use this and every other file type walks the
+# line with `_lex` and `_SIG_RE`.
+_PY_DEF_RE = re.compile("[" + chr(0xFEFF) + r"]?\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(([^)]*)\)")
+
+_PY_SUFFIXES = (".py", ".pyi")
+_HASH_COMMENT_SUFFIXES = (
+    ".rb",
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".yml",
+    ".yaml",
+    ".toml",
+    ".pl",
+    ".pm",
+    ".ps1",
+    ".mk",
+)
+_DASH_COMMENT_SUFFIXES = (".sql", ".lua")
+_LINE_COMMENT = {"c": "//", "hash": "#", "sql": "--"}
+_QUOTES = "'\"`"
+# A `/` starts a regular expression, not a division, after one of these (or at the start).
+_REGEX_PRECEDERS = frozenset("=(,:[!&|?{};+-*%<>~^")
 
 
-def _in_literal_or_comment(prefix: str) -> bool:
-    """Is the position just after ``prefix`` inside a string literal or a comment?
+def _is_python_path(path: str) -> bool:
+    """A `.py` module or a `.pyi` stub: a statement-start `def` is a definition there."""
+    return path.lower().endswith(_PY_SUFFIXES)
 
-    Scans left to right with the state a lexer would have: ``'``, ``"`` and backtick
-    strings, triple quotes where the line itself shows them, a backslash skipping the next
-    character (so ``"a\\"b"`` stays open at the escaped quote), ``//`` to end of line, and
-    ``/* ... */``. Used for non-Python files, where a `function` match is accepted only if
-    this says False. A line is judged alone: a string that opened on an earlier line is
-    invisible here.
+
+def _comment_style(path: str) -> str:
+    """How a file marks comments, which decides what a `def` match may sit inside.
+
+    ``py`` (anchored, see `_PY_DEF_RE`), ``hash`` (`#`: ruby, shell, yaml, toml),
+    ``sql`` (`--` and block comments) or ``c`` (`//`, block comments and regex literals:
+    JS, TS, HTML, and the default for any type not listed).
     """
-    quote: str | None = None
-    i, n = 0, len(prefix)
+    low = path.lower()
+    if low.endswith(_PY_SUFFIXES):
+        return "py"
+    if low.endswith(_HASH_COMMENT_SUFFIXES):
+        return "hash"
+    if low.endswith(_DASH_COMMENT_SUFFIXES):
+        return "sql"
+    return "c"
+
+
+def _regex_end(text: str, start: int) -> int:
+    """The index just after the regex literal that opens at ``text[start] == "/"``, or -1
+    when no closing slash follows on this line (so it was a division after all)."""
+    i, n, in_class = start + 1, len(text), False
     while i < n:
-        ch = prefix[i]
-        if quote == "/*":
-            end = prefix.find("*/", i)
-            if end < 0:
-                return True
-            quote, i = None, end + 2
+        ch = text[i]
+        if ch == "\\":
+            i += 2
             continue
+        if in_class:
+            in_class = ch != "]"
+        elif ch == "[":
+            in_class = True
+        elif ch == "/":
+            i += 1
+            while i < n and text[i].isalpha():
+                i += 1  # flags
+            return i
+        i += 1
+    return -1
+
+
+def _lex(text: str, style: str = "c", probe=None):
+    """Walk ``text`` ONCE, carrying lexer state; return ``(probe_result, ends_inside)``.
+
+    LINEAR BY CONSTRUCTION. The previous reader rescanned the whole prefix for every
+    `function` match inside a literal: a 100 KB line of ``"`` + `function f(a) ` x 7,142 +
+    ``"`` took 43 s. Here the walk visits each character once; the optional ``probe`` is
+    called only at positions where the lexer is in CODE and the character can start a
+    definition (`d` or `f`), and a truthy result ends the walk. A definition can therefore
+    never be found inside a string or a comment, and an unclosed `function foo(` in one
+    cannot swallow a real `function bar(a)` after it.
+
+    What it understands: ``'``, ``"`` and backtick strings (a backslash skips the next
+    character; ``'''`` and ``\"\"\"`` triples where the text shows them), the style's line
+    comment (``//``, ``#`` or ``--``), ``/* ... */`` for ``c`` and ``sql``, and for ``c`` a
+    regex literal (a `/` after ``=(,:[!&|?{};`` and operators, closed on the same line,
+    honouring ``[...]`` classes and escapes). In ``hash`` files a backslash outside a
+    string escapes the next character. NOT understood: a template literal's ``${...}``, a
+    regex after a keyword (``return /x/``, read as a division), anything spanning lines.
+    """
+    line_comment = _LINE_COMMENT.get(style)
+    block_comments = style in ("c", "sql")
+    regex_ok = style == "c"
+    last_paren = text.rfind(")") if probe is not None else -1
+    n, i = len(text), 0
+    quote: str | None = None
+    last = ""  # the last significant code character: decides regex versus division
+    while i < n:
+        ch = text[i]
         if quote is not None:
             if ch == "\\":
                 i += 2
-            elif prefix.startswith(quote, i):
+            elif text.startswith(quote, i):
                 i += len(quote)
-                quote = None
+                quote, last = None, ch
             else:
                 i += 1
             continue
-        if prefix.startswith("//", i):
-            return True
-        if prefix.startswith("/*", i):
-            quote, i = "/*", i + 2
-        elif ch in "'\"`":
+        if probe is not None and ch in "df" and i < last_paren:
+            found = probe(i)
+            if found is not None:
+                return found, False
+        if line_comment is not None and text.startswith(line_comment, i):
+            return None, True
+        if block_comments and text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            if end < 0:
+                return None, True
+            i = end + 2
+            continue
+        if ch in _QUOTES:
             triple = ch * 3
-            if ch != "`" and prefix.startswith(triple, i):
+            if ch != "`" and text.startswith(triple, i):
                 quote, i = triple, i + 3
             else:
                 quote, i = ch, i + 1
-        else:
-            i += 1
-    return quote is not None
+            continue
+        if ch == "\\" and style == "hash":
+            i += 2
+            continue
+        if regex_ok and ch == "/" and (last == "" or last in _REGEX_PRECEDERS):
+            end = _regex_end(text, i)
+            if end >= 0:
+                i, last = end, ")"
+                continue
+            regex_ok = False  # no closing slash anywhere after this: stop trying (linear)
+        if not ch.isspace():
+            last = ch
+        i += 1
+    return None, quote is not None
 
 
-def _signature_on_line(line: str, *, is_py: bool) -> tuple[str, str, bool] | None:
+def _in_literal_or_comment(prefix: str, style: str = "c") -> bool:
+    """Is the position just after ``prefix`` inside a string literal or a comment?"""
+    return _lex(prefix, style)[1]
+
+
+def _signature_on_line(line: str, *, is_py: bool, style: str = "c") -> tuple[str, str, bool] | None:
     """The ``(name, parameter text, is_python_def)`` a changed diff line defines, or None.
 
     A `def` INSIDE A STRING IS NOT A DEFINITION. tests/unit/test_hanging_detectors.py builds
     synthetic diffs in string literals, and `_SIG_RE.search` read ``"+def f(a=None):\\n"`` as
     a real definition: PR #923, which refined this detector, failed its own gate on an edit
     to such a line. Python files take only a statement-start `def`; other files take the
-    first `def`/`function` match that is not inside a string or comment on its line.
+    first `def`/`function` the single-pass lexer reaches in CODE (`_lex`).
     """
     if is_py:
         m = _PY_DEF_RE.match(line)
         return (m.group(1), m.group(2), True) if m else None
-    for m in _SIG_RE.finditer(line):
-        if not _in_literal_or_comment(line[: m.start()]):
-            return m.group(1), m.group(2), False
-    return None
+
+    def probe(i: int):
+        m = _SIG_RE.match(line, i)
+        return (m.group(1), m.group(2), False) if m else None
+
+    return _lex(line, style, probe)[0]
+
+
+# --- python: is a line inside a multi-line string? ---------------------------
+
+
+def _py_line_end_state(line: str, state: str | None) -> str | None:
+    """The open triple-quote delimiter (or None) after ``line``, given ``state`` at its start.
+
+    Handles single-line strings (a backslash skips a character), ``#`` comments, and
+    ``'''`` / ``\"\"\"`` strings that stay open across lines. A single-quoted string cannot
+    span a line here, so it is forgotten at the line's end.
+    """
+    triple, quote = state, None
+    i, n = 0, len(line)
+    while i < n:
+        ch = line[i]
+        if triple is not None:
+            if ch == "\\":
+                i += 2
+            elif line.startswith(triple, i):
+                i += 3
+                triple = None
+            else:
+                i += 1
+            continue
+        if quote is not None:
+            if ch == "\\":
+                i += 2
+            else:
+                i += 1
+                if ch == quote:
+                    quote = None
+            continue
+        if ch == "#":
+            break
+        if ch in "'\"":
+            if line.startswith(ch * 3, i):
+                triple, i = ch * 3, i + 3
+            else:
+                quote, i = ch, i + 1
+            continue
+        i += 1
+    return triple
+
+
+def _split_source_lines(text: str) -> list[str]:
+    lines = text.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    return lines
+
+
+def _py_start_states(text: str) -> list[str | None]:
+    """For each line of a Python file, the triple-quote delimiter open at its START."""
+    states: list[str | None] = []
+    state: str | None = None
+    for line in _split_source_lines(text):
+        states.append(state)
+        state = _py_line_end_state(line, state)
+    return states
+
+
+def _py_ignorable_lines(f: dict[str, Any], root: Path) -> tuple[set[int], set[int]]:
+    """Indexes into ``f["removed"]`` / ``f["added"]`` of lines that START inside a
+    multi-line string, and so are text, not definitions.
+
+    A diff shows the changed lines and three of context, never the string's opener, so the
+    state is rebuilt per hunk: from the file ON DISK (the new file: exact at the hunk's first
+    line), then by scanning the hunk's lines in order. The old side starts each hunk in the
+    state the new side does (they share everything before the first change). RESIDUAL: a
+    PR that changes a quote's balance in one hunk and edits a def inside the affected string
+    in a later hunk of the same file. With no file on disk the state starts as "in code".
+    Only hunks holding a def-shaped changed line are scanned.
+    """
+    removed_skip: set[int] = set()
+    added_skip: set[int] = set()
+    starts: list[str | None] | None = None
+    r_i = a_i = 0
+    for hunk in f.get("hunks") or []:
+        lines = hunk["lines"]
+        if not any(tag != " " and _PY_DEF_RE.match(text) for tag, text in lines):
+            r_i += sum(1 for tag, _ in lines if tag == "-")
+            a_i += sum(1 for tag, _ in lines if tag == "+")
+            continue
+        if starts is None:
+            try:
+                source = (root / _normalize(f["path"])).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                source = ""
+            starts = _py_start_states(source)
+        k = hunk["new_start"] - 1
+        old_state = new_state = starts[k] if 0 <= k < len(starts) else None
+        for tag, text in lines:
+            if tag == "-":
+                if old_state is not None:
+                    removed_skip.add(r_i)
+                old_state = _py_line_end_state(text, old_state)
+                r_i += 1
+            elif tag == "+":
+                if new_state is not None:
+                    added_skip.add(a_i)
+                new_state = _py_line_end_state(text, new_state)
+                a_i += 1
+            else:
+                old_state = _py_line_end_state(text, old_state)
+                new_state = _py_line_end_state(text, new_state)
+    return removed_skip, added_skip
 
 
 def _split_top_level_commas(param_str: str) -> list[str]:
@@ -610,14 +826,81 @@ def _SETATTR_TARGET_RE(name: str):
 
 # A cheap textual pre-filter: only a file naming one of these is worth an AST parse.
 _INTROSPECTION_HINT_RE = re.compile(
-    r"signature|getfullargspec|getargspec|getcallargs|from_callable"
-    r"|__code__|__defaults__|__kwdefaults__"
+    r"signature|getfullargspec|getargspec|getcallargs|from_callable|get_type_hints"
+    r"|get_annotations|__code__|__defaults__|__kwdefaults__|__annotations__|__wrapped__"
+    r"|\bdir\b|wraps|update_wrapper"
 )
-# Calls that read a callable's parameters, and attributes that expose them.
+# Calls that read (or copy) a callable's parameters, and attributes that expose them.
 _INTROSPECTION_CALLS = frozenset(
-    {"signature", "getfullargspec", "getargspec", "getcallargs", "from_callable"}
+    {
+        "signature",
+        "getfullargspec",
+        "getargspec",
+        "getcallargs",
+        "from_callable",
+        "get_type_hints",
+        "get_annotations",
+        "dir",
+        "wraps",
+        "update_wrapper",
+    }
 )
-_INTROSPECTION_ATTRS = frozenset({"__code__", "__signature__", "__defaults__", "__kwdefaults__"})
+_INTROSPECTION_ATTRS = frozenset(
+    {
+        "__code__",
+        "__signature__",
+        "__defaults__",
+        "__kwdefaults__",
+        "__annotations__",
+        "__wrapped__",
+    }
+)
+# `from <one of these> import signature as sig` makes `sig(fn)` an introspection call too.
+_INTROSPECTION_MODULES = frozenset({"inspect", "typing", "functools", "typing_extensions"})
+
+
+class _Memo:
+    """Per-run memo for the detector's loop, which asks about the SAME file once per
+    changed name. Identity-keyed (the loop hands over one string object per file) and only
+    live while ``detect_changed_signature_callers`` runs, so a direct call never sees a
+    stale entry. Cost: a 20-name scan parsed and tokenized each file 20 times."""
+
+    active = False
+    tree_of: str | None = None
+    tree: Any = None
+    code_of: str | None = None
+    code: str = ""
+
+    @classmethod
+    def reset(cls, active: bool) -> None:
+        cls.active = active
+        cls.tree_of = cls.code_of = None
+        cls.tree, cls.code = None, ""
+
+
+def _parsed_tree(text: str):
+    """The AST of ``text``, or None when it is not parseable Python."""
+    import ast  # function-local: see _parse_params
+
+    if _Memo.tree_of is text:  # only ever set while a run is live (see the store below)
+        return _Memo.tree
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError, RecursionError, MemoryError):
+        tree = None
+    if _Memo.active:
+        _Memo.tree_of, _Memo.tree = text, tree
+    return tree
+
+
+def _code_only_of(text: str) -> str:
+    """`_code_only`, memoised for the detector's loop (see `_Memo`)."""
+    if _Memo.code_of is text:
+        return _Memo.code
+    code = _code_only(text)
+    if _Memo.active:
+        _Memo.code_of, _Memo.code = text, code
+    return code
 
 
 def _introspection_text_re(name: str):
@@ -636,17 +919,21 @@ def _inspects_symbol(text: str, name: str) -> bool:
 
     ``inspect.signature(fn).parameters``, ``getfullargspec(fn).args``,
     ``fn.__code__.co_argcount`` / ``co_varnames``, ``fn.__signature__``,
-    ``fn.__defaults__``: a consumer of the OLD SHAPE. A call-compatible change keeps every
-    call valid and still changes every one of these answers, so such a file breaks exactly
-    as a mock does. tests/unit/test_workflow_runner.py asserts
+    ``fn.__defaults__``, ``fn.__annotations__``, ``typing.get_type_hints(fn)``, ``dir(fn)``,
+    ``functools.wraps(fn)``: a consumer of the OLD SHAPE. A call-compatible change keeps
+    every call valid and still changes every one of these answers, so such a file breaks
+    exactly as a mock does. tests/unit/test_workflow_runner.py asserts
     ``list(sig.parameters) == ["self", "node_id", "ynode"]``.
 
     The introspection must be OF THIS FUNCTION. "The file contains ``inspect.signature``
     anywhere" would report every test that ever inspected anything, so the AST is asked
     whether the call's arguments (or the attribute's owner) mention the name -- as a name,
     an attribute (``Cls.name``), a string (``getattr(mod, "name")``), or a variable bound
-    from one of those by a plain assignment or loop. A file that is not parseable Python
-    gets the textual equivalent.
+    from one of those by an assignment, annotated assignment, walrus, loop or comprehension,
+    followed to a fixed point however many hops or in whatever textual order, or by
+    ``from mod import name as alias``. ``from inspect import signature as sig`` makes
+    ``sig(fn)`` an introspection call. A file that is not parseable Python gets the textual
+    equivalent (no alias following).
 
     NOT DETECTED: a computed name (``getattr(Cls, method)``), and a stub or fake handed in
     without the name appearing in the file at all.
@@ -655,12 +942,12 @@ def _inspects_symbol(text: str, name: str) -> bool:
         return False
     import ast  # function-local: see _parse_params
 
-    try:
-        tree = ast.parse(text)
-    except (SyntaxError, ValueError, RecursionError, MemoryError):
+    tree = _parsed_tree(text)
+    if tree is None:
         return bool(_introspection_text_re(name).search(text))
 
     names = {name}
+    call_names = set(_INTROSPECTION_CALLS)
 
     def mentions(node: Any) -> bool:
         for n in ast.walk(node):
@@ -673,30 +960,41 @@ def _inspects_symbol(text: str, name: str) -> bool:
                     return True
         return False
 
-    # Variables bound from the function (one assignment hop, repeated to a fixed point).
-    for _ in range(3):
-        before = len(names)
-        for node in ast.walk(tree):
-            source, targets = None, []
-            if isinstance(node, ast.Assign):
-                source, targets = node.value, node.targets
-            elif isinstance(node, (ast.AnnAssign, ast.NamedExpr)) and node.value is not None:
-                source, targets = node.value, [node.target]
-            elif isinstance(node, (ast.For, ast.comprehension)):
-                source, targets = node.iter, [node.target]
+    bindings: list[tuple[Any, list[Any]]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            bindings.append((node.value, node.targets))
+        elif isinstance(node, (ast.AnnAssign, ast.NamedExpr)) and node.value is not None:
+            bindings.append((node.value, [node.target]))
+        elif isinstance(node, (ast.For, ast.comprehension)):
+            bindings.append((node.iter, [node.target]))
+        elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in (
+            _INTROSPECTION_MODULES
+        ):
+            call_names.update(
+                a.asname for a in node.names if a.asname and a.name in _INTROSPECTION_CALLS
+            )
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names.update(a.asname for a in node.names if a.asname and a.name.split(".")[-1] == name)
+
+    # Variables bound from the function, followed to a fixed point (the set only grows).
+    changed = True
+    while changed:
+        changed = False
+        for source, targets in bindings:
             if isinstance(source, ast.Call) and mentions(source.func):
                 continue  # `result = do_work(1)` binds what the function RETURNS
-            if source is not None and mentions(source):
+            if mentions(source):
+                before = len(names)
                 for target in targets:
                     names.update(t.id for t in ast.walk(target) if isinstance(t, ast.Name))
-        if len(names) == before:
-            break
+                changed = changed or len(names) != before
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             func = node.func
             called = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
-            if called in _INTROSPECTION_CALLS and any(
+            if called in call_names and any(
                 mentions(a) for a in [*node.args, *(k.value for k in node.keywords)]
             ):
                 return True
@@ -714,7 +1012,9 @@ def _string_reference(text: str, name: str) -> bool:
     return bool(_SETATTR_TARGET_RE(name).search(text)) or _inspects_symbol(text, name)
 
 
-def _mocks_symbol(text: str, name: str, *, referenced_in_code: bool) -> bool:
+def _mocks_symbol(
+    text: str, name: str, *, referenced_in_code: bool, string_ref: bool | None = None
+) -> bool:
     """Does this file MOCK or INTROSPECT ``name`` -- the ways a call-compatible change
     still breaks it?
 
@@ -724,13 +1024,14 @@ def _mocks_symbol(text: str, name: str, *, referenced_in_code: bool) -> bool:
     one or reads the parameters. So a compatible change is reported for a file that names
     the function as a patch target, hands its name to ``setattr`` / ``patch.object``,
     introspects its signature (`_inspects_symbol`), or references it in code alongside mock
-    call assertions -- and for no other file.
+    call assertions -- and for no other file. ``string_ref`` hands over an answer the caller
+    already computed for `_string_reference`.
     """
     if _PATCH_TARGET_RE(name).search(text):
         return True
-    if _string_reference(text, name):
+    if _string_reference(text, name) if string_ref is None else string_ref:
         return True
-    return referenced_in_code and bool(_MOCK_ASSERTION_RE.search(_code_only(text)))
+    return referenced_in_code and bool(_MOCK_ASSERTION_RE.search(_code_only_of(text)))
 
 
 def _slice(lines: list[str], start: tuple[int, int], end: tuple[int, int]) -> str:
@@ -859,7 +1160,7 @@ def _aliased_to_a_different_name(text: str, name: str) -> bool:
     origin symbol to this name is not calling the changed one, whichever
     module actually changed.
     """
-    m = re.search(r"\b(\w+)\s+as\s+" + re.escape(name) + r"\b", _code_only(text))
+    m = re.search(r"\b(\w+)\s+as\s+" + re.escape(name) + r"\b", _code_only_of(text))
     return bool(m) and m.group(1) != name
 
 
@@ -875,20 +1176,35 @@ def _classify_pair(old_item: tuple[str, bool], new_item: tuple[str, bool]):
     return old_names, new_names, verdict == "compatible"
 
 
+def _normalized_params(text: str) -> str:
+    return re.sub(r"\s+", "", text)
+
+
 def _classify_changes(old_items: list[tuple[str, bool]], new_items: list[tuple[str, bool]]):
     """Every same-named def of one file, not just the last.
 
     Two classes can each define ``render``; keeping only the last pair let an incompatible
     change followed by a compatible one pass. The removed and added defs are paired in
     order and the file is reported if ANY pair is incompatible; it is compatible-only if
-    every changed pair is. When the counts differ no pairing is trustworthy, so the name
-    lists are compared as sets: any shape present on one side only is a change, reported
-    without a compatibility verdict.
+    every changed pair is.
+
+    When the counts differ no pairing is trustworthy, so the full parameter text (whitespace
+    removed) is compared as a MULTISET: any parameter list that occurs more often on the
+    added side than on the removed side is a new or changed definition and is reported
+    without a compatibility verdict. Comparing sets of name lists hid a changed definition
+    that reused an old shape (issue #926: ``-(a)`` ``-(a, b)`` / ``+(a, b)`` ``+(a, b)``
+    ``+(a)``) and a kind-only change such as ``(a, b)`` -> ``(a, *, b)``. Fewer definitions
+    of a shape already present introduce nothing and are not reported.
     """
     if len(old_items) != len(new_items):
-        old_shapes = {_param_names(t) for t, _ in old_items}
-        new_shapes = {_param_names(t) for t, _ in new_items}
-        if old_shapes == new_shapes:
+        surplus: dict[str, int] = {}
+        for text, _ in new_items:
+            key = _normalized_params(text)
+            surplus[key] = surplus.get(key, 0) + 1
+        for text, _ in old_items:
+            key = _normalized_params(text)
+            surplus[key] = surplus.get(key, 0) - 1
+        if not any(count > 0 for count in surplus.values()):
             return None
         return _param_names(old_items[-1][0]), _param_names(new_items[-1][0]), False
     changes = [
@@ -937,8 +1253,9 @@ def detect_changed_signature_callers(
 
     EVERY same-named def of a file is classified, not the last (``_classify_changes``):
     two classes may each define ``render``. Removed and added defs are paired in order and
-    the file is reported if any pair is incompatible; with unequal counts the name lists
-    are compared as sets.
+    the file is reported if any pair is incompatible; with unequal counts the full
+    parameter text is compared as a multiset and a shape added more often than it was
+    removed is reported (issue #926).
 
     NOT DETECTED, by design or for want of a signal: a fake or stub handed in without the
     function's name appearing in the file; introspection through a computed name
@@ -957,13 +1274,20 @@ def detect_changed_signature_callers(
     A `def` INSIDE A STRING OR COMMENT IS NOT A DEFINITION (``_signature_on_line``). PR #923
     failed its own gate because tests/unit/test_hanging_detectors.py builds synthetic diffs
     in strings, and an edit to ``"+def f(a=None):\\n"`` was read as a real signature change.
-    A ``.py`` file contributes only a statement-start ``def`` (``^\\s*(?:async\\s+)?def``,
-    exact: Python cannot put a `def` anywhere else, so quote-parity would add nothing);
-    every other file type (JS ``function``, ``export function``) contributes the first
-    match not inside a quote, backtick, ``//`` or ``/* */`` on its line
-    (``_in_literal_or_comment``). LIMIT: a line is judged alone, so a def-shaped statement in
-    the MIDDLE of a multi-line string or docstring still reads as a definition; the repo's
-    own test files are checked for that in tests/unit/test_blast_radius_string_literal_defs.py.
+    A ``.py`` or ``.pyi`` file contributes only a statement-start ``def``
+    (``^\\s*(?:async\\s+)?def``, a leading byte order mark allowed: exact, because Python
+    cannot put a `def` anywhere else) that does not START INSIDE A MULTI-LINE STRING
+    (``_py_ignorable_lines``: the state is rebuilt per hunk from the file on disk plus the
+    hunk's own lines; with no file on disk it starts as "in code", and a PR that changes a
+    quote's balance in one hunk and edits a def inside the affected string in a later hunk
+    is the residual). Every other file type contributes the first match the single-pass
+    lexer ``_lex`` reaches IN CODE: quotes, backticks, triple quotes, the file type's line
+    comment (``//``, ``#`` for ruby/shell/yaml/toml, ``--`` for sql), ``/* */`` and, for
+    C-like files, a regex literal after ``=(,:[!&|?{};`` (closed on the line; a regex after
+    a keyword such as ``return`` is read as a division and is NOT understood, nor is a
+    template literal's ``${...}``). The walk is linear in the line length.
+    tests/unit/test_blast_radius_py_strings.py runs the whole check over every tracked
+    ``.py`` file.
 
     KNOWN LIMIT, unchanged: ``_SIG_RE`` reads one line and stops at the first ``)``, so a
     multi-line ``def`` or a default containing a call is not extracted whole. A one-line def
@@ -985,13 +1309,16 @@ def detect_changed_signature_callers(
         # keyword-only contract.
         old: dict[str, list[tuple[str, bool]]] = {}
         new: dict[str, list[tuple[str, bool]]] = {}
-        is_py = _normalize(f["path"]).endswith(".py")
-        for ln in f["removed"]:
-            sig = _signature_on_line(ln, is_py=is_py)
+        path = _normalize(f["path"])
+        is_py, style = _is_python_path(path), _comment_style(path)
+        # Lines that START inside a multi-line string of a Python file are text.
+        removed_skip, added_skip = _py_ignorable_lines(f, root) if is_py else (set(), set())
+        for idx, ln in enumerate(f["removed"]):
+            sig = None if idx in removed_skip else _signature_on_line(ln, is_py=is_py, style=style)
             if sig:
                 old.setdefault(sig[0], []).append((sig[1], sig[2]))
-        for ln in f["added"]:
-            sig = _signature_on_line(ln, is_py=is_py)
+        for idx, ln in enumerate(f["added"]):
+            sig = None if idx in added_skip else _signature_on_line(ln, is_py=is_py, style=style)
             if sig:
                 new.setdefault(sig[0], []).append((sig[1], sig[2]))
         for name in set(old) & set(new):
@@ -1017,46 +1344,63 @@ def detect_changed_signature_callers(
     # #353 caller) are caught — only a leading word char rules out a match.
     ref_res = {name: re.compile(r"(?<!\w)" + re.escape(name) + r"\b") for name in changed_sigs}
     findings: list[Finding] = []
-    for rel, text in _iter_code_files(root):
-        if rel in changed_paths:
-            continue
-        for name, pat in ref_res.items():
-            # AN AMBIGUOUS NAME NEEDS ITS MODULE NAMED. `main` and `run` are defined in
-            # dozens of modules here, so matching them bare finds every unrelated mention
-            # -- 720 findings on one PR, 682 for those two names. A name defined ONCE (the
-            # #353 symbol, and most real cases) keeps bare matching, so nothing this
-            # detector was built to catch is weakened.
-            if _ambiguous.get(name) and not _qualified_reference(
-                text, sig_origin.get(name, ""), name
-            ):
+    _Memo.reset(True)
+    try:
+        for rel, text in _iter_code_files(root):
+            if rel in changed_paths:
                 continue
-            # A LOCAL ALIAS TO A DIFFERENT ORIGIN SYMBOL IS NOT A CALLER OF THIS ONE,
-            # whether or not `name` has more than one `def` in the tree — the ambiguity
-            # here comes from an import, which _definition_modules never sees.
-            if _aliased_to_a_different_name(text, name):
-                continue
-            # A PATCH TARGET IS A REAL DEPENDENCY, AND IT LIVES IN A STRING.
-            #
-            # _code_only blanks comment and string contents so prose cannot raise false
-            # positives -- but mock.patch names its target as a STRING literal,
-            # patch('control.context.monitor._write_handoff_packet_to_db'), so the
-            # de-noising erased exactly the reference this detector exists to find. The
-            # #353 regression it was built for stopped being caught, and
-            # tests/integration/test_session_regressions.py has failed on main since.
-            #
-            # Code first (cheap, no false positives), then the raw text restricted to
-            # quoted patch targets. A quoted dotted path ending in the changed symbol is
-            # a dependency by any reading; prose does not contain one by accident.
-            in_code = pat.search(_code_only(text))
-            in_patch_target = _PATCH_TARGET_RE(name).search(text)
-            old_p, new_p, mock_only = changed_sigs[name]
-            # A string target or string-named introspection is a reference for ANY change.
-            in_string_reference = _string_reference(text, name) if name in text else False
-            if in_code or in_patch_target or in_string_reference:
+            for name, pat in ref_res.items():
+                # EVERY REFERENCE CONTAINS THE NAME LITERALLY: a call, an attribute, a dotted
+                # path inside a patch string, a setattr string, an introspection argument.
+                # A file without it is skipped before anything is tokenized or parsed (a
+                # 20-name scan paid for a tokenization of every file once per name).
+                if name not in text:
+                    continue
+                # AN AMBIGUOUS NAME NEEDS ITS MODULE NAMED. `main` and `run` are defined in
+                # dozens of modules here, so matching them bare finds every unrelated mention
+                # -- 720 findings on one PR, 682 for those two names. A name defined ONCE (the
+                # #353 symbol, and most real cases) keeps bare matching, so nothing this
+                # detector was built to catch is weakened.
+                if _ambiguous.get(name) and not _qualified_reference(
+                    text, sig_origin.get(name, ""), name
+                ):
+                    continue
+                # A LOCAL ALIAS TO A DIFFERENT ORIGIN SYMBOL IS NOT A CALLER OF THIS ONE,
+                # whether or not `name` has more than one `def` in the tree — the ambiguity
+                # here comes from an import, which _definition_modules never sees.
+                if _aliased_to_a_different_name(text, name):
+                    continue
+                # A PATCH TARGET IS A REAL DEPENDENCY, AND IT LIVES IN A STRING.
+                #
+                # _code_only blanks comment and string contents so prose cannot raise false
+                # positives -- but mock.patch names its target as a STRING literal,
+                # patch('control.context.monitor._write_handoff_packet_to_db'), so the
+                # de-noising erased exactly the reference this detector exists to find. The
+                # #353 regression it was built for stopped being caught, and
+                # tests/integration/test_session_regressions.py has failed on main since.
+                #
+                # Code first (cheap, no false positives), then the raw text restricted to
+                # quoted patch targets. A quoted dotted path ending in the changed symbol is
+                # a dependency by any reading; prose does not contain one by accident.
+                in_code = bool(pat.search(_code_only_of(text)))
+                old_p, new_p, mock_only = changed_sigs[name]
+                string_ref: bool | None = None
+                if mock_only or not in_code:
+                    # A call site already decides an incompatible change: nothing below can
+                    # change that verdict, so it is not computed. Everything else asks
+                    # whether the file patches, mocks or introspects the function, once.
+                    in_patch_target = bool(_PATCH_TARGET_RE(name).search(text))
+                    # A string target or string-named introspection is a reference for ANY
+                    # change.
+                    string_ref = _string_reference(text, name)
+                    if not (in_code or in_patch_target or string_ref):
+                        continue
                 if mock_only:
                     # A CALL-COMPATIBLE CHANGE BREAKS NO REAL CALL. It can still break a
                     # file that mocks the function and asserts the old call shape (#353).
-                    if not _mocks_symbol(text, name, referenced_in_code=bool(in_code)):
+                    if not _mocks_symbol(
+                        text, name, referenced_in_code=in_code, string_ref=string_ref
+                    ):
                         continue
                     message = (
                         f"{rel} mocks or introspects {name}(), whose signature changed in this "
@@ -1080,6 +1424,8 @@ def detect_changed_signature_callers(
                         "message": message,
                     }
                 )
+    finally:
+        _Memo.reset(False)
     return findings
 
 
