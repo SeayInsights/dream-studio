@@ -115,6 +115,70 @@ def _extract_cvss_score(result: dict) -> float | None:
     return None
 
 
+# What a tool's `precision` says about how often a result of that rule is a true positive.
+# Only a value the tool actually wrote maps to a confidence; anything else is left unknown.
+# SARIF's `rank` is deliberately NOT mapped: it says how important a result is, not how
+# sure the tool is that it is real.
+_PRECISION_TO_CONFIDENCE = {"very-high": "high", "high": "high", "medium": "medium", "low": "low"}
+
+
+def _rule_for(result: dict, run: dict) -> dict:
+    """The reportingDescriptor a result refers to, or {} when the run does not carry it."""
+    tool = run.get("tool")
+    driver = tool.get("driver") if isinstance(tool, dict) else None
+    rules = driver.get("rules") if isinstance(driver, dict) else None
+    rules = rules if isinstance(rules, list) else []
+    index = result.get("ruleIndex")
+    if index is None:
+        ref = result.get("rule")
+        index = ref.get("index") if isinstance(ref, dict) else None
+    rule_id = result.get("ruleId")
+    # ruleIndex is a claim the file makes, and SARIF requires it to agree with ruleId. It is
+    # used only when it does (or when the result names no rule to disagree with). A bool is
+    # an int to Python and 1.0 == 1, but neither is an index; a negative one would index from
+    # the end of the list.
+    if type(index) is int and 0 <= index < len(rules) and isinstance(rules[index], dict):
+        if not rule_id or rules[index].get("id") == rule_id:
+            return rules[index]
+    if rule_id:
+        for rule in rules:
+            if isinstance(rule, dict) and rule.get("id") == rule_id:
+                return rule
+    return {}
+
+
+def _honesty_from_sarif(result: dict, run: dict) -> dict:
+    """The confidence / coverage / limitations a SARIF result genuinely states.
+
+    * confidence: the result's, or its rule's, `properties.precision` (CodeQL and Semgrep
+      write it), when it is one of very-high / high / medium / low.
+    * coverage and limitations: only a run whose invocation says `executionSuccessful` is
+      false is known to be incomplete, so its results are `partial` with that stated.
+      `executionSuccessful: true` says the tool ran to its end, not that it examined
+      everything, so it is not read as `complete`.
+
+    Everything the file does not say stays absent, which is stored as NULL, unknown.
+    """
+    honesty: dict = {}
+    for source in (result, _rule_for(result, run)):
+        props = source.get("properties")
+        precision = props.get("precision") if isinstance(props, dict) else None
+        confidence = (
+            _PRECISION_TO_CONFIDENCE.get(precision.strip().lower())
+            if isinstance(precision, str)
+            else None
+        )
+        if confidence:
+            honesty["confidence"] = confidence
+            break
+    invocations = run.get("invocations")
+    invocations = invocations if isinstance(invocations, list) else []
+    if any(isinstance(i, dict) and i.get("executionSuccessful") is False for i in invocations):
+        honesty["coverage"] = "partial"
+        honesty["limitations"] = ["the scanner reported executionSuccessful=false for this run"]
+    return honesty
+
+
 def _normalize_severity(sarif_level: str) -> str:
     """Map SARIF severity level to finding severity.
 
@@ -270,6 +334,7 @@ def parse_sarif_file(file_path: str) -> int:
                     scanner_type=tool_name,
                     cwe_id=cwe_id,
                     vuln_class=rule_id,  # rule_id stored in vuln_class for dedup
+                    **_honesty_from_sarif(result, run),
                 )
 
                 imported_count += 1

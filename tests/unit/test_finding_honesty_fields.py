@@ -141,7 +141,8 @@ def test_html_escapes_limitation_text():
 
 
 def test_security_event_rows_stay_unknown(tmp_path: Path):
-    """security_events has no honesty columns, so nothing may be claimed for its rows."""
+    """A security_events table without the honesty columns (a database older than migration
+    161) claims nothing for its rows."""
     db = tmp_path / "studio.db"
     conn = sqlite3.connect(db)
     conn.execute(

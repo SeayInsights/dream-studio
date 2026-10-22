@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from core.config.database import get_db_path
+from core.telemetry.execution_spine import failure_reason
 
 TELEMETRY_DB_ENV = "DREAM_STUDIO_TELEMETRY_DB"
 TELEMETRY_DISABLED_ENV = "DREAM_STUDIO_TELEMETRY_DISABLED"
@@ -80,6 +81,9 @@ class TelemetryEmitResult:
     event_id: str | None = None
     record_id: str | None = None
     error: str | None = None
+    failed: bool = False
+    """True when a write was attempted and failed. emitted False with failed False is a
+    skip: telemetry disabled, or the record was already there."""
 
 
 def _status(value: Any) -> str:
@@ -120,7 +124,9 @@ def _emit(
     except Exception as exc:
         if mode == MODE_STRICT:
             raise
-        return TelemetryEmitResult(False, error=str(exc))
+        # The class and SQLite code only, as everywhere else a write failure is reported:
+        # str(exc) can carry the data that failed to write into a log or an error field.
+        return TelemetryEmitResult(False, error=failure_reason(exc), failed=True)
 
 
 def _connect(db_path: Path | str | None) -> sqlite3.Connection:
