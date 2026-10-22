@@ -285,9 +285,11 @@ def test_a_failed_insert_with_a_non_open_status_reports_the_insert_not_the_statu
 def test_the_log_names_the_class_and_never_the_data(db: Path, caplog):
     secret = "customer-record-7731-do-not-log"
     conn = sqlite3.connect(db)
+    # RAISE() takes only a string literal on every SQLite build (some reject an
+    # expression), so the secret is written into the message itself.
     conn.execute(
         "CREATE TRIGGER leak BEFORE INSERT ON security_events WHEN NEW.title LIKE '%7731%' "
-        "BEGIN SELECT RAISE(ABORT, 'rejected value ' || NEW.title); END"
+        f"BEGIN SELECT RAISE(ABORT, 'rejected value {secret}'); END"
     )
     conn.commit()
     conn.close()
