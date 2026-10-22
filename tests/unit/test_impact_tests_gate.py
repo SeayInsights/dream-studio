@@ -479,3 +479,15 @@ def test_an_empty_diff_selects_nothing_even_when_the_register_cannot_be_read(tmp
     (tmp_path / "canonical" / "rules.yml").write_text("rules: [unclosed\n", encoding="utf-8")
     assert gate.rule_enforcement_tests([], tmp_path) == []
     assert gate.rule_enforcement_tests(["README.md"], tmp_path) == RULE_TESTS
+
+
+def test_a_data_file_under_testpaths_that_the_register_names_is_not_a_test_file(tmp_path):
+    (tmp_path / "canonical").mkdir()
+    (tmp_path / "pytest.ini").write_text("[pytest]\ntestpaths = tests\n", encoding="utf-8")
+    (tmp_path / "canonical" / "rules.yml").write_text(
+        "rules:\n  - id: a-rule\n    enforced_by:\n      - tests/data/schema.json\n"
+        "      - tests/test_a.py::t\n",
+        encoding="utf-8",
+    )
+    assert gate.rule_enforcement_tests(["tests/data/schema.json"], tmp_path) == []
+    assert gate.rule_enforcement_tests(["tests/test_a.py"], tmp_path) == RULE_TESTS

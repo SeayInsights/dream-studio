@@ -2436,3 +2436,35 @@ def test_a_test_file_reached_by_two_spellings_is_one_module_not_a_name_clash(tmp
         pytest.skip("this platform will not make a directory link here")
     assert _why(root, "tests/alias/test_a.py::test_x") is None
     assert _why(root, "tests/real/test_a.py::test_x") is None
+
+
+def test_a_package_file_that_comes_after_a_plain_one_of_the_same_name_is_not_a_clash(tmp_path):
+    """The plain file is the top-level module `test_dup`; the package one is `b.test_dup`."""
+    root = _tree(
+        tmp_path,
+        {
+            "tests/a/test_dup.py": "def test_x():\n    pass\n",
+            "tests/b/__init__.py": "",
+            "tests/b/test_dup.py": "def test_x():\n    pass\n",
+        },
+    )
+    assert _why(root, "tests/a/test_dup.py::test_x") is None
+    assert _why(root, "tests/b/test_dup.py::test_x") is None
+
+
+def test_only_the_modules_the_test_run_owns_are_followed_for_import_failures(tmp_path):
+    """A product module that raises breaks far more than one rule and walking all of them is
+    what made the gate slow; it is a stated limit. A helper under testpaths is followed."""
+    root = _tree(
+        tmp_path,
+        {
+            "pytest.ini": "[pytest]\ntestpaths = tests\n",
+            "core/__init__.py": "",
+            "core/boom.py": "raise RuntimeError('x')\n",
+            "tests/helpers.py": "raise RuntimeError('x')\n",
+            "tests/test_product.py": "import core.boom\n\n\ndef test_x():\n    pass\n",
+            "tests/test_helper.py": "import helpers\n\n\ndef test_x():\n    pass\n",
+        },
+    )
+    assert _why(root, "tests/test_product.py::test_x") is None
+    assert "fails to import" in (_why(root, "tests/test_helper.py::test_x") or "")

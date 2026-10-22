@@ -311,6 +311,16 @@ def test_the_known_limits_of_the_resolver_are_still_limits(tmp_path):
 #: above: a conftest that cannot be imported aborts pytest's whole session, and doctest items
 #: exist only under `--doctest-modules`.
 _ISOLATED_LIMITS = {
+    "a product module that raises when imported": (
+        "accept",
+        {
+            "pytest.ini": "[pytest]\ntestpaths = tests\n",
+            "core/__init__.py": "",
+            "core/boom.py": "raise RuntimeError('x')\n",
+            "tests/test_a.py": "import core.boom\n\n\ndef test_ok():\n    pass\n",
+        },
+        "tests/test_a.py::test_ok",
+    ),
     "a conftest that imports a module missing from the environment": (
         "accept",
         {
