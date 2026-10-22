@@ -132,3 +132,65 @@ def test_brief_lifecycle_syncs_in_one_interpreter(live_like_home):
     assert design_system == "tech-minimal"
     assert font_pairing == "Inter / Source Serif"
     assert brand_tokens == "primary=#1e40af; radius=8px"
+
+
+# -- the one-shot CLI: every `ds design-brief ...` is its own process -------------------
+#
+# The test above ticks by hand between calls. An operator cannot: `ds design-brief
+# create` printed "Draft brief created: <id>" and exited, nothing projected the event
+# (no daemon in a one-shot process), so `show` said "No design brief" and `lock <id>`
+# said "Brief not found". Each CLI call below must leave the read model current on its
+# own -- no sync_tick() in this test.
+
+
+def _cli(capsys, home, *argv: str) -> tuple[int, str]:
+    from interfaces.cli.ds import main
+
+    capsys.readouterr()
+    rc = main(["--home", str(home), *argv])
+    return rc, capsys.readouterr().out
+
+
+def test_cli_create_is_visible_to_the_next_command_without_a_daemon(live_like_home, capsys):
+    home, db = live_like_home
+    project_id = _seed_project(db)
+
+    rc, out = _cli(capsys, home, "design-brief", "create", project_id)
+    assert rc == 0, out
+    brief_id = out.split("Draft brief created:")[1].split()[0]
+
+    rc, out = _cli(capsys, home, "design-brief", "show", project_id)
+    assert rc == 0
+    assert brief_id in out, f"created brief is not readable by the next command: {out!r}"
+
+    rc, out = _cli(
+        capsys, home, "design-brief", "update", brief_id, "--field", "purpose", "--value", "p"
+    )
+    assert rc == 0, out
+    rc, out = _cli(capsys, home, "design-brief", "set-system", brief_id, "tech-minimal")
+    assert rc == 0, out
+    rc, out = _cli(capsys, home, "design-brief", "lock", brief_id)
+    assert rc == 0, out
+
+    conn = sqlite3.connect(str(db))
+    try:
+        row = conn.execute(
+            "SELECT status, purpose, design_system FROM business_design_briefs"
+            " WHERE brief_id = ?",
+            (brief_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    assert row == ("locked", "p", "tech-minimal")
+
+
+def test_cli_create_for_an_unregistered_project_fails_instead_of_claiming_success(
+    live_like_home, capsys
+):
+    home, _db = live_like_home
+
+    rc, out = _cli(capsys, home, "design-brief", "create", str(uuid.uuid4()))
+
+    assert rc == 1
+    assert "Project not found" in out
+    assert "Draft brief created" not in out

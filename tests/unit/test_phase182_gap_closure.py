@@ -72,9 +72,12 @@ class TestFix2DesignBriefEmits:
     def test_update_design_brief_field_emits_event_with_field_and_value(self):
         """update_design_brief_field() must emit event carrying field name + value."""
         source = self._get_design_brief_source()
-        fn_start = source.find("def update_design_brief_field(")
+        # The emission lives in the helper update_design_brief_field() delegates to.
+        fn_start = source.find("def _emit_field_update(")
         fn_end = source.find("\ndef ", fn_start + 1)
         fn_body = source[fn_start:fn_end]
+        public = source.find("def update_design_brief_field(")
+        assert "_emit_field_update(" in source[public:]
         assert (
             "design_brief.updated" in fn_body
         ), "update_design_brief_field() must emit design_brief.updated event"

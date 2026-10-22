@@ -106,8 +106,7 @@ def test_design_brief_create_inserts_draft_row(db_home, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert "Draft brief created:" in out
-    # Row is applied by DesignBriefProjection from the design_brief.created event,
-    # not synchronously — no direct DB check here (emit-only contract).
+    # The row itself is asserted end to end in test_design_brief_sync.py.
 
 
 # ── 2b. A2.5: direct-call create_design_brief returns a structured dict ──────
@@ -130,28 +129,6 @@ def test_create_design_brief_returns_dict_with_draft_status(db_home):
     assert "created_at" in result
     assert "next_step" in result
     assert "website:discover" in result["next_step"]
-
-
-def test_create_design_brief_does_not_write_row_synchronously(db_home):
-    """create_design_brief() emits design_brief.created; the row is absent until
-    DesignBriefProjection applies the event (emit-only contract)."""
-    from core.design_briefs.mutations import create_design_brief
-
-    result = create_design_brief(
-        project_id=PROJECT_ID,
-        source_root=REPO_ROOT,
-        dream_studio_home=db_home,
-    )
-    assert result["ok"] is True
-    conn = sqlite3.connect(str(_db_path(db_home)))
-    try:
-        row = conn.execute(
-            "SELECT brief_id FROM business_design_briefs WHERE project_id = ?",
-            (PROJECT_ID,),
-        ).fetchone()
-    finally:
-        conn.close()
-    assert row is None, "business_design_briefs row must not be written synchronously"
 
 
 def test_create_design_brief_each_call_produces_distinct_brief_id(db_home):

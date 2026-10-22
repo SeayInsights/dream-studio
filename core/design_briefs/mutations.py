@@ -45,6 +45,52 @@ def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
     return paths.sqlite_path
 
 
+def _emit(
+    event_type: str, *, brief_id: str, project_id: str, payload: dict[str, Any], now: str
+) -> None:
+    """Write one design_brief.* event to the spool, then project it before returning.
+
+    The mutations are emit-only (DesignBriefProjection is the sole writer of
+    business_design_briefs), but ``ds design-brief ...`` is a one-shot process and no
+    daemon is guaranteed: without the tick, ``create`` printed "Draft brief created"
+    while the row never existed, so the next ``show``/``lock``/``update`` reported
+    "Brief not found". Same emit-then-tick as core.clients.mutations._emit (Pattern C).
+
+    A failed write is NOT swallowed: reporting a brief that was never emitted as
+    created is exactly the defect this exists to prevent.
+    """
+    import spool.writer as _spool_writer
+
+    from canonical.events.envelope import CanonicalEventEnvelope
+    from core.projections.runner import sync_tick
+
+    _spool_writer.write_event(
+        CanonicalEventEnvelope(
+            event_type=event_type,
+            session_id=None,
+            payload=payload,
+            timestamp=now,
+            severity="info",
+            trace={
+                "domain": "sdlc",
+                "project_id": project_id,
+                "brief_id": brief_id,
+                "attribution_status": "fully_attributed",
+            },
+        ).to_dict()
+    )
+    sync_tick()
+
+
+def _brief_row(db_path: Path, brief_id: str) -> tuple[Any, ...] | None:
+    """``(status, project_id)`` for a brief, or None when no such brief is projected."""
+    with _connect(db_path) as conn:
+        return conn.execute(
+            "SELECT status, project_id FROM business_design_briefs WHERE brief_id = ?",
+            (brief_id,),
+        ).fetchone()
+
+
 def create_design_brief(
     *,
     project_id: str,
@@ -60,33 +106,27 @@ def create_design_brief(
          "next_step": "Invoke website:discover with --work-order <wo_id> ..."}
     """
 
-    _require_db(source_root, dream_studio_home)  # validate DB exists before emitting
+    db_path = _require_db(source_root, dream_studio_home)  # DB must exist before emitting
+    # A brief for a project that is not registered can never materialize (the projection's
+    # foreign key dead-letters it), so refuse it here rather than print "created".
+    with _connect(db_path) as conn:
+        known = conn.execute(
+            "SELECT 1 FROM business_projects WHERE project_id = ?", (project_id,)
+        ).fetchone()
+    if known is None:
+        return {"ok": False, "error": f"Project not found: {project_id}"}
     brief_id = str(uuid.uuid4())
     now = datetime.now(UTC).isoformat()
     try:
-        import spool.writer as _spool_writer
-
-        from canonical.events.envelope import CanonicalEventEnvelope
-
-        _spool_writer.write_event(
-            CanonicalEventEnvelope(
-                event_type="design_brief.created",
-                session_id=None,
-                payload={"brief_id": brief_id, "project_id": project_id, "status": "draft"},
-                timestamp=now,
-                severity="info",
-                trace={
-                    "domain": "sdlc",
-                    "project_id": project_id,
-                    "brief_id": brief_id,
-                    "attribution_status": "fully_attributed",
-                },
-            ).to_dict()
+        _emit(
+            "design_brief.created",
+            brief_id=brief_id,
+            project_id=project_id,
+            payload={"brief_id": brief_id, "project_id": project_id, "status": "draft"},
+            now=now,
         )
-    except Exception:
-        pass
-    # DesignBriefProjection applies the INSERT from design_brief.created.
-    # No direct write here — projection is the sole writer.
+    except Exception as exc:  # noqa: BLE001 - reported, never reported as success
+        return {"ok": False, "error": f"design_brief.created not emitted: {exc}"}
     return {
         "ok": True,
         "brief_id": brief_id,
@@ -116,39 +156,48 @@ def lock_design_brief(
 
     db_path = _require_db(source_root, dream_studio_home)
     now = datetime.now(UTC).isoformat()
-    with _connect(db_path) as conn:
-        row = conn.execute(
-            "SELECT brief_id, project_id FROM business_design_briefs WHERE brief_id = ?",
-            (brief_id,),
-        ).fetchone()
-        if row is None:
-            return {"ok": False, "error": f"Brief not found: {brief_id}"}
-        _project_id = row[1]
-        try:
-            import spool.writer as _spool_writer
-
-            from canonical.events.envelope import CanonicalEventEnvelope
-
-            _spool_writer.write_event(
-                CanonicalEventEnvelope(
-                    event_type="design_brief.locked",
-                    session_id=None,
-                    payload={"brief_id": brief_id},
-                    timestamp=now,
-                    severity="info",
-                    trace={
-                        "domain": "sdlc",
-                        "project_id": _project_id,
-                        "brief_id": brief_id,
-                        "attribution_status": "fully_attributed",
-                    },
-                ).to_dict()
-            )
-        except Exception:
-            pass
-        # DesignBriefProjection applies status='locked' from the design_brief.locked event.
-        # No direct UPDATE here — projection is the sole writer (Phase 18.2 Fix #2 contract).
+    row = _brief_row(db_path, brief_id)
+    if row is None:
+        return {"ok": False, "error": f"Brief not found: {brief_id}"}
+    try:
+        _emit(
+            "design_brief.locked",
+            brief_id=brief_id,
+            project_id=row[1],
+            payload={"brief_id": brief_id},
+            now=now,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"design_brief.locked not emitted: {exc}"}
     return {"ok": True, "brief_id": brief_id, "status": "locked", "locked_at": now}
+
+
+def _emit_field_update(
+    *,
+    brief_id: str,
+    field: str,
+    value: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> dict[str, Any] | None:
+    """Emit one field update on a draft brief: the error dict, or None on success."""
+    db_path = _require_db(source_root, dream_studio_home)
+    row = _brief_row(db_path, brief_id)
+    if row is None:
+        return {"ok": False, "error": f"Brief not found: {brief_id}"}
+    if row[0] == "locked":
+        return {"ok": False, "error": "Brief is locked and cannot be updated"}
+    try:
+        _emit(
+            "design_brief.updated",
+            brief_id=brief_id,
+            project_id=row[1],
+            payload={"brief_id": brief_id, "field": field, "new_value": value},
+            now=datetime.now(UTC).isoformat(),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"design_brief.updated not emitted: {exc}"}
+    return None
 
 
 def update_design_brief_field(
@@ -164,42 +213,15 @@ def update_design_brief_field(
             "ok": False,
             "error": (f"Unknown field: {field}. Valid fields: {sorted(BRIEF_UPDATABLE_FIELDS)}"),
         }
-    db_path = _require_db(source_root, dream_studio_home)
-    now = datetime.now(UTC).isoformat()
-    with _connect(db_path) as conn:
-        row = conn.execute(
-            "SELECT status, project_id FROM business_design_briefs WHERE brief_id = ?",
-            (brief_id,),
-        ).fetchone()
-        if row is None:
-            return {"ok": False, "error": f"Brief not found: {brief_id}"}
-        if row[0] == "locked":
-            return {"ok": False, "error": "Brief is locked and cannot be updated"}
-        _project_id = row[1]
-        try:
-            import spool.writer as _spool_writer
-
-            from canonical.events.envelope import CanonicalEventEnvelope
-
-            _spool_writer.write_event(
-                CanonicalEventEnvelope(
-                    event_type="design_brief.updated",
-                    session_id=None,
-                    payload={"brief_id": brief_id, "field": field, "new_value": value},
-                    timestamp=now,
-                    severity="info",
-                    trace={
-                        "domain": "sdlc",
-                        "project_id": _project_id,
-                        "brief_id": brief_id,
-                        "attribution_status": "fully_attributed",
-                    },
-                ).to_dict()
-            )
-        except Exception:
-            pass
-        # DesignBriefProjection applies the field update from design_brief.updated.
-        # No direct UPDATE here — projection is the sole writer.
+    failure = _emit_field_update(
+        brief_id=brief_id,
+        field=field,
+        value=value,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    if failure is not None:
+        return failure
     return {"ok": True, "brief_id": brief_id, "field": field, "value": value}
 
 
@@ -218,44 +240,13 @@ def set_design_system(
                 f"Valid values: {sorted(VALID_DESIGN_SYSTEMS)}"
             ),
         }
-    db_path = _require_db(source_root, dream_studio_home)
-    now = datetime.now(UTC).isoformat()
-    with _connect(db_path) as conn:
-        row = conn.execute(
-            "SELECT status, project_id FROM business_design_briefs WHERE brief_id = ?",
-            (brief_id,),
-        ).fetchone()
-        if row is None:
-            return {"ok": False, "error": f"Brief not found: {brief_id}"}
-        if row[0] == "locked":
-            return {"ok": False, "error": "Brief is locked and cannot be updated"}
-        _project_id = row[1]
-        try:
-            import spool.writer as _spool_writer
-
-            from canonical.events.envelope import CanonicalEventEnvelope
-
-            _spool_writer.write_event(
-                CanonicalEventEnvelope(
-                    event_type="design_brief.updated",
-                    session_id=None,
-                    payload={
-                        "brief_id": brief_id,
-                        "field": "design_system",
-                        "new_value": system_name,
-                    },
-                    timestamp=now,
-                    severity="info",
-                    trace={
-                        "domain": "sdlc",
-                        "project_id": _project_id,
-                        "brief_id": brief_id,
-                        "attribution_status": "fully_attributed",
-                    },
-                ).to_dict()
-            )
-        except Exception:
-            pass
-        # DesignBriefProjection applies design_system from design_brief.updated.
-        # No direct UPDATE here — projection is the sole writer.
+    failure = _emit_field_update(
+        brief_id=brief_id,
+        field="design_system",
+        value=system_name,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    if failure is not None:
+        return failure
     return {"ok": True, "brief_id": brief_id, "design_system": system_name}
