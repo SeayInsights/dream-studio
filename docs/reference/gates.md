@@ -70,7 +70,7 @@ Applied by `ds work-order close <wo_id>`. Gate checked automatically — failure
 
 | Gate | Requires | Work order types that trigger it |
 |------|---------|----------------------------------|
-| `design_brief_locked` | Locked design brief in project | `ui_component`, `ui_page`, `saas_feature` |
+| `design_brief_locked` | The project's newest design brief (the one `ds design-brief show` reads) is locked, and no UI work has closed since it was locked | `ui_component`, `ui_page`, `saas_feature` |
 | `api_contract_exists` | `.planning/work-orders/<id>/api-contract.md` | `api_endpoint`, `saas_feature` |
 | `api_contract_and_security_review` | Both files above | `authentication` |
 | `security_scan` | `.planning/work-orders/<id>/security-scan.md` with no BLOCKED findings | `infrastructure` (and any WO with security-critical changes) |
