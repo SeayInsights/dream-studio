@@ -24,6 +24,7 @@ CLI uses, and avoids a second, drifting way to invoke Dream Studio.
 from __future__ import annotations
 
 import copy
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -69,6 +70,20 @@ class CallContext:
         return self.identity.name
 
 
+_LOG = logging.getLogger("dream_studio.mcp.tools")
+_LOGGED_MANIFEST_FAILURES: set[str] = set()
+
+
+def _log_manifest_failure(detail: str) -> None:
+    """The full loader message, to the server log, once per distinct message (bounded)."""
+    if detail in _LOGGED_MANIFEST_FAILURES:
+        return
+    if len(_LOGGED_MANIFEST_FAILURES) >= 16:
+        _LOGGED_MANIFEST_FAILURES.clear()
+    _LOGGED_MANIFEST_FAILURES.add(detail)
+    _LOG.warning("work-order types declared by packs are unavailable: %s", detail)
+
+
 @dataclass(frozen=True)
 class Tool:
     name: str
@@ -103,13 +118,17 @@ class Tool:
             except PackManifestError as exc:
                 # A pack manifest that does not load must not take tool DISCOVERY down with it
                 # (this is what `tools/list` calls, and an unhandled error here was a bare HTTP
-                # 500). Advertise the built-in types, say plainly why the pack's are missing,
-                # and let every other tool carry on. A call that needs the full set fails in
-                # the handler, with the loader's message, as a JSON-RPC tool error.
+                # 500). Advertise the built-in types and say why the pack's are missing, in a
+                # fixed vocabulary: a client is shown the file's NAME and a one-word reason,
+                # never the absolute path or the parser's text, which stay in the server log.
+                # Every other tool carries on; a call that needs the full set fails in the
+                # handler as a JSON-RPC tool error.
+                _log_manifest_failure(str(exc))
                 node["enum"] = list(builtin_work_order_type_names())
                 node["description"] = (
                     f"{node.get('description', '')} UNAVAILABLE: types declared by packs are not"
-                    f" listed because the pack manifest does not load: {str(exc)[:300]}"
+                    f" listed because packs.yaml does not load ({exc.kind}); the server log and"
+                    " `ds doctor` have the detail."
                 ).strip()
         return schema
 

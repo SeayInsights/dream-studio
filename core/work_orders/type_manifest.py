@@ -56,6 +56,7 @@ see an edit, and says so in its log when the file has changed on disk since it l
 
 from __future__ import annotations
 
+import functools
 from pathlib import Path
 from typing import Any
 
@@ -104,10 +105,17 @@ def default_manifest_path() -> Path:
     return code_root() / MANIFEST_NAME
 
 
-def default_trust_path() -> Path:
-    """The operator's pack-trust file, in the Dream Studio home. Read-only here, never created."""
+def default_trust_path(home: str | None = None) -> Path:
+    """The operator's pack-trust file, in the Dream Studio home. Read-only here, never created.
+
+    ``home`` is the home variable's value as the caller read it; passing it makes the caller's
+    one read the only read, so a home that changes while a load is under way cannot name one
+    file for the trust check and another for the record of what was validated.
+    """
     from core.config.paths import home_dir
 
+    if home:
+        return Path(home).expanduser() / TRUST_NAME
     return home_dir() / TRUST_NAME
 
 
@@ -119,6 +127,39 @@ def _keys(mapping: dict[Any, Any]) -> str:
 
 def _short(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {str(exc)[:300]}"
+
+
+@functools.cache
+def _unique_key_loader() -> type:
+    """A SafeLoader that REFUSES a mapping key written twice.
+
+    PyYAML keeps the last value and drops the first without a word, so a pack key repeated in
+    packs.yaml silently discarded the first pack's entry (and a repeated `exempt_from_verification`
+    key kept whichever came last). A manifest is declarative data, and two answers to one key is
+    a mistake or an attack, not a feature.
+    """
+    import yaml
+
+    class UniqueKeyLoader(yaml.SafeLoader):
+        def construct_mapping(self, node: Any, deep: bool = False) -> dict[Any, Any]:
+            seen: set[Any] = set()
+            for key_node, _value in node.value:
+                key = self.construct_object(key_node, deep=True)
+                try:
+                    duplicate = key in seen
+                except TypeError:
+                    continue  # an unhashable key; the base class refuses it with its own error
+                if duplicate:
+                    raise yaml.constructor.ConstructorError(
+                        None,
+                        None,
+                        f"found a duplicate key {quote(key)}",
+                        key_node.start_mark,
+                    )
+                seen.add(key)
+            return super().construct_mapping(node, deep=deep)
+
+    return UniqueKeyLoader
 
 
 def _load_yaml(path: Path, *, limit: int, what: str) -> Any:
@@ -134,7 +175,8 @@ def _load_yaml(path: Path, *, limit: int, what: str) -> Any:
         if size > limit:
             raise PackManifestError(
                 f"the {what} {path} is {size} bytes; the limit is {limit}. A file that large is"
-                " not a manifest, and reading it whole is how a hostile one costs this process."
+                " not a manifest, and reading it whole is how a hostile one costs this process.",
+                kind="unreadable",
             )
         raw = path.read_bytes()
     except PackManifestError:
@@ -142,13 +184,15 @@ def _load_yaml(path: Path, *, limit: int, what: str) -> Any:
     except OSError as exc:
         raise PackManifestError(
             f"cannot read the {what} {path}: {_short(exc)}. Work-order types a pack declares"
-            " are read from it, so no type can be declared or refused correctly without it."
+            " are read from it, so no type can be declared or refused correctly without it.",
+            kind="unreadable",
         ) from exc
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise PackManifestError(
-            f"the {what} {path} is not UTF-8 text ({_short(exc)}); it must be UTF-8"
+            f"the {what} {path} is not UTF-8 text ({_short(exc)}); it must be UTF-8",
+            kind="unreadable",
         ) from exc
     try:
         depth = 0
@@ -156,21 +200,25 @@ def _load_yaml(path: Path, *, limit: int, what: str) -> Any:
             if isinstance(event, yaml.AliasEvent) or getattr(event, "anchor", None):
                 raise PackManifestError(
                     f"the {what} {path} uses a YAML anchor or alias. They are refused: an alias"
-                    " chain expands a few hundred bytes into gigabytes."
+                    " chain expands a few hundred bytes into gigabytes.",
+                    kind="malformed",
                 )
             if isinstance(event, (yaml.MappingStartEvent, yaml.SequenceStartEvent)):
                 depth += 1
                 if depth > MAX_NESTING:
                     raise PackManifestError(
-                        f"the {what} {path} nests deeper than {MAX_NESTING} levels"
+                        f"the {what} {path} nests deeper than {MAX_NESTING} levels",
+                        kind="malformed",
                     )
             elif isinstance(event, (yaml.MappingEndEvent, yaml.SequenceEndEvent)):
                 depth -= 1
-        return yaml.load(text, Loader=yaml.SafeLoader)
+        return yaml.load(text, Loader=_unique_key_loader())
     except PackManifestError:
         raise
     except (yaml.YAMLError, RecursionError, MemoryError, ValueError) as exc:
-        raise PackManifestError(f"the {what} {path} is not valid YAML: {_short(exc)}") from exc
+        raise PackManifestError(
+            f"the {what} {path} is not valid YAML: {_short(exc)}", kind="malformed"
+        ) from exc
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -178,7 +226,9 @@ def _read(path: Path) -> dict[str, Any]:
     if data is None:
         return {}
     if not isinstance(data, dict):
-        raise PackManifestError(f"the pack manifest {path} must be a mapping at the top level")
+        raise PackManifestError(
+            f"the pack manifest {path} must be a mapping at the top level", kind="malformed"
+        )
     return data
 
 
@@ -190,13 +240,21 @@ def read_pack_trust(trust_path: Path | None = None) -> frozenset[str]:
     ignoring it would refuse a pack they meant to allow with a message about the pack.
     """
     path = Path(trust_path) if trust_path is not None else default_trust_path()
-    if not path.exists():
+    try:
+        present = path.exists()
+    except OSError as exc:
+        # e.g. PermissionError on a directory the operator cannot traverse: an explicit error
+        # naming the file, not a raw exception out of the registry.
+        raise PackManifestError(
+            f"cannot check for the pack trust file {path}: {_short(exc)}", kind="unreadable"
+        ) from exc
+    if not present:
         return frozenset()
     data = _load_yaml(path, limit=MAX_TRUST_BYTES, what="pack trust file")
     if data is None:
         return frozenset()
     if not isinstance(data, dict):
-        raise PackManifestError(f"the pack trust file {path} must be a mapping")
+        raise PackManifestError(f"the pack trust file {path} must be a mapping", kind="malformed")
     unknown = [k for k in data if k not in _TRUST_KEYS]
     if unknown:
         raise PackManifestError(
@@ -229,6 +287,11 @@ def _declarations(path: Path, data: dict[str, Any]) -> list[tuple[str, int, dict
             raise PackManifestError(
                 f"{where}: the pack key is {len(str(pack))} characters; it must be at most"
                 f" {MAX_PACK_KEY_LENGTH}"
+            )
+        if type(pack) is not str or not pack.strip() or not pack.isprintable():
+            raise PackManifestError(
+                f"{where}: a pack key must be a non-empty printable string (it is named in the"
+                " operator's trust file and in messages)"
             )
         schema = data.get("schema_version")
         if type(schema) is not int or schema < _MIN_SCHEMA_VERSION:
@@ -285,7 +348,13 @@ def _build_one(
             f"{where} declares exempt_from_verification: true, which lets work of this type close"
             " with no independent review. A manifest cannot grant itself that: the operator"
             f" allows it per pack in {TRUST_NAME} in the Dream Studio home"
-            f" (exempt_from_verification: [{pack}])."
+            f" (exempt_from_verification: [{pack}]).",
+            kind="not-permitted",
+        )
+    if type(item["description"]) is str and not item["description"].strip():
+        raise PackManifestError(
+            f"{where}: description must not be empty; it is the sentence the generated operator"
+            " AGENTS.md prints for the type"
         )
     flags = {
         k: item[k] for k in ("ui_bearing", "exempt_from_verification", *_OPTIONAL) if k in item

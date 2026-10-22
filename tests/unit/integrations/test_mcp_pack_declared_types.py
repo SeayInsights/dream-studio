@@ -222,3 +222,20 @@ def test_each_distinct_edit_is_reported_once_not_only_the_first_one_a_process_se
         handle_message({"jsonrpc": "2.0", "id": 5, "method": "tools/list"})
     warnings = [r.getMessage() for r in caplog.records if "changed on disk" in r.getMessage()]
     assert len(warnings) == 2 and warnings[0] != warnings[1], warnings
+
+
+def test_the_remembered_warnings_are_bounded(monkeypatch, caplog):
+    """A long-lived server edited many times must not grow its memory of what it already said
+    without limit; each distinct message is still logged once."""
+    import logging
+
+    counter = iter(range(10_000))
+    monkeypatch.setattr(
+        server, "manifest_changed_since_load", lambda: f"edit number {next(counter)}"
+    )
+    monkeypatch.setattr(server, "_WARNED_MANIFEST_CHANGES", set())
+    with caplog.at_level(logging.WARNING, logger="dream_studio.mcp.server"):
+        for i in range(300):
+            handle_message({"jsonrpc": "2.0", "id": i, "method": "tools/list"})
+    assert len(server._WARNED_MANIFEST_CHANGES) <= server._MAX_REMEMBERED_WARNINGS
+    assert len([r for r in caplog.records if "edit number" in r.getMessage()]) == 300

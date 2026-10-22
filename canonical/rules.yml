@@ -203,6 +203,11 @@ rules:
       - tests/unit/test_broken_manifest_does_not_break_ds.py::test_a_command_that_reads_a_type_fails_in_one_line_naming_the_manifest
       - tests/unit/test_pack_trust_follows_home.py::test_ds_home_decides_whose_trust_file_counts_not_the_ambient_home
       - tests/unit/test_pack_trust_follows_home.py::test_mcp_serve_home_decides_whose_trust_file_counts
+      - tests/unit/test_work_order_type_manifest.py::test_a_withdrawn_allowance_is_honoured_and_warned_about_in_a_running_process
+      - tests/unit/test_work_order_type_manifest.py::test_a_duplicate_key_is_refused_not_silently_resolved_to_the_last_value
+      - tests/unit/test_work_order_type_manifest.py::test_a_description_must_be_plain_prose
+      - tests/unit/test_broken_manifest_does_not_break_ds.py::test_doctor_reports_an_unusable_packs_yaml_instead_of_crashing
+      - tests/unit/integrations/test_mcp_broken_manifest.py::test_the_client_sees_a_one_word_reason_and_the_log_has_the_detail
       - tests/unit/test_work_order_type_manifest.py::test_a_pack_key_is_refused_when_too_long_never_truncated_into_a_trusted_one
       - tests/unit/integrations/test_mcp_broken_manifest.py::test_tools_list_over_http_is_a_200_with_every_tool_when_the_manifest_is_broken
     note: >

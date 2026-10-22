@@ -157,9 +157,14 @@ How it behaves:
   key, an unknown artifact class, a bad name, flag or description, a duplicate across packs,
   a collision with a built-in, a reserved or an already registered type, an exemption the
   operator has not allowed, a pack key over 64 characters (refused, never truncated: the trust
-  file names a pack by its full key), a description with a control character, a line or
-  paragraph separator, or one of `|`, a backtick, `<` or `>` (it becomes a row of the generated
-  operator `AGENTS.md`), and a manifest that is too large, nested too deeply, uses a YAML
+  file names a pack by its full key; a key must also be a non-empty printable string), a
+  description that is empty or whitespace-only, carries a control character, a line or paragraph
+  separator, a stack of more than two combining marks, or any of `|`, a backtick, `<`, `>`,
+  `[`, `]`, a leading `#`, `*`, `__`, a `scheme:` prefix such as `javascript:` or `http:`, or an
+  HTML entity (it becomes a row of the generated operator `AGENTS.md`, so plain prose is all it
+  may carry; ordinary punctuation, parentheses and accented letters are fine), a mapping key
+  written twice (YAML would keep the last and drop the first without a word, so a repeated pack
+  key silently discarded a pack), and a manifest that is too large, nested too deeply, uses a YAML
   anchor or alias, is not UTF-8, or declares more than 200 types. `contributes.gates` and
   `contributes.finding_categories` are refused today, not ignored, because nothing reads them.
   A manifest is applied whole or not at all. Every refusal is a `PackManifestError` naming the
@@ -178,13 +183,20 @@ How it behaves:
   reads `schema()`.
 - **MCP discovery survives a broken manifest.** `tools/list` still answers 200 with every tool;
   `ds_work_order_create` is advertised with the built-in types and a description that says the
-  pack types are unavailable and why, and a call that needs the full set fails as a tool error
-  (`isError`) carrying the loader's message. Every other tool is unaffected.
+  pack types are unavailable and gives a one-word reason (`unreadable`, `malformed`,
+  `not-permitted` or `invalid`), and a call that needs the full set fails as a tool error
+  (`isError`) carrying the loader's message. A client is shown no path and no parser text; the
+  server log has the full detail. Every other tool is unaffected. A broken manifest is parsed
+  once and the failure remembered against the files' sizes and mtimes and the home, so it is
+  not re-parsed on every request.
 - **Home means home.** The operator's trust file is read from the home the command runs against.
   A manifest accepted on the strength of one home's trust file is validated again, against the
   new home's file, when the home changes (`ds --home H0` under an ambient `DREAM_STUDIO_HOME=H1`;
-  `ds mcp serve --home`), and its types are dropped if the allowance is not there. A manifest
-  that asked for no exemption is never reloaded for a home change.
+  `ds mcp serve --home`; a relative home followed by a chdir), and its types are dropped if the
+  allowance is not there. The same happens when the trust file itself is edited or deleted
+  while a process runs: a withdrawn allowance takes effect on the next use, with a warning,
+  not at the next restart. The home is read once per load and that value names the trust file
+  and is recorded. A manifest that asked for no exemption is never reloaded for either.
 - **No reload.** The manifest is read once per process. A long-lived process (`ds mcp serve`)
   keeps serving the types it loaded until it is restarted, and logs one warning line, once per
   change, when the file has changed on disk since it loaded. Editing the manifest therefore

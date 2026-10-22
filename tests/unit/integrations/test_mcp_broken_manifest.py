@@ -87,8 +87,10 @@ def test_the_create_tool_advertises_the_built_in_types_and_says_why_the_rest_are
     prop = create["inputSchema"]["properties"]["work_order_type"]
     assert tuple(prop["enum"]) == type_registry.builtin_work_order_type_names()
     assert "UNAVAILABLE" in prop["description"]
-    assert "unsupported key" in prop["description"], "the loader's reason travels with it"
-    assert len(prop["description"]) < 1200
+    assert "(invalid)" in prop["description"], "a one-word reason from a fixed vocabulary"
+    assert "unsupported key" not in prop["description"], "no parser or loader text to a client"
+    assert str(broken_manifest.parent) not in prop["description"], "no absolute path to a client"
+    assert len(prop["description"]) < 500
 
 
 def test_every_other_tool_is_listed_unchanged_and_callable_under_a_broken_manifest(
@@ -155,3 +157,75 @@ def test_the_tool_schema_of_a_healthy_registry_is_unchanged_by_the_fallback():
     prop = TOOLS_BY_NAME["ds_work_order_create"].schema()["properties"]["work_order_type"]
     assert "UNAVAILABLE" not in prop.get("description", "")
     assert tuple(prop["enum"]) == type_registry.work_order_type_names()
+
+
+@pytest.mark.parametrize(
+    ("content", "kind"),
+    [
+        pytest.param(b"packs: [unclosed", "malformed", id="syntax-error"),
+        pytest.param(b"schema_version: 2\n# caf\xe9\n", "unreadable", id="not-utf8"),
+        pytest.param(None, "unreadable", id="missing"),
+        pytest.param(BROKEN.encode(), "invalid", id="unsupported-key"),
+    ],
+)
+def test_the_client_sees_a_one_word_reason_and_the_log_has_the_detail(
+    monkeypatch, tmp_path, caplog, content, kind
+):
+    """File NAME and a fixed-vocabulary reason go to the client. The absolute path and the
+    parser's own text (up to 300 characters of it) used to go too; they stay in the log."""
+    import logging
+
+    from integrations.mcp import tools
+
+    builtins = {
+        n: t
+        for n, t in type_registry._REGISTRY.items()
+        if n in type_registry.builtin_work_order_type_names()
+    }
+    monkeypatch.setattr(type_registry, "_REGISTRY", builtins)
+    monkeypatch.setattr(type_registry, "_STATE", {"loaded": False, "loading": False})
+    monkeypatch.setattr(tools, "_LOGGED_MANIFEST_FAILURES", set())
+    path = tmp_path / "secret-dir" / "packs.yaml"
+    path.parent.mkdir()
+    if content is not None:
+        path.write_bytes(content)
+    monkeypatch.setattr(type_manifest, "default_manifest_path", lambda: path)
+
+    with caplog.at_level(logging.WARNING, logger="dream_studio.mcp.tools"):
+        listed = _rpc("tools/list")["result"]["tools"]
+    create = next(t for t in listed if t["name"] == "ds_work_order_create")
+    shown = create["inputSchema"]["properties"]["work_order_type"]["description"]
+    assert f"({kind})" in shown and "packs.yaml" in shown
+    assert "secret-dir" not in shown and str(tmp_path) not in shown
+    logged = " ".join(r.getMessage() for r in caplog.records)
+    assert "secret-dir" in logged, "the full detail, path included, is in the server log"
+
+
+def test_an_untraversable_trust_file_does_not_break_tool_discovery(monkeypatch, tmp_path):
+    """`Path.exists` raised PermissionError out of the registry and `tools/list` with it."""
+    builtins = {
+        n: t
+        for n, t in type_registry._REGISTRY.items()
+        if n in type_registry.builtin_work_order_type_names()
+    }
+    monkeypatch.setattr(type_registry, "_REGISTRY", builtins)
+    monkeypatch.setattr(type_registry, "_STATE", {"loaded": False, "loading": False})
+    manifest = tmp_path / "packs.yaml"
+    manifest.write_text(
+        "schema_version: 2\npacks:\n  legal:\n    contributes:\n      work_order_types:\n"
+        "        - {name: contract_review, artifact_class: document, description: A contract,"
+        " ui_bearing: false, exempt_from_verification: true}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(type_manifest, "default_manifest_path", lambda: manifest)
+    real_exists = Path.exists
+
+    def refuses(self):
+        if self.name == "pack-trust.yaml":
+            raise PermissionError("access denied")
+        return real_exists(self)
+
+    monkeypatch.setattr(Path, "exists", refuses)
+    listed = _rpc("tools/list")["result"]["tools"]
+    create = next(t for t in listed if t["name"] == "ds_work_order_create")
+    assert "(unreadable)" in create["inputSchema"]["properties"]["work_order_type"]["description"]

@@ -93,6 +93,13 @@ def _manifest(tmp_path: Path, text: str | bytes, name: str = "packs.yaml") -> Pa
     return path
 
 
+def _running(tmp_path: Path, text: str = GOOD):
+    """A zero-argument callable naming ONE manifest file written once: a lambda that wrote the
+    file on every call would change its mtime under the registry's feet."""
+    path = _manifest(tmp_path, text)
+    return lambda: path
+
+
 def _load(path: Path, **kwargs):
     kwargs.setdefault("trusted", TRUST)
     return load_pack_work_order_types(packs_yaml_path=path, **kwargs)
@@ -666,7 +673,7 @@ def new_process(monkeypatch, tmp_path):
     monkeypatch.setattr(type_registry, "_REGISTRY", builtins)
     monkeypatch.setattr(type_registry, "_STATE", {"loaded": False, "loading": False})
     trust = _manifest(tmp_path, "exempt_from_verification: [legal]\n", name="pack-trust.yaml")
-    monkeypatch.setattr(type_manifest, "default_trust_path", lambda: trust)
+    monkeypatch.setattr(type_manifest, "default_trust_path", lambda home=None: trust)
 
 
 def _running_manifest(monkeypatch, path: Path) -> None:
@@ -757,7 +764,9 @@ def test_a_manifest_that_fails_leaves_the_built_ins_exactly_as_they_were(
 
 def test_the_running_manifest_cannot_exempt_itself_either(new_process, tmp_path, monkeypatch):
     """The same governance applies on the path every process takes, not only through the loader."""
-    monkeypatch.setattr(type_manifest, "default_trust_path", lambda: tmp_path / "none.yaml")
+    monkeypatch.setattr(
+        type_manifest, "default_trust_path", lambda home=None: tmp_path / "none.yaml"
+    )
     _running_manifest(monkeypatch, _manifest(tmp_path, GOOD))
     with pytest.raises(PackManifestError, match="exempt_from_verification: true"):
         work_order_type_names()
@@ -928,7 +937,7 @@ def test_scoped_pack_manifest_restores_even_when_the_manifest_is_refused(tmp_pat
 def test_a_scope_never_reads_the_operators_trust_file(tmp_path, monkeypatch):
     """A test's outcome must not depend on whose machine it runs on."""
     trust = _manifest(tmp_path, "exempt_from_verification: [legal]\n", name="pack-trust.yaml")
-    monkeypatch.setattr(type_manifest, "default_trust_path", lambda: trust)
+    monkeypatch.setattr(type_manifest, "default_trust_path", lambda home=None: trust)
     path = _manifest(tmp_path, _exempt())
     with pytest.raises(PackManifestError, match="exempt_from_verification: true"):
         with scoped_pack_manifest(path):
@@ -1009,7 +1018,7 @@ def test_a_manifest_accepted_under_one_home_is_not_trusted_under_another(
     home changes."""
     trusted = _home_with_trust(tmp_path, "h1", trusts="legal")
     untrusted = _home_with_trust(tmp_path, "h0", trusts=None)
-    monkeypatch.setattr(type_manifest, "default_manifest_path", lambda: _manifest(tmp_path, GOOD))
+    monkeypatch.setattr(type_manifest, "default_manifest_path", _running(tmp_path))
 
     monkeypatch.setenv("DREAM_STUDIO_HOME", str(trusted))
     assert "contract_review" in work_order_type_names()
@@ -1029,7 +1038,7 @@ def test_a_manifest_that_asked_for_no_exemption_is_not_reloaded_when_the_home_ch
 ):
     """The trust file is irrelevant to it, so a home change costs nothing."""
     plain = _bad(_OK_ENTRY)
-    monkeypatch.setattr(type_manifest, "default_manifest_path", lambda: _manifest(tmp_path, plain))
+    monkeypatch.setattr(type_manifest, "default_manifest_path", _running(tmp_path, plain))
     loads: list[int] = []
     real = type_manifest.load_pack_work_order_types
 
@@ -1052,7 +1061,7 @@ def test_a_scope_is_not_sent_back_to_the_real_manifest_by_a_home_change(
     send it back to be validated); a scope over another manifest pins its own allowance and is
     not."""
     trusted = _home_with_trust(tmp_path, "h1", trusts="legal")
-    monkeypatch.setattr(type_manifest, "default_manifest_path", lambda: _manifest(tmp_path, GOOD))
+    monkeypatch.setattr(type_manifest, "default_manifest_path", _running(tmp_path))
     monkeypatch.setenv("DREAM_STUDIO_HOME", str(trusted))
     assert type_registry._STATE.get("trust_used") is None
     assert "contract_review" in work_order_type_names()
@@ -1068,7 +1077,7 @@ def test_a_manifest_that_relied_on_the_trust_file_is_not_reloaded_while_the_home
 ):
     """Revalidation is for a CHANGED home: many reads under one home load once."""
     trusted = _home_with_trust(tmp_path, "h1", trusts="legal")
-    monkeypatch.setattr(type_manifest, "default_manifest_path", lambda: _manifest(tmp_path, GOOD))
+    monkeypatch.setattr(type_manifest, "default_manifest_path", _running(tmp_path))
     loads: list[int] = []
     real = type_manifest.load_pack_work_order_types
 
@@ -1120,7 +1129,8 @@ _HOSTILE_CHARS = [
     (0x09, "tab"),
     (0x200B, "zero-width-space"),
     (0x60, "backtick"),
-    (0x3C, "angle-bracket"),
+    (0x3C, "left-angle-bracket"),
+    (0x3E, "right-angle-bracket"),
     (0x7C, "pipe"),
 ]
 
@@ -1207,3 +1217,371 @@ def test_a_scope_removes_the_running_manifests_types_and_gives_them_back(
     with scoped_pack_manifest(other, trusted=TRUST):
         assert work_order_type_names() == builtin_work_order_type_names() + ("other_type",)
     assert work_order_type_names()[-3:] == ("contract_review", "poster", "month_end_close")
+
+
+# ── second review round ───────────────────────────────────────────────────────
+
+
+def test_a_withdrawn_allowance_is_honoured_and_warned_about_in_a_running_process(
+    unloaded_process, tmp_path, monkeypatch
+):
+    """The home string was watched but not the trust file's CONTENT, so `ds mcp serve` kept an
+    exemption the operator had withdrawn until it was restarted. The trust file's size and mtime
+    are part of what a load is validated against: a change or a deletion warns and revalidates."""
+    home = _home_with_trust(tmp_path, "h1", trusts="legal")
+    monkeypatch.setattr(type_manifest, "default_manifest_path", _running(tmp_path))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(home))
+    assert "contract_review" in work_order_type_names()
+    assert manifest_changed_since_load() is None
+
+    (home / "pack-trust.yaml").unlink()  # the operator withdraws the allowance
+    warning = manifest_changed_since_load()
+    assert warning and "pack trust file" in warning and "changed on disk" in warning
+    assert "\n" not in warning
+    with pytest.raises(PackManifestError, match="exempt_from_verification: true"):
+        work_order_type_names()
+    assert "contract_review" not in type_registry._REGISTRY, "withdrawn means gone"
+
+    # Restored, and the process takes it back without a restart.
+    (home / "pack-trust.yaml").write_text("exempt_from_verification: [legal]\n", encoding="utf-8")
+    assert "contract_review" in work_order_type_names()
+
+
+def test_narrowing_the_allowance_to_another_pack_refuses_the_exemption(
+    unloaded_process, tmp_path, monkeypatch
+):
+    home = _home_with_trust(tmp_path, "h1", trusts="legal")
+    monkeypatch.setattr(type_manifest, "default_manifest_path", _running(tmp_path))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(home))
+    work_order_type_names()
+    (home / "pack-trust.yaml").write_text("exempt_from_verification: [someone_else]\n", "utf-8")
+    with pytest.raises(PackManifestError, match="'legal'"):
+        work_order_type_names()
+
+
+def test_the_home_is_read_once_per_load_and_that_value_is_what_is_recorded(
+    unloaded_process, tmp_path, monkeypatch
+):
+    """A home that changes between the trust read and the end of the load must not be recorded as
+    the home the manifest was validated under: the trust file is named from the one read taken
+    before the load, and that same value is the record."""
+    trusted = _home_with_trust(tmp_path, "h1", trusts="legal")
+    bare = _home_with_trust(tmp_path, "h0", trusts=None)
+    monkeypatch.setattr(type_manifest, "default_manifest_path", _running(tmp_path))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(trusted))
+    real = type_manifest.load_pack_work_order_types
+    seen: dict[str, object] = {}
+
+    def home_moves_during_the_load(*args, **kwargs):
+        seen["trust_path"] = kwargs.get("trust_path")
+        monkeypatch.setenv("DREAM_STUDIO_HOME", str(bare))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(type_manifest, "load_pack_work_order_types", home_moves_during_the_load)
+    work_order_type_names()
+    assert seen["trust_path"] == trusted / "pack-trust.yaml", "named from the one early read"
+    assert type_registry._STATE["home_key"][0] == str(trusted)
+    # The load was validated for the trusted home, so under the bare one it is stale.
+    monkeypatch.setattr(type_manifest, "load_pack_work_order_types", real)
+    with pytest.raises(PackManifestError, match="exempt_from_verification: true"):
+        work_order_type_names()
+
+
+def test_a_relative_home_that_now_names_another_directory_is_a_different_home(
+    unloaded_process, tmp_path, monkeypatch
+):
+    """`DREAM_STUDIO_HOME=rel` plus a chdir is the same string and another home: the key is the
+    raw value AND the absolute path it names at the moment."""
+    here = tmp_path / "here"
+    there = tmp_path / "there"
+    (here / "rel").mkdir(parents=True)
+    (there / "rel").mkdir(parents=True)
+    (here / "rel" / "pack-trust.yaml").write_text("exempt_from_verification: [legal]\n", "utf-8")
+    monkeypatch.setattr(type_manifest, "default_manifest_path", _running(tmp_path))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", "rel")
+    monkeypatch.chdir(here)
+    assert "contract_review" in work_order_type_names()
+    monkeypatch.chdir(there)
+    with pytest.raises(PackManifestError, match="exempt_from_verification: true"):
+        work_order_type_names()
+
+
+def test_a_broken_manifest_is_parsed_once_not_on_every_read_and_again_once_it_changes(
+    unloaded_process, tmp_path, monkeypatch
+):
+    """Every request of a server with a broken manifest re-parsed it. The failure is remembered
+    against the manifest's and the trust file's size and mtime and the home."""
+    path = _manifest(tmp_path, GOOD + "  broken:\n    contributes:\n      gates: [x]\n")
+    monkeypatch.setattr(type_manifest, "default_manifest_path", lambda: path)
+    loads: list[int] = []
+    real = type_manifest.load_pack_work_order_types
+
+    def counting(*args, **kwargs):
+        loads.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(type_manifest, "load_pack_work_order_types", counting)
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(_home_with_trust(tmp_path, "h", trusts="legal")))
+    for _ in range(5):
+        with pytest.raises(PackManifestError, match="unsupported key"):
+            work_order_type_names()
+    assert len(loads) == 1
+
+    path.write_text(GOOD, encoding="utf-8")  # fixed: the size changed, so it is parsed again
+    assert "contract_review" in work_order_type_names()
+    assert len(loads) == 2
+
+
+def test_a_cached_failure_keeps_its_kind(unloaded_process, tmp_path, monkeypatch):
+    path = _manifest(tmp_path, "packs: [unclosed")
+    monkeypatch.setattr(type_manifest, "default_manifest_path", lambda: path)
+    kinds = []
+    for _ in range(2):
+        with pytest.raises(PackManifestError) as exc:
+            work_order_type_names()
+        kinds.append(exc.value.kind)
+    assert kinds == ["malformed", "malformed"]
+
+
+def test_every_refusal_carries_a_kind_from_a_fixed_vocabulary(tmp_path):
+    cases = {
+        "unreadable": lambda: _load(tmp_path / "missing.yaml"),
+        "malformed": lambda: _load(_manifest(tmp_path, "packs: [unclosed", name="m.yaml")),
+        "not-permitted": lambda: load_pack_work_order_types(
+            packs_yaml_path=_manifest(tmp_path, _exempt(), name="e.yaml"), trusted=frozenset()
+        ),
+        "invalid": lambda: _load(
+            _manifest(tmp_path, _bad(_OK_ENTRY, extra="      gates: [x]\n"), name="i.yaml")
+        ),
+    }
+    for expected, run in cases.items():
+        with scoped_registration():
+            with pytest.raises(PackManifestError) as exc:
+                run()
+        assert exc.value.kind == expected, (expected, exc.value.kind, str(exc.value)[:120])
+
+
+def test_a_trust_path_that_cannot_be_checked_is_a_manifest_error_not_a_raw_exception(
+    tmp_path, monkeypatch
+):
+    """`Path.exists` raised PermissionError straight out of the registry, and `tools/list` with it."""
+    trust = tmp_path / "pack-trust.yaml"
+    real_exists = Path.exists
+
+    def refuses(self):
+        if self.name == "pack-trust.yaml":
+            raise PermissionError("access denied")
+        return real_exists(self)
+
+    monkeypatch.setattr(Path, "exists", refuses)
+    with pytest.raises(PackManifestError, match="cannot check for the pack trust file") as exc:
+        read_pack_trust(trust)
+    assert str(trust) in str(exc.value) and exc.value.kind == "unreadable"
+
+
+def test_a_duplicate_key_is_refused_not_silently_resolved_to_the_last_value(tmp_path):
+    """PyYAML keeps the last value and drops the first: a pack key written twice silently
+    discarded the first pack, and a flag written twice kept whichever came last."""
+    twice_pack = "schema_version: 2\npacks:\n  legal:\n    skill: a\n  legal:\n    skill: b\n"
+    twice_flag = _bad(_OK_ENTRY + "          exempt_from_verification: true\n")
+    twice_top = "schema_version: 2\nschema_version: 3\npacks: {}\n"
+    for label, text in (("pack", twice_pack), ("flag", twice_flag), ("top", twice_top)):
+        path = _manifest(tmp_path, text, name=f"{label}.yaml")
+        with scoped_registration():
+            with pytest.raises(PackManifestError, match="duplicate key") as exc:
+                _load(path)
+        assert str(path) in str(exc.value), label
+        assert exc.value.kind == "malformed"
+
+
+def test_a_trust_file_with_a_duplicate_key_is_refused_too(tmp_path):
+    trust = _manifest(
+        tmp_path,
+        "exempt_from_verification: [a]\nexempt_from_verification: [b]\n",
+        name="pack-trust.yaml",
+    )
+    with pytest.raises(PackManifestError, match="duplicate key"):
+        read_pack_trust(trust)
+
+
+def test_a_non_mapping_contributes_is_refused_with_a_message_that_says_what_it_wants(tmp_path):
+    text = "schema_version: 2\npacks:\n  legal:\n    contributes: [work_order_types]\n"
+    path = _manifest(tmp_path, text)
+    with scoped_registration():
+        with pytest.raises(PackManifestError) as exc:
+            _load(path)
+    message = str(exc.value)
+    assert "'contributes' must be a mapping" in message and "'legal'" in message
+    assert str(path) in message
+
+
+# ── what a size or an mtime alone says ────────────────────────────────────────
+
+
+def test_a_change_of_mtime_alone_is_reported(new_process, tmp_path, monkeypatch):
+    """Same bytes, same size, a new mtime (a `touch`, or a restore that rewrote the file): the
+    fingerprint is size AND mtime, and either one moving is a change."""
+    path = _manifest(tmp_path, GOOD)
+    _running_manifest(monkeypatch, path)
+    work_order_type_names()
+    before = path.stat()
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns + 5_000_000_000))
+    assert path.stat().st_size == before.st_size
+    warning = manifest_changed_since_load()
+    assert warning and "changed on disk" in warning
+    assert f"{before.st_mtime_ns + 5_000_000_000}" in warning, "the mtime is in the message"
+
+
+def test_a_change_of_size_alone_is_reported(new_process, tmp_path, monkeypatch):
+    path = _manifest(tmp_path, GOOD)
+    _running_manifest(monkeypatch, path)
+    work_order_type_names()
+    before = path.stat()
+    path.write_text(GOOD + "#\n", encoding="utf-8")
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))  # the mtime is put back
+    assert path.stat().st_mtime_ns == before.st_mtime_ns
+    assert path.stat().st_size != before.st_size
+    warning = manifest_changed_since_load()
+    assert warning and f"now {path.stat().st_size} bytes" in warning
+
+
+def test_the_fingerprint_is_the_path_the_size_and_the_mtime(tmp_path):
+    path = _manifest(tmp_path, GOOD)
+    stat = path.stat()
+    assert type_manifest.fingerprint(path) == (str(path), stat.st_size, stat.st_mtime_ns)
+    assert type_manifest.fingerprint(tmp_path / "gone.yaml") == (
+        str(tmp_path / "gone.yaml"),
+        -1,
+        -1,
+    )
+
+
+# ── descriptions and pack keys: plain prose only ──────────────────────────────
+
+_MARKUP_CASES = [
+    ("", "empty-is-fine-for-the-api-default", None),
+    ("   ", "whitespace-only", "only whitespace"),
+    ("a [link](http://x.example) here", "link", "square brackets"),
+    ("see [1]", "bracketed", "square brackets"),
+    ("# Heading", "heading", "leading #"),
+    ("  ## deeper", "indented-heading", "leading #"),
+    ("some *emphasis* here", "star-emphasis", "emphasis markers"),
+    ("some __bold__ here", "underscore-emphasis", "emphasis markers"),
+    ("javascript:alert(1)", "javascript-scheme", "scheme:"),
+    ("click data:text/html;base64,AAAA", "data-scheme", "scheme:"),
+    ("see http://example.invalid/x", "http-scheme", "scheme:"),
+    ("fish &amp; chips", "named-entity", "HTML entity"),
+    ("fish &#x41; chips", "numeric-entity", "HTML entity"),
+    ("e" + chr(0x301) * 3, "combining-flood", "combining marks"),
+]
+
+
+@pytest.mark.parametrize(
+    ("text", "label", "needle"), _MARKUP_CASES, ids=[label for _, label, _ in _MARKUP_CASES]
+)
+def test_a_description_must_be_plain_prose(text, label, needle):
+    with scoped_registration():
+        if needle is None:
+            register_work_order_type("poster", artifact_class=CODE, description=text)
+            return
+        with pytest.raises(ValueError, match="must not contain") as exc:
+            register_work_order_type("poster", artifact_class=CODE, description=text)
+        assert needle in str(exc.value), (label, str(exc.value))
+        assert get_work_order_type("poster") is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Revue d'un contrat (clause 3), v2.1 - e.g. " + chr(0xE9) + "t" + chr(0xE9) + ".",
+        "Notes: one sentence, with a colon and a space after it",
+        "Building a reusable UI element (button, card, modal, chart)",
+        "A user-facing product capability that spans UI + API (e.g., billing)",
+        "Caf" + chr(0xE9) + " r" + chr(0xE9) + "sum" + chr(0xE9) + " na" + chr(0xEF) + "ve",
+        "One combining mark is a letter: e" + chr(0x301),
+        "Two stack fine too: e" + chr(0x301) + chr(0x302),
+        "snake_case and a trailing question?",
+    ],
+)
+def test_ordinary_punctuation_accents_and_a_colon_before_a_space_are_still_prose(text):
+    with scoped_registration():
+        register_work_order_type("poster", artifact_class=CODE, description=text)
+
+
+def test_the_built_in_descriptions_pass_their_own_rules():
+    from core.work_orders.type_registry import _markup_problem
+
+    for declared in work_order_types_in_presentation_order():
+        assert _markup_problem(declared.description) is None, declared.name
+
+
+def test_an_empty_manifest_description_is_refused_naming_the_file(tmp_path):
+    for blank in ('""', '"   "'):
+        text = _bad(_OK_ENTRY.replace("A real sentence", blank))
+        path = _manifest(tmp_path, text)
+        with scoped_registration():
+            with pytest.raises(PackManifestError, match="description must not be empty") as exc:
+                _load(path)
+        assert str(path) in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "yaml_key",
+    [
+        pytest.param('"tab\\tkey"', id="tab"),
+        pytest.param('"nul\\0key"', id="nul"),
+        pytest.param('"sep\\u2028key"', id="line-separator"),
+        pytest.param('"   "', id="whitespace-only"),
+    ],
+)
+def test_a_pack_key_must_be_a_non_empty_printable_string(tmp_path, yaml_key):
+    """The key is written as a YAML double-quoted scalar, so the control character is decoded
+    by the loader and never appears literally in this file."""
+    text = _bad(_OK_ENTRY, pack=yaml_key)
+    with scoped_registration():
+        with pytest.raises(PackManifestError, match="non-empty printable string"):
+            _load(_manifest(tmp_path, text))
+
+
+def test_an_integer_pack_key_is_refused(tmp_path):
+    text = _bad(_OK_ENTRY, pack="123")
+    with scoped_registration():
+        with pytest.raises(PackManifestError, match="non-empty printable string"):
+            _load(_manifest(tmp_path, text))
+
+
+def test_the_trust_file_is_named_from_the_one_home_read_even_if_the_home_moves_straight_after(
+    unloaded_process, tmp_path, monkeypatch
+):
+    """Not only a home that moves during the load: one that moves between the read and the
+    naming of the trust file. The file comes from the value read, never from a second look."""
+    trusted = _home_with_trust(tmp_path, "h1", trusts="legal")
+    bare = _home_with_trust(tmp_path, "h0", trusts=None)
+    monkeypatch.setattr(type_manifest, "default_manifest_path", _running(tmp_path))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(trusted))
+    real = type_registry._trust_home
+
+    def read_once_then_move():
+        value = real()
+        monkeypatch.setenv("DREAM_STUDIO_HOME", str(bare))
+        return value
+
+    monkeypatch.setattr(type_registry, "_trust_home", read_once_then_move)
+    assert "contract_review" in work_order_type_names()
+    assert type_registry._STATE["home_key"][0] == str(trusted)
+    assert Path(type_registry._STATE["trust_path"]) == Path(
+        os.path.abspath(trusted / "pack-trust.yaml")
+    )
+
+
+def test_the_trust_file_recorded_is_absolute_so_a_chdir_cannot_swap_it(
+    unloaded_process, tmp_path, monkeypatch
+):
+    here = tmp_path / "here"
+    (here / "rel").mkdir(parents=True)
+    (here / "rel" / "pack-trust.yaml").write_text("exempt_from_verification: [legal]\n", "utf-8")
+    monkeypatch.setattr(type_manifest, "default_manifest_path", _running(tmp_path))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", "rel")
+    monkeypatch.chdir(here)
+    work_order_type_names()
+    assert Path(type_registry._STATE["trust_path"]).is_absolute()

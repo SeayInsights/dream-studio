@@ -28,6 +28,7 @@ _LOG = logging.getLogger("dream_studio.mcp.server")
 
 #: Messages already logged, so a changed manifest is reported once per change, not per request.
 _WARNED_MANIFEST_CHANGES: set[str] = set()
+_MAX_REMEMBERED_WARNINGS = 64
 
 PROTOCOL_VERSION = "2026-03-26"
 SERVER_NAME = "dream-studio"
@@ -205,6 +206,9 @@ def _warn_if_manifest_changed() -> None:
     """
     message = manifest_changed_since_load()
     if message and message not in _WARNED_MANIFEST_CHANGES:
+        # Bounded: a long-lived server edited many times must not grow this without limit.
+        if len(_WARNED_MANIFEST_CHANGES) >= _MAX_REMEMBERED_WARNINGS:
+            _WARNED_MANIFEST_CHANGES.clear()
         _WARNED_MANIFEST_CHANGES.add(message)
         _LOG.warning(message)
 

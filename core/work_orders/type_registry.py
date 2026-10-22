@@ -56,6 +56,7 @@ from __future__ import annotations
 import os
 import re
 import threading
+import unicodedata
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -81,6 +82,41 @@ MAX_DESCRIPTION_LENGTH = 200
 #: Characters that would break or inject into that table cell. Control characters, line and
 #: paragraph separators (U+2028, U+0085) and the like are refused by ``str.isprintable``.
 _TABLE_CELL_UNSAFE = ("|", "`", "<", ">")
+
+#: Markup a description may not carry, with what to call it in the refusal. Parentheses stay
+#: allowed (the built-in descriptions use them); link syntax is refused through the brackets.
+_MARKUP = (
+    (re.compile(r"[\[\]]"), "square brackets (markdown link syntax)"),
+    (re.compile(r"^\s*#"), "a leading # (a markdown heading)"),
+    (re.compile(r"\*|__"), "emphasis markers (* or __)"),
+    (
+        re.compile(r"[A-Za-z][A-Za-z0-9+.\-]*:\S"),
+        "a scheme: prefix such as javascript:, data: or http:",
+    ),
+    (re.compile(r"&#?[A-Za-z0-9]+;"), "an HTML entity"),
+)
+
+#: A stack of combining marks on one character is how text is made to render as something else.
+_MAX_COMBINING_RUN = 2
+
+
+def _markup_problem(description: str) -> str | None:
+    """What in ``description`` is markup or rendering trickery, or None for plain prose."""
+    if description and not description.strip():
+        return "only whitespace"
+    for pattern, label in _MARKUP:
+        if pattern.search(description):
+            return label
+    run = 0
+    for ch in description:
+        if unicodedata.category(ch).startswith("M"):
+            run += 1
+            if run > _MAX_COMBINING_RUN:
+                return f"more than {_MAX_COMBINING_RUN} combining marks on one character"
+        else:
+            run = 0
+    return None
+
 
 #: Names core itself writes into ``business_work_orders.work_order_type`` without going through
 #: the declared set, or has written, and so cannot be declared by anything else. A name here is
@@ -153,7 +189,16 @@ class PackManifestError(ValueError):
     """A pack manifest could not be read or declares something the registry refuses.
 
     A ValueError, like every refusal the registry itself makes, so a caller catches one thing.
+
+    ``kind`` is a short fixed word for WHY, safe to show a client that must not see paths or
+    parser output: ``unreadable`` (cannot be read, too large, not UTF-8), ``malformed`` (not
+    valid YAML or the wrong shape), ``not-permitted`` (asks for something only the operator may
+    grant) or ``invalid`` (anything else it refuses). The message carries the detail.
     """
+
+    def __init__(self, message: str, *, kind: str = "invalid") -> None:
+        super().__init__(message)
+        self.kind = kind
 
 
 # Insertion order is the declared order: it is what ``--type``'s choices and the refusal
@@ -236,6 +281,12 @@ def _build(
             " (it is a table row in a generated markdown file: control and line-separator"
             " characters, a pipe, a backtick or an angle bracket would break or inject into it)"
         )
+    problem = _markup_problem(description)
+    if problem:
+        raise ValueError(
+            f"work-order type {name!r}: description must not contain {problem} (it is a table row"
+            " in a generated markdown file, and plain prose is all it may carry)"
+        )
     if order is not None and (type(order) is not int or order < 0):
         raise ValueError(
             f"work-order type {name!r}: order must be a non-negative integer, got {quote(order)}"
@@ -311,22 +362,33 @@ def register_work_order_type(
         )
 
 
-def _trust_home() -> str | None:
+def _trust_home() -> tuple[str, str] | None:
     """The one input to the operator's trust file that can change inside a process: the home
-    variable (`ds --home` sets it for the length of a command). The installed-app marker it
-    also falls back to is fixed for a process."""
-    return os.environ.get("DREAM_STUDIO_HOME")
+    variable (`ds --home` sets it for the length of a command), as the raw string AND the
+    absolute path it names right now. A relative value plus a chdir is a different home with
+    the same string, which the second half notices. The installed-app marker the lookup also
+    falls back to is fixed for a process."""
+    raw = os.environ.get("DREAM_STUDIO_HOME")
+    if not raw:
+        return None
+    return (raw, os.path.abspath(os.path.expanduser(raw)))
 
 
-def _home_changed_under_trust() -> bool:
-    """True when the loaded manifest was accepted on the strength of one home's trust file and
-    the home has since changed. A manifest that asked for no exemption does not depend on the
-    trust file, so it is never reloaded for a home change; a scope pins its own trust."""
-    return (
-        bool(_STATE.get("trust_used"))
-        and not _STATE.get("pinned")
-        and _STATE.get("home_key") != _trust_home()
-    )
+def _stale_under_trust() -> bool:
+    """True when a loaded manifest was accepted on the strength of the operator's trust file and
+    the ground it was accepted on has moved: the home changed, or the trust file there did (an
+    allowance withdrawn, narrowed or deleted). A manifest that asked for no exemption does not
+    depend on the trust file, so it is never reloaded for either; a scope pins its own trust."""
+    if not _STATE.get("trust_used") or _STATE.get("pinned"):
+        return False
+    if _STATE.get("home_key") != _trust_home():
+        return True
+    trust_path = _STATE.get("trust_path")
+    if not trust_path:
+        return False
+    from .type_manifest import fingerprint
+
+    return fingerprint(Path(str(trust_path))) != _STATE.get("trust_fingerprint")
 
 
 def ensure_loaded() -> None:
@@ -335,59 +397,88 @@ def ensure_loaded() -> None:
     Called by every accessor below and by ``register_work_order_type``; nothing else needs to
     remember to. Idempotent and thread-safe. Raises ``PackManifestError`` if the manifest is
     unreadable or invalid, on every call until it is fixed, and leaves the registry as it was.
+    A failure is remembered against the manifest's and the trust file's size and mtime and the
+    home, so a broken manifest is parsed once, not on every request, and is parsed again the
+    moment any of them changes.
 
     HOME MEANS HOME. A manifest that declared an exemption was accepted because the operator's
     trust file, in the home that was current at load, allowed it. If the home changes
     afterwards (``ds --home H0`` run under an ambient ``DREAM_STUDIO_HOME=H1``, which the
-    argument parser reads before ``--home`` takes effect), the load is not trusted for the new
-    home: the manifest's types are dropped and it is validated again against that home's trust
-    file, which raises if the allowance is not there.
+    argument parser reads before ``--home`` takes effect), or the trust file there is edited or
+    deleted, the load is not trusted any longer: the manifest's types are dropped and it is
+    validated again, which raises if the allowance is not there. The home is read ONCE per load
+    and that one value names the trust file, so a home that changes mid-load cannot be recorded
+    as the one the manifest was validated under.
     """
-    if _STATE["loaded"] and not _home_changed_under_trust():
+    if _STATE["loaded"] and not _stale_under_trust():
         return
     with _LOCK:
         if _STATE["loading"]:
             return
-        if _STATE["loaded"] and not _home_changed_under_trust():
+        if _STATE["loaded"] and not _stale_under_trust():
             return
         if _STATE["loaded"]:
             for name in [n for n, t in _REGISTRY.items() if t.declared_by is not None]:
                 del _REGISTRY[name]
             _STATE["loaded"] = False
-        from .type_manifest import fingerprint, load_pack_work_order_types
+        from .type_manifest import default_trust_path, fingerprint, load_pack_work_order_types
 
-        # The fingerprint is taken BEFORE the read, so an edit that lands during the load is
-        # reported as a change rather than recorded as already seen.
-        seen = fingerprint()
-        registered = load_pack_work_order_types()
+        home_key = _trust_home()
+        # Absolute, so the file recorded is the file read whatever the working directory does
+        # next; a chdir is then noticed through the home's absolute path, not hidden by it.
+        trust_path = Path(os.path.abspath(default_trust_path(home_key[0] if home_key else None)))
+        # Taken BEFORE the read, so an edit that lands during the load is reported as a change
+        # rather than recorded as already seen.
+        seen = (fingerprint(), fingerprint(trust_path), home_key)
+        failed = _STATE.get("failure")
+        if failed and failed[0] == seen:
+            raise PackManifestError(failed[1], kind=failed[2])
+        try:
+            registered = load_pack_work_order_types(trust_path=trust_path)
+        except PackManifestError as exc:
+            _STATE["failure"] = (seen, str(exc), exc.kind)
+            raise
+        _STATE.pop("failure", None)
         _STATE["loaded"] = True
-        _STATE["fingerprint"] = seen
+        _STATE["fingerprint"] = seen[0]
+        _STATE["trust_fingerprint"] = seen[1]
+        _STATE["trust_path"] = str(trust_path)
         _STATE["trust_used"] = any(t.exempt_from_verification for t in registered)
-        _STATE["home_key"] = _trust_home()
+        _STATE["home_key"] = home_key
 
 
 def manifest_changed_since_load() -> str | None:
-    """A one-line warning if the manifest this process loaded has changed on disk, else None.
+    """A one-line warning if the manifest this process loaded, or the trust file it was validated
+    against, has changed on disk, else None.
 
     The manifest is read once per process, so a long-lived one (``ds mcp serve``) keeps serving
-    the types it loaded until it is restarted. This compares the file's size and mtime with
+    the types it loaded until it is restarted. This compares each file's size and mtime with
     what was seen at load (no read), so it is cheap enough to call on every request. The
     message carries the file's current size and mtime, so each distinct edit is a distinct
     message and is reported once, not just the first one a process sees.
     """
-    recorded = _STATE.get("fingerprint")
-    if not recorded:
-        return None
     from .type_manifest import fingerprint
 
-    now = fingerprint(Path(recorded[0]))
-    if now == recorded:
-        return None
-    return (
-        f"the pack manifest {recorded[0]} changed on disk (now {now[1]} bytes, mtime_ns"
-        f" {now[2]}) after this process loaded its work-order types; restart the process to"
-        " pick up the edit"
-    )
+    recorded = _STATE.get("fingerprint")
+    if recorded:
+        now = fingerprint(Path(recorded[0]))
+        if now != recorded:
+            return (
+                f"the pack manifest {recorded[0]} changed on disk (now {now[1]} bytes, mtime_ns"
+                f" {now[2]}) after this process loaded its work-order types; restart the process"
+                " to pick up the edit"
+            )
+    trust_path = _STATE.get("trust_path")
+    if trust_path and _STATE.get("trust_used"):
+        recorded_trust = _STATE.get("trust_fingerprint")
+        now = fingerprint(Path(str(trust_path)))
+        if now != recorded_trust:
+            return (
+                f"the pack trust file {trust_path} changed on disk (now {now[1]} bytes, mtime_ns"
+                f" {now[2]}) after this process validated its work-order types against it; they"
+                " are validated again on next use, and a withdrawn allowance refuses them"
+            )
+    return None
 
 
 @contextmanager
