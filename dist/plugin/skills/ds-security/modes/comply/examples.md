@@ -30,10 +30,10 @@ Extract from user input:
 For each framework in the resolved list:
 
 1. Map framework name to definition file:
-   - `soc2` → `templates/security/compliance/soc2-mapping.yaml`
-   - `nist-csf` → `templates/security/compliance/nist-csf-mapping.yaml`
-   - `owasp-asvs` → `templates/security/compliance/owasp-asvs-mapping.yaml`
-   - `cwe-top25` → `templates/security/compliance/cwe-top25-mapping.yaml`
+   - `soc2` → `<skill-dir>/templates/security/compliance/soc2-mapping.yaml`
+   - `nist-csf` → `<skill-dir>/templates/security/compliance/nist-csf-mapping.yaml`
+   - `owasp-asvs` → `<skill-dir>/templates/security/compliance/owasp-asvs-mapping.yaml`
+   - `cwe-top25` → `<skill-dir>/templates/security/compliance/cwe-top25-mapping.yaml`
 2. Read each YAML file. Validate structure: each entry must have `control_id`, `framework`, `mapped_cwes`, `mapped_owasp`.
 3. If a file is missing or malformed: **stop** — "Framework definition not found: `{path}`. Run `harden` to restore missing templates."
 4. Build an in-memory lookup: `{ "CWE-89": [CC6.1, PR.DS-1, V5.3, ...], ... }` — mapping each CWE and OWASP category to all controls that reference it.

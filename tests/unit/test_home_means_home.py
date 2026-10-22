@@ -319,6 +319,22 @@ _MAY_SPELL_THE_HOME = {
     ): "stdlib-only by design (this file must not import DREAM STUDIO -- see its own"
     " docstring); reads DS_HOME, which --home sets for exactly this reader"
     " (interfaces/cli/ds.py home_variables())",
+    # The security ETL scripts ship STANDALONE into a skill directory (the plugin and the
+    # self-install projection copy templates/security/ there), where there is no `core`
+    # package to import, and importing it would cost pydantic, jsonschema and the event
+    # store. etl_home.py is therefore the stdlib mirror of home_dir() -- exactly as
+    # runtime/lib/home.py is for hooks -- and is held to the same answer by
+    # tests/unit/test_etl_home_parity.py (same precedence, same normalisation, run with
+    # `core` blocked). These two lines are its entire spelling of the default; the entry
+    # shrinks if the scripts ever import the resolver.
+    (
+        "templates/security/etl/etl_home.py",
+        'USER_DATA_DIRNAME = ".dream-studio"',
+    ): "standalone stdlib mirror of home_dir() (ships into a tree with no core); parity-tested",
+    (
+        "templates/security/etl/etl_home.py",
+        "return Path.home() / USER_DATA_DIRNAME",
+    ): "standalone stdlib mirror of home_dir() (ships into a tree with no core); parity-tested",
     ("runtime/lib/apps/game_validate.py", 'if ".dream-studio" in normalized:'): "path test",
     (
         "scripts/runtime_state_hash_guard.py",

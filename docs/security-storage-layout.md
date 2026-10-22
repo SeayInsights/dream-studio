@@ -7,11 +7,14 @@ All security skills write to `~/.dream-studio/security/`. This is the single sou
 ```
 ~/.dream-studio/security/
 ├── scans/{client}/{repo}/{date}/       # Ingested scan results
-│   ├── semgrep.sarif                   # Semgrep SARIF output
-│   ├── trivy.json                      # Trivy JSON output
-│   ├── codeql.sarif                    # CodeQL SARIF (if enabled)
-│   ├── zap-report.json                 # ZAP DAST results
-│   └── scan-meta.json                  # Metadata (date, scanner versions, finding counts)
+│   ├── semgrep-results.sarif           # Semgrep SARIF output (the workflow's artifact name)
+│   ├── bandit-results.json             # + trufflehog / pip-audit / npm-audit results, per scan.extra_scanners
+│   ├── zap-report.json                 # ZAP DAST results (dast: scans/{client}/{target}/{date}/)
+│   ├── scan-meta.json                  # Metadata: run record (steps, run.conclusion), finding counts
+│   └── coverage.json                   # Parser sidecar: coverage per scan directory
+│
+├── scans/{client}/{target}/{date}-not-scanned/   # dast: a target the run did not scan
+│   └── scan-meta.json                  # outcome: not_scanned + reason; never shares a directory with a scan
 │
 ├── datasets/{client}/                  # Processed datasets for analysis
 │   ├── mitigations.csv                 # Per-finding fix recommendations (mitigate skill)

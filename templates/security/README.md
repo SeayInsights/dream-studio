@@ -21,7 +21,9 @@ templates/security/
 ├── etl/                     # Python ETL scripts (pipeline stage processors)
 │   ├── analyze_netcompat.py
 │   ├── export_dataset.py
+│   ├── etl_home.py          # shared: finds the Dream Studio home, with or without the platform's `core`
 │   ├── generate_mitigations.py
+│   ├── header_analysis.py   # binary-scan A7: PE/ELF header checks -> header-analysis.json
 │   ├── map_compliance.py
 │   ├── parse_binary.py
 │   ├── parse_dast.py
@@ -67,5 +69,11 @@ templates/security/
 # Render a Jinja2 template with client config
 py -3.12 templates/security/etl/parse_sarif.py --client {client} --scans-dir {scan_dir}
 ```
+
+Paths here are relative to the dream-studio repository root. In an installed plugin the same
+tree ships inside the ds-security skill's own directory, so the command is
+`py -3.12 <skill-dir>/templates/security/etl/parse_sarif.py ...` (`<skill-dir>` is where the
+skill's `SKILL.md` is). The scripts import only their own directory, run from any working
+directory, and find the Dream Studio home from `DREAM_STUDIO_HOME`, else the home a self-installed app records in its venv, else `~/.dream-studio` (`etl_home.py`, the stdlib mirror of the platform's resolver).
 
 ETL scripts expect `~/.dream-studio/clients/{client}/` to exist with scan outputs.

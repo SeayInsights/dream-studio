@@ -123,18 +123,22 @@ jobs:
 
       - name: Run TruffleHog
         run: |
+          # --json prints one JSON result per line (JSON Lines) on stdout and its own log on
+          # stderr. Keep them apart: merged, the file is neither a document nor clean JSONL
+          # and no ingest can read it. A result carries the secret itself in `Raw`; the
+          # ingest step never copies it into a finding.
           trufflehog git \
             file://. \
             --json \
             --no-update \
-            > trufflehog-results.json 2>&1 || true
+            > trufflehog-results.jsonl 2> trufflehog.log || true
 
       - name: Upload TruffleHog results
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: {{ client.name | lower }}-trufflehog-results
-          path: trufflehog-results.json
+          path: trufflehog-results.jsonl
           retention-days: 30
 
 {% endif %}

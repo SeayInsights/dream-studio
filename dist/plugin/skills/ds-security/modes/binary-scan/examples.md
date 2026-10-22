@@ -6,7 +6,7 @@ Extracted from SKILL.md to reduce context injection size.
 See `docs/security-storage-layout.md`. See skill-specific paths in layout doc.
 
 ## Templates
-See `templates/security/README.md` for template registry.
+See `<skill-dir>/templates/security/README.md` for template registry.
 
 ## Client Profile
 See `docs/client-profile-schema.md`. Required fields vary by mode.
@@ -49,14 +49,14 @@ Extract from user input:
 
 For each binary target:
 
-1. Read `builds/dream-studio-clean/templates/security/binary/yara-rules.yar.j2`.
+1. Read `<skill-dir>/templates/security/binary/yara-rules.yar.j2`.
 2. Fill variables from client profile: `data.pii_patterns`, `data.critical` terms, `data.sensitive` terms.
 3. Include hardcoded signature patterns for: hardcoded credentials, embedded URLs/IPs, known packer signatures.
 4. Write to `~/.dream-studio/security/binary/{client}/{target.name}/yara-rules.yar`.
 
 ### Step S3: Generate checksec Config
 
-1. Read `builds/dream-studio-clean/templates/security/binary/checksec-config.yaml.j2`.
+1. Read `<skill-dir>/templates/security/binary/checksec-config.yaml.j2`.
 2. Configure checks based on `target.platform`:
    - Linux: NX, PIE, RELRO, Stack Canaries, FORTIFY, RUNPATH
    - Windows: DEP, ASLR, CFG, SafeSEH, Authenticode
@@ -65,13 +65,13 @@ For each binary target:
 
 ### Step S4: Generate Analysis Script
 
-1. Read `builds/dream-studio-clean/templates/security/binary/analyze.sh.j2`.
+1. Read `<skill-dir>/templates/security/binary/analyze.sh.j2`.
 2. Render platform-appropriate commands.
 3. Write to `~/.dream-studio/security/binary/{client}/{target.name}/analyze.sh`.
 
 ### Step S5: Generate GitHub Actions Workflow
 
-1. Read `builds/dream-studio-clean/templates/security/github-actions/binary-scan.yml.j2`.
+1. Read `<skill-dir>/templates/security/github-actions/binary-scan.yml.j2`.
 2. Fill variables from all binary targets.
 3. Write to `~/.dream-studio/security/actions/{client}/binary-scan.yml`.
 
@@ -168,38 +168,57 @@ which turns a credential scan into a file of NUL-separated characters. Use the b
 above (Git Bash or WSL), or in PowerShell pipe through `| Out-File -Encoding utf8
 strings-findings.txt` (PowerShell 7 writes UTF-8 by default), or set `PYTHONUTF8=1` for
 Python steps. Ingest also accepts a UTF-8 BOM and UTF-16/UTF-32 with a BOM (or UTF-16
-without one), decodes them, and names the encoding as a limitation; bytes it cannot decode
+without one), decodes them, and names the encoding as a limitation. UTF-16 without a BOM is recognised only when most of the text is ASCII (a NUL in most of the high bytes): non-Latin text with no BOM and no NULs to give it away is not recognised, and otherwise the file is unread and the step `partial`, so write it as UTF-8 or with a BOM; bytes it cannot decode
 make the step `partial`, and a file that is mostly undecodable or holds NUL characters is
 not read at all.
 
 ### Step A7: PE/ELF Header Analysis (needs `pefile` for PE, `pyelftools` for ELF)
 
-Try the import first. If the library for the binary's format is not installed, record
-`header_analysis` as `skipped` with the reason (for example "pefile is not installed") --
-do not just move on, because nothing downstream can tell a skipped header analysis from
-one that found nothing.
+Run the header analysis script; it picks the format from the file's magic bytes, imports the
+library for it, and writes `header-analysis.json` in exactly the shape ingest reads:
 
-```python
-# For PE (Windows):
-import pefile
-pe = pefile.PE(binary_path)
-# Check: unsigned, debug symbols, known vulnerable compiler
-
-# For ELF (Linux):
-from elftools.elf.elffile import ELFFile
-# Check: interpreter, sections, symbols
+```bash
+py -3.12 <skill-dir>/templates/security/etl/header_analysis.py {binary_path} --output header-analysis.json
 ```
 
-Write the checks to `header-analysis.json`, one boolean per check, `true` when the
-property holds and `false` when it does not (each `false` becomes a finding):
+Its exit status is the run record for this step:
+
+- `header_analysis.py` exits 0: the file was written. Record `header_analysis` as `ran`, with
+  `tool` `pefile` (PE) or `pyelftools` (ELF).
+- It exits 3: the library for the binary's format is not installed (the message on stderr,
+  "pefile is not installed" or "pyelftools is not installed", is the reason). Record
+  `header_analysis` as `skipped` with that reason -- do not just move on, because nothing
+  downstream can tell a skipped header analysis from one that found nothing.
+- It exits 2: the file is not a PE or ELF binary (record `skipped`, reason from stderr), could
+  not be read, or is truncated: its headers point past the end of the file, or declare more sections than could be read (record `failed`,
+  reason from stderr). No file is written. A missing `--output` directory is created; one that
+  cannot be written also exits 2.
+
+The file is one boolean per check, `true` when the property holds and `false` when it does
+not (each `false` becomes a finding), plus the caveats the writer attaches, which ingest
+carries into the limitations:
 
 ```json
-{"format": "pe", "checks": {"signed": false, "debug_symbols_stripped": true,
-                            "no_known_vulnerable_compiler": true}}
+{"format": "pe", "checks": {"signed": true, "debug_symbols_stripped": true},
+ "notes": ["signed: an embedded Authenticode signature block is present; the signature was not verified"]}
 ```
 
-PE checks: `signed`, `debug_symbols_stripped`, `no_known_vulnerable_compiler`. ELF
-checks: `interpreter_trusted`, `symbols_stripped`, `no_writable_executable_sections`.
+PE checks written: `signed`, only ever as `true` (an embedded Authenticode signature block is
+present; it is not verified, and a binary signed with a revoked or broken signature still reads
+`true`). No embedded block is NOT written as `false`: Windows system files (notepad.exe,
+cmd.exe) are signed through catalogs that pefile cannot see, so the absence says nothing, and
+the file's `notes` say the check was not made, which ingest carries into the limitations. And
+`debug_symbols_stripped` (no embedded COFF symbol table; the PDB path an MSVC build leaves in
+the debug directory does not count). ELF checks written: `interpreter_trusted` (no
+interpreter, or a standard loader in a system directory), `symbols_stripped` (no `.symtab`)
+and `no_writable_executable_sections` (no section both writable and executable); the
+interpreter must be one a real distribution ships (`ld-linux-x86-64.so.2`, `ld-linux-aarch64.so.1`,
+`ld.so.1`, `ld-musl-<arch>.so.1`, ...) in a system directory, not just a name that starts
+the same way. A PE check
+this doc used to list, `no_known_vulnerable_compiler`, is not computed: it needs a list of
+defective compiler versions and none ships, so it is never written (a `true` would be a
+claim nothing checked). Ingest still accepts it from a hand-written file.
+
 `format` must be `pe` or `elf`, and the file counts as read only if it holds at least one
 of that format's checks with a boolean value; otherwise ingest leaves `header_analysis`
 unread (`partial`) and names why. A value that is not `true` or `false` (0, null,
@@ -261,7 +280,7 @@ Find `checksec.json`, `yara-matches.json`, `strings-findings.txt` and `header-an
 
 Run parse_binary.py:
 ```bash
-py -3.12 templates/security/etl/parse_binary.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json
+py -3.12 <skill-dir>/templates/security/etl/parse_binary.py --client {client} --scans-dir {scan_dir} --coverage-output {scan_dir}/coverage.json
 ```
 
 Each finding carries `coverage` (`complete` | `partial` | `unknown`) and `limitations`,
@@ -269,7 +288,7 @@ read from the `steps` run record in `scan-meta.json` and from what the parser ac
 read: `complete` only when all four steps are recorded `ran` AND a result was read for
 each, `partial` naming each skipped, failed, ran-but-unread (missing or unparseable
 result file, or one that is not that step's output) or only partly read step (strings
-over the 50-entry cap, ignored header values), `unknown` when `scan-meta.json` has no usable run record (an
+over the 50-entry cap, ignored header values, a checksec.json holding more than one binary or an entry with no recognised check key), `unknown` when `scan-meta.json` has no usable run record (an
 older scan directory, a malformed entry, a step recorded twice). `coverage.json` holds
 the same per scan directory, with the limitations. It is the only place coverage shows
 when a scan produced no findings, and it is written even when ingest then exits 1
