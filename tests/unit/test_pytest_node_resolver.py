@@ -2376,3 +2376,18 @@ def test_a_try_without_handlers_does_not_guard_its_imports(tmp_path):
         },
     )
     assert "outside the repository" in (_why(root, "test_a.py::test_a") or "")
+
+
+def test_a_test_inherited_from_an_imported_base_is_collected_when_imported_tests_are_off(tmp_path):
+    """collect_imported_tests = false drops a test or class IMPORTED into the module, not the
+    tests a class inherits from a base it imported: those are members of a class defined here."""
+    root = _tree(
+        tmp_path,
+        {
+            "pytest.ini": "[pytest]\ncollect_imported_tests = false\n",
+            "lib.py": "class TestBaseX:\n    def test_b(self):\n        pass\n",
+            "test_a.py": "from lib import TestBaseX\n\n\nclass TestA(TestBaseX):\n    pass\n",
+        },
+    )
+    assert _why(root, "test_a.py::TestA::test_b") is None
+    assert "collect_imported_tests" in (_why(root, "test_a.py::TestBaseX::test_b") or "")

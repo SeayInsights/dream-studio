@@ -58,8 +58,8 @@ from tests.helpers.resolver_cases import (
 from tests.helpers.resolver_cases import write_tree as _tree
 
 
-def _collected(root: Path, target: str, config: Path) -> set[str]:
-    """What pytest itself collects under `target`: node ids with parameters dropped."""
+def _collected(root: Path, target: str, config: Path, keep_params: bool = False) -> set[str]:
+    """What pytest itself collects under `target`: node ids, parameters dropped unless asked."""
     result = subprocess.run(
         [
             sys.executable,
@@ -281,11 +281,15 @@ def test_the_known_limits_of_the_resolver_are_still_limits(tmp_path):
         files.update(case_files)
     root = _tree(tmp_path, files)
     collected = _collected(root, "tests", root / "pytest.ini")
+    with_ids = _collected(root, "tests", root / "pytest.ini", keep_params=True)
     resolver = NodeResolver(root)
 
     stale = []
     for name, (kind, _, node) in _KNOWN_LIMITS.items():
-        pytest_collects = node in collected or any(c.startswith(node + "::") for c in collected)
+        if "[" in node:  # a parametrized id is compared whole
+            pytest_collects = node in with_ids
+        else:
+            pytest_collects = node in collected or any(c.startswith(node + "::") for c in collected)
         resolver_accepts = resolver.resolve(node) is None
         holds = (
             (resolver_accepts and not pytest_collects)

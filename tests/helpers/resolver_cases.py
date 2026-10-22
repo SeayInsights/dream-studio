@@ -1779,3 +1779,124 @@ _KNOWN_LIMITS = {
         "tests/test_lim_setattr.py::test_made",
     ),
 }
+
+# The third review's findings that stay limits: a branch only the run can decide, a name rebound
+# on a path only the run takes, a parametrized id (the resolver cannot know a decorator's ids), a
+# base from outside the standard library, and two refusals that need an import to be settled.
+_KNOWN_LIMITS.update(
+    {
+        "a def under a branch decided only at run time": (
+            "accept",
+            {
+                "tests/test_lim_branch.py": (
+                    "import sys\n\nif sys.version_info < (3, 0):\n\n    def test_x():\n"
+                    "        pass\n"
+                )
+            },
+            "tests/test_lim_branch.py::test_x",
+        ),
+        "a def in an except handler that never runs": (
+            "accept",
+            {
+                "tests/test_lim_except.py": (
+                    "try:\n    pass\nexcept Exception:\n\n    def test_x():\n        pass\n"
+                )
+            },
+            "tests/test_lim_except.py::test_x",
+        ),
+        "a def in a match case that never matches": (
+            "accept",
+            {
+                "tests/test_lim_match.py": (
+                    "match 1:\n    case 2:\n\n        def test_x():\n            pass\n"
+                )
+            },
+            "tests/test_lim_match.py::test_x",
+        ),
+        "a name rebound by a loop over an iterable only the run knows": (
+            "accept",
+            {
+                "tests/test_lim_loop.py": (
+                    "def test_x():\n    pass\n\n\nfor test_x in sorted(['a']):\n    pass\n"
+                )
+            },
+            "tests/test_lim_loop.py::test_x",
+        ),
+        "a name rebound through global": (
+            "accept",
+            {
+                "tests/test_lim_rebind.py": (
+                    "def test_x():\n    pass\n\n\ndef rebind():\n    global test_x\n"
+                    "    test_x = 1\n\n\nrebind()\n"
+                )
+            },
+            "tests/test_lim_rebind.py::test_x",
+        ),
+        "an except-as name that deletes a def": (
+            "accept",
+            {
+                "tests/test_lim_exceptas.py": (
+                    "def test_x():\n    pass\n\n\ntry:\n    raise ValueError\n"
+                    "except ValueError as test_x:\n    pass\n"
+                )
+            },
+            "tests/test_lim_exceptas.py::test_x",
+        ),
+        "a star import after a def whose module redefines the name": (
+            "accept",
+            {
+                "tests/lim_star.py": "test_x = None\n",
+                "tests/test_lim_star.py": "def test_x():\n    pass\n\n\nfrom lim_star import *\n",
+            },
+            "tests/test_lim_star.py::test_x",
+        ),
+        "a base from a third-party package that defines __init__": (
+            "accept",
+            {
+                "tests/test_lim_third.py": (
+                    "from _pytest.outcomes import OutcomeException\n\n\n"
+                    "class TestA(OutcomeException):\n    def test_a(self):\n        pass\n"
+                )
+            },
+            "tests/test_lim_third.py::TestA::test_a",
+        ),
+        "a parametrized id that does not exist": (
+            "accept",
+            {
+                "tests/test_lim_param.py": (
+                    "import pytest\n\n\n@pytest.mark.parametrize('a', [1, 2])\n"
+                    "def test_p(a):\n    pass\n"
+                )
+            },
+            "tests/test_lim_param.py::test_p[nonexistent]",
+        ),
+        "a test assigned by tuple unpacking": (
+            "refuse",
+            {"tests/test_lim_tuple.py": "test_x, = [lambda: None]\n"},
+            "tests/test_lim_tuple.py::test_x",
+        ),
+        "a star import that overrides a base class defined above it": (
+            "refuse",
+            {
+                "tests/lim_base.py": "class TestBase:\n    def test_b(self):\n        pass\n",
+                "tests/test_lim_override.py": (
+                    "class TestBase:\n    def test_a(self):\n        pass\n\n\n"
+                    "from lim_base import *\n\n\nclass TestA(TestBase):\n    pass\n"
+                ),
+            },
+            "tests/test_lim_override.py::TestA::test_b",
+        ),
+        "a base defined in each arm of a run-time if": (
+            "refuse",
+            {
+                "tests/test_lim_arms.py": (
+                    "import sys\n\nif sys.version_info >= (3, 0):\n\n    class TestBase:\n"
+                    "        def test_a(self):\n            pass\n\nelse:\n\n"
+                    "    class TestBase:\n        def test_b(self):\n            pass\n\n\n"
+                    "class TestA(TestBase):\n    pass\n"
+                )
+            },
+            "tests/test_lim_arms.py::TestA::test_a",
+        ),
+    }
+)

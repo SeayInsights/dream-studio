@@ -31,36 +31,53 @@ LAYER TWO, WHICH TESTS A FILE HOLDS:
     (pytest.toml, pytest.ini, pyproject.toml, tox.ini, setup.cfg, in pytest's order), not
     defaults baked in here; an option that is present and empty is empty, not the default;
     `__test__ = True` collects a name pytest would otherwise skip and a falsy `__test__`
-    (`False`, `0`, `None`, assigned in the body, inherited, or set from outside as
-    `test_x.__test__ = False`) removes one;
+    (`False`, `0`, `None`, a comparison of constants, assigned in the body, inherited, set from
+    outside as `test_x.__test__ = False` or `setattr(...)`, or from `@nottest`) removes one;
   * a module namespace is built statement by statement, so a later binding wins, an alias of a
-    test (`test_b = test_a`, also `= module.attr`, `= functools.partial(test_a)`, a lambda, a
-    function assigned in a class body) is collected under its own name, an imported test is
-    collected (unless `collect_imported_tests = false`), `del`, a `with ... as test_x`, a walrus
-    and a `for test_x in <non-empty literal>` target rebind the name, and the body of a `for`
-    over an empty literal never runs;
+    test (`test_b = test_a`, also `= module.attr`, `= functools.partial(test_a)`, a lambda,
+    `staticmethod(...)`, a function assigned in a class body) is collected under its own name,
+    an imported test is collected (unless `collect_imported_tests = false`), `del`, a
+    `with ... as test_x`, a walrus and a `for test_x in <non-empty literal>` target rebind the
+    name, the body of a `for` over an empty literal never runs, and a `while True` body always
+    does; an import under a `try` with handlers or any branch that may not run does not replace a
+    def of the same name;
   * a class is collected when its name matches, it is not abstract (`ABC` or `ABCMeta` with a
-    method marked abstract and not overridden), it gets no `__init__`/`__new__` (its own, a
-    `@dataclass`, a builtin base that has one such as dict, Exception, int, list, str, tuple or
-    type, or an Enum, NamedTuple, TypedDict or Protocol base), does not set a falsy `__test__`,
-    and holds at least one test pytest would collect; its members are those of its real C3
-    linearisation (so a diamond resolves the way Python resolves it) with bases found in the
-    same file or elsewhere in the repo, a subscripted base (`Base[int]`) standing for `Base`;
+    method still marked abstract, or a standard-library base with abstract methods this does not
+    implement), it gets no `__init__`/`__new__` (its own, a `@dataclass`, a builtin or
+    standard-library base that has one such as dict, Exception, threading.Thread, io.StringIO,
+    pathlib.PurePath, collections.OrderedDict or a namedtuple() call, or an Enum, NamedTuple,
+    TypedDict or Protocol base), is hashable (a class that defines `__eq__` without `__hash__`, or
+    sets `__hash__ = None`, is not), does not set a falsy `__test__`, and holds at least one test
+    pytest would collect; its members are those of its real C3 linearisation (so a diamond
+    resolves the way Python resolves it) with bases found in the same file or elsewhere in the
+    repo, a subscripted base (`Base[int]`) standing for `Base`. Standard-library bases are read
+    from the interpreter, never a module that does something when imported;
   * a `@property` is not callable and a fixture, also through `from pytest import fixture as
-    fx`, is not a test;
-  * a condition is decided when it is a constant, `not`/`and`/`or` over constants, a module
-    constant bound to one, `__name__ == "__main__"`, or `TYPE_CHECKING` however imported;
+    fx` or `yield_fixture`, is not a test;
+  * a condition is decided when it is a constant, `not`/`and`/`or`/comparison/arithmetic over
+    constants, a module constant bound to one, `__name__ == "__main__"`, or `TYPE_CHECKING`
+    however imported;
   * a file that raises when imported is refused whole, for the causes a static read can PROVE: a
-    top-level `raise` or false `assert`, a base class defined later in the file or nowhere it
-    could come from, bases with no consistent MRO, a top-level relative import in a directory
-    that is not a package, a top-level `pytest.skip(..., allow_module_level=True)`, an import of
-    a module a regular repository package lacks, of a name a repository module does not define
-    (when it makes names by no route a static read cannot see), or of a repository helper that
-    does not parse;
+    top-level `raise`, a false `assert`, or a call that always raises (`pytest.skip` in any form,
+    `pytest.xfail`, `pytest.fail`, `pytest.exit`, `sys.exit`, `exit()`, a division by a literal
+    zero), a name augmented before it is defined, a class body that raises, a base class defined
+    later in the file or nowhere it could come from, bases with no consistent MRO, a relative
+    import in a directory that is not a package, an import (absolute or relative) of a module a
+    regular repository package lacks or of a module that is not a package, of a name a repository
+    module does not define by any route a static read can see (itself included), or of a repository
+    helper that does not parse, raises, or imports one of those: the helpers of the test run's own
+    tree are followed, product modules are not. Only top-level statements are read, and a namespace
+    directory, a star import from outside the repository, or a module that makes names with
+    `globals()` or `__getattr__` is not refused;
+  * a bare file reference (no `::`) is judged the same way, and also refused when the file holds no
+    test pytest would collect;
+  * two files with one name in directories that are not packages: the second, in the order pytest
+    collects them, fails with "import file mismatch" and is refused;
   * `from x import *` binds what `x.__all__` lists when that is a literal list, otherwise the
     public names, and a star import whose `__all__` cannot be evaluated is named as the doubt;
-  * a path is judged as it is SPELLED (`skipme/` is excluded even when it is a link to `real/`)
-    and must match the case of the file on disk, as a Linux checkout would require.
+  * a path is judged as it is SPELLED (`skipme/` is excluded even when it is a link to `real/`),
+    must match the case of the file on disk, and every pattern is matched the way a Linux checkout
+    matches it (case-sensitive, `/` separators) whatever platform this runs on, since CI is Linux.
 
 WHAT IT DOES NOT PRETEND TO KNOW. When a name cannot be found and a base class could not be
 read (it lives outside the repository, or is not a plain name), the answer is a failure that
@@ -71,9 +88,10 @@ accepted: either arm may run, and the gate cannot tell which.
 SKIPS. A test skipped by a marker (`@pytest.mark.skip`, `pytestmark`, `skipif`, `xfail`) still
 resolves: skipping is a run-time outcome and pytest collects the test either way, so the
 question this answers is whether the enforcer is there to run, not whether it runs green on
-this machine. A top-level `pytest.skip(..., allow_module_level=True)` is different, because it
-raises while the file is imported and no item ever exists, so it is REFUSED; one that is
-conditional or reached through a function call is not decidable and is a false accept (below).
+this machine. A top-level call to `pytest.skip`, with or without allow_module_level, is
+different, because it raises while the file is imported and no item ever exists, so it is
+REFUSED; one that is conditional or reached through a function call is not decidable and is a
+false accept (below).
 
 THE KNOWN FALSE ACCEPTS: pytest collects nothing and the resolver says yes. Each is a case in
 `_KNOWN_LIMITS` (tests/helpers/resolver_cases.py), judged against `pytest --collect-only` by
@@ -86,21 +104,31 @@ this list is corrected rather than left to rot:
     of a missing module, a conditional or function-called `pytest.skip(allow_module_level=True)`;
   * a generator test function (pytest fails the file);
   * a class or function decorator that replaces the object (one that returns `None` or an int)
-    or adds an `__init__` (attrs and its kin), and an abstract class reached through a base the
-    resolver cannot read;
-  * a `def` inside a `try` whose import may fail;
+    or adds an `__init__` (attrs and its kin);
+  * a base from a third-party package that defines `__init__` or `__new__` (only the standard
+    library is read from the interpreter; an installed package is not imported);
+  * a def under a branch only the run can decide (`if sys.version_info < (3, 0):`), in an except
+    handler that never runs, or in a match case that never matches; a name rebound by a loop over
+    an iterable only the run knows, through `global`, by `except ... as name`, or by a star import
+    placed after the def; a `def` in a `try` whose import fails;
+  * a parametrized id that does not exist (`test_p[nonexistent]`): the ids a decorator generates
+    are not evaluated;
   * options given on a command line or in `PYTEST_ADDOPTS`, `-o python_files=...`, and plugins
     installed in the environment.
 
 THE KNOWN FALSE REFUSALS: pytest collects it and the resolver says no.
 
   * a base made by a call (`class T(make_base())`) or splatted (`class T(*bases)`) that
-    supplies the test; a class built by a factory function; a `def` created through `global`;
-    a test made with `setattr`; and `unittest.TestCase.runTest`.
+    supplies the test; a class built by a factory function; a `def` created through `global`; a
+    test made with `setattr`; a test assigned by tuple unpacking; `unittest.TestCase.runTest`;
+  * a star import that overrides a base class defined above it, and a base class defined in each
+    arm of an `if` only the run can decide (the resolver takes the last).
 
 REFUSED CONFIGURATION. `-k`, `-m`, `--noconftest`, `--confcutdir`, `--pyargs`, `--import-mode`,
 `--rootdir` and `-p <plugin>` in `addopts` change collection in ways that need marks, imports or
-a different rootdir to evaluate; a repo that sets one gets a configuration error, not a guess.
+a different rootdir to evaluate, a node id in `addopts` narrows the run to tests, and a
+`setup.cfg` with a `[pytest]` section is an error in pytest; a repo that does any of these gets a
+configuration error, not a guess. A bare path in `addopts` is an argument and replaces `testpaths`.
 """
 
 from __future__ import annotations
@@ -168,7 +196,7 @@ def _name_matches(patterns: tuple[str, ...], name: str) -> bool:
     for pattern in patterns:
         if name.startswith(pattern):
             return True
-        if any(c in pattern for c in "*?[") and fnmatch.fnmatch(name, pattern):
+        if any(c in pattern for c in "*?[") and fnmatch.fnmatchcase(name, pattern):
             return True
     return False
 
