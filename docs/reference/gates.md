@@ -76,6 +76,8 @@ A gate escape hatch that fires leaves one `gate.bypassed` event, and each event 
 
 Events written before these fields existed have none of them. They are still counted, as unattributed.
 
+`ds doctor` (`checks.bypass_audit`) prints the window it counted over (`window`, `since_days`, default 7 days) and, per gate, `count` (raw runs), `distinct_runs` (distinct `HEAD` shas among attributed runs) and `unattributed` (runs with no sha, counted separately and never given one). Duplicates are counted rather than suppressed at emission: a retry is a real execution, and de-duplicating it there would need state shared between runs.
+
 ---
 
 ## Work Order Close Gates
