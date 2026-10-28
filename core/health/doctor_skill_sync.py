@@ -188,10 +188,16 @@ def _check_pack_mode_coverage(
         return []
     try:
         data = _yaml.safe_load(packs_yaml_path.read_text(encoding="utf-8")) or {}
-    except OSError:
+    except (OSError, UnicodeError, _yaml.YAMLError, RecursionError, ValueError):
+        # An unreadable or malformed manifest is not this check's finding to report (it is
+        # `checks.pack_work_order_types`, which names the file and the reason); crashing the
+        # doctor here is what it used to do, for a manifest that is the very thing to diagnose.
+        return []
+    packs = data.get("packs") if isinstance(data, dict) else None
+    if not isinstance(packs, dict):
         return []
     missing: list[str] = []
-    for pack_key, pack_cfg in (data.get("packs") or {}).items():
+    for pack_key, pack_cfg in packs.items():
         if not isinstance(pack_cfg, dict):
             continue
         skill_id = pack_cfg.get("skill", pack_key)

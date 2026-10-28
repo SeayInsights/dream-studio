@@ -1,6 +1,7 @@
 # Pack Capability Contract
 
-Status: draft (proposed; nothing here is enforced yet)
+Status: draft. What "Present today" lists is built and tested, including declaring work-order
+types in a pack manifest; everything under "Proposed" is not enforced yet.
 
 A pack is installable content: skills, agents, templates, rules, and the work-order
 types and gates a domain needs. This contract defines how a pack reaches governance —
@@ -36,9 +37,9 @@ Each pack carries a manifest (today this is spread across `packs.yaml` and each 
 | --- | --- |
 | `requires` | Capabilities the pack cannot work without. If the backend denies one, the pack stops and says which. |
 | `uses` | Capabilities the pack uses when present and replaces with a fallback when not. |
-| `contributes.work_order_types` | Work-order types the pack adds, each with the artifact class it reviews as. |
-| `contributes.gates` | Close gates the pack adds, each with its check command. |
-| `contributes.finding_categories` | Finding categories the pack emits. |
+| `contributes.work_order_types` | Work-order types the pack adds, each with the artifact class it reviews as. Read from `packs.yaml` today (see "Present today"). |
+| `contributes.gates` | Close gates the pack adds, each with its check command. Not read yet; a manifest that declares it is refused. |
+| `contributes.finding_categories` | Finding categories the pack emits. Not read yet; a manifest that declares it is refused. |
 | `files` | Every template, rule, and script the pack reads, by path inside the pack. A path outside the pack directory is a defect. |
 
 `metadata.yml` today declares `core_modules: []` for 35 of 51 skills, and some skills
@@ -109,31 +110,158 @@ resolution are written only after the row is stored and the transaction has comm
 failed write leaves nothing on the spool. The SARIF importer uses a result's `ruleIndex` only when the
 indexed rule's id matches the result's `ruleId`.
 
-### Present today (Python API only, not yet reachable by a pack)
+### Present today (work-order types: declared in a pack manifest)
 
 | Capability | Surface |
 | --- | --- |
-| `registry:work_order_type` | `core.work_orders.type_registry.register_work_order_type(name, artifact_class=..., ui_bearing=..., stales_design_brief=..., exempt_from_verification=...)` and the read accessors beside it. |
+| `registry:work_order_type` | A pack declares types under `contributes.work_order_types` in `packs.yaml`; `core.work_orders.type_manifest.load_pack_work_order_types(packs_yaml_path=...)` registers them through `core.work_orders.type_registry.register_work_order_type`, and the registry's accessors load the running install's manifest on first use (`ensure_loaded`). |
 
 The registry holds, per work-order type, the artifact class it reviews as, whether it is
-UI-bearing, whether closing it stales the design brief, and whether it is exempt from
-default-on verification. The ten built-in types are registered at import, and
-`review_rules`, `brief_currency`, `milestones/close`, `milestones/queries`, `start_brief`,
-`close_main`, `create_work_order`, the CLI `--type` choices and the MCP
-`ds_work_order_create` enum all read it. The closed `WORK_ORDER_TYPES` tuple and the four
-private subsets are gone.
+UI-bearing, whether closing it stales the design brief, whether it is exempt from default-on
+verification, whether closing it is held to the `dashboard_truth` gate, and the one-line
+description and presentation order the generated operator `AGENTS.md` prints. The ten
+built-in types are registered at import. `review_rules`, `brief_currency`,
+`milestones/close`, `milestones/queries`, `start_brief`, `close_main`, `create_work_order`,
+`ds project state`, the CLI `--type` choices, the MCP `ds_work_order_create` enum and the
+operator `AGENTS.md` type table all read it. The closed `WORK_ORDER_TYPES` tuple, the four
+private subsets, the literal `dashboard_truth` set and the second type list in the AGENTS.md
+generator are gone.
 
-This is a function call inside one process. Nothing reads `contributes.work_order_types`
-from a manifest, nothing persists a registration, and there is no MCP or CLI surface for
-it, so a pack cannot use it yet. Three gaps remain before a registered type is fully
-usable:
+A pack declares a type like this (`schema_version: 2`):
 
-- A type needs a `business_work_order_types` row (its gates, executor and workflow
-  template) before `ds work-order start` accepts it; the registry does not write one.
-- The MCP `ds_work_order_create` enum is built when `integrations.mcp.tools` is imported,
-  so a type must be registered before then to appear in it.
-- The `dashboard_truth` close gate still names its types in a literal set in
-  `close_main`; a pack cannot opt a type into it.
+```yaml
+packs:
+  legal:
+    contributes:
+      work_order_types:
+        - name: contract_review           # required: lowercase, digits, underscores, at most 64
+          artifact_class: document        # required: code | config | document | data
+          description: Reviewing a contract for completeness and accuracy   # required, one line
+          ui_bearing: false               # required, never defaulted (see below)
+          exempt_from_verification: false # required, never defaulted; true needs the operator
+          stales_design_brief: false      # optional; defaults to ui_bearing
+          dashboard_truth_gated: false    # optional; only adds a close gate
+```
+
+How it behaves:
+
+- **When it is read.** Lazily, once per process, by the first accessor or registration call;
+  never at import, so importing the registry reads no file and writes nothing. The manifest is
+  `code_root() / "packs.yaml"`: the checkout's in a checkout, the site-packages copy in an
+  installed app (the wheel ships `packs.yaml` at that path), independent of the working
+  directory. Registrations are process-local and rebuilt in every process (the CLI, the MCP
+  server and each hook read the manifest themselves). A manifest that cannot be read, or that
+  declares something invalid, is a `PackManifestError` naming the file and the pack on every
+  read until it is fixed: it never silently falls back to the built-ins.
+- **What is refused.** An unknown key on a type or under `contributes`, a missing required
+  key, an unknown artifact class, a bad name, flag or description, a duplicate across packs,
+  a collision with a built-in, a reserved or an already registered type, an exemption the
+  operator has not allowed, a pack key over 64 characters (refused, never truncated: the trust
+  file names a pack by its full key; a key must also be a non-empty printable string), a
+  description that is empty or whitespace-only, carries a control character, a line or paragraph
+  separator, a stack of more than two combining marks, or any of `|`, a backtick, `<`, `>`,
+  `[`, `]`, a leading `#`, `*`, `__`, a `scheme:` prefix such as `javascript:` or `http:`, or an
+  HTML entity (it becomes a row of the generated operator `AGENTS.md`, so plain prose is all it
+  may carry; ordinary punctuation, parentheses and accented letters are fine), a mapping key
+  written twice (YAML would keep the last and drop the first without a word, so a repeated pack
+  key silently discarded a pack), and a manifest that is too large, nested too deeply, uses a YAML
+  anchor or alias, is not UTF-8, or declares more than 200 types. `contributes.gates` and
+  `contributes.finding_categories` are refused today, not ignored, because nothing reads them.
+  A manifest is applied whole or not at all. Every refusal is a `PackManifestError` naming the
+  file and the pack, never a raw traceback, and no message quotes manifest data whole.
+- **A broken manifest does not take `ds` down.** The CLI builds its parser whatever the
+  manifest holds, so `ds --help`, `version`, `status` and `doctor` run. A command that reads a
+  work-order type (`create`, `start`, `close`, `project state`) fails with one line naming the
+  manifest and the pack. `ds doctor` reports the manifest as `checks.pack_work_order_types`,
+  with the error when it does not load and, when it does, the governance profile of every type
+  a pack declared.
+- **MCP.** `ds_work_order_create`'s `work_order_type` enum is computed when `tools/list`
+  runs (`Tool.schema()`), and the strict argument validator for a tool with such a live enum is
+  built from that schema at every call, never cached by tool name, so a type declared after the
+  first call is accepted and an unknown one is `-32602` rather than reaching the handler.
+  `Tool.input_schema` carries no enum for it; anything validating or inspecting arguments
+  reads `schema()`.
+- **MCP discovery survives a broken manifest.** `tools/list` still answers 200 with every tool;
+  `ds_work_order_create` is advertised with the built-in types and a description that says the
+  pack types are unavailable and gives a one-word reason (`unreadable`, `malformed`,
+  `not-permitted` or `invalid`), and a call that needs the full set fails as a tool error
+  (`isError`) carrying the loader's message. A client is shown no path and no parser text; the
+  server log has the full detail. Every other tool is unaffected. A broken manifest is parsed
+  once and the failure remembered against the files' sizes and mtimes and the home, so it is
+  not re-parsed on every request.
+- **Home means home.** The operator's trust file is read from the home the command runs against.
+  A manifest accepted on the strength of one home's trust file is validated again, against the
+  new home's file, when the home changes (`ds --home H0` under an ambient `DREAM_STUDIO_HOME=H1`;
+  `ds mcp serve --home`; a relative home followed by a chdir), and its types are dropped if the
+  allowance is not there. The same happens when the trust file itself is edited or deleted
+  while a process runs: a withdrawn allowance takes effect on the next use, with a warning,
+  not at the next restart. The home is read once per load and that value names the trust file
+  and is recorded. A manifest that asked for no exemption is never reloaded for either.
+- **No reload.** The manifest is read once per process. A long-lived process (`ds mcp serve`)
+  keeps serving the types it loaded until it is restarted, and logs one warning line, once per
+  change, when the file has changed on disk since it loaded. Editing the manifest therefore
+  needs a restart of the server; a new `ds` command picks it up on its own.
+- **Startable without a row.** `ds work-order start` reads `business_work_order_types` for a
+  work order's gates, executor and workflow template. A declared type with no row gets a
+  profile derived from the declaration (a label, and no pre/post gate, executor or workflow);
+  nothing is written, so there is no migration and nothing to drift from the manifest. A
+  pack-declared work order is therefore held to the universal close gates (tasks done,
+  executable acceptance criteria, change impact, independent review unless the type is
+  exempt) and to the registry flags, and to no type-specific gate. A row, where one exists,
+  still wins.
+- **When the manifest goes away.** Work orders of the type stay readable and listable. Start
+  refuses with a message that names the manifest as the likely cause. Close treats the type as
+  undeclared: independent review is required, it reviews as code, and the `dashboard_truth`
+  gate does not apply, so such a work order can still be closed through the universal gates.
+- **For tests.** `type_registry.scoped_registration()` and
+  `type_registry.scoped_pack_manifest(path, trusted=...)` restore the registry on exit. There
+  is no public unregister. Scopes swap the process-wide registry, so they are single-threaded:
+  a second thread entering one is refused, and a reader on another thread sees the scoped
+  state while it lasts. A scope never reads the operator's trust file.
+
+#### What a pack type can and cannot weaken
+
+A manifest is the pack's own statement about itself, so the platform treats everything in it as
+an attestation the pack author owns, and refuses the ones that lower governance unless the
+operator, who is not the pack, says so.
+
+| A manifest can | A manifest cannot |
+| --- | --- |
+| Choose an artifact class, which selects the review standards (8 for code, 6 for config, 8 for data, 5 for a document). This is an attestation: nothing checks it against what the type delivers, so declaring `document` for code drops three review standards. `ds doctor` prints the count for each declared type. | Take a name core writes or holds: `cleanup`, `migration`, `investigation`, `chore`. Declaring one would change how existing work orders of that name are reviewed and closed. `cleanup` is derived (core files it; a test scans production code and fails on a writer of any name that is neither built in nor reserved); the other three are held by live authorities from earlier versions and cannot be derived from the code. |
+| Declare `ui_bearing` (a locked design brief is read at start; the milestone owes a design audit and a Core Web Vitals result) and `exempt_from_verification` explicitly. Neither has a default, so omission is an error; saying `ui_bearing: false` for a type that ships a page skips the milestone design audit, and that is the author's attestation. | Exempt its work from independent review by itself. `exempt_from_verification: true` needs the pack's key in the operator's `pack-trust.yaml` in the Dream Studio home (`exempt_from_verification: [<pack>]`), a file no manifest can edit, name or point at. |
+| Add governance: `dashboard_truth_gated: true` holds closing the type to the live-authority invariants; `stales_design_brief` widens the staling set. | Remove a universal close gate (tasks done, executable acceptance criteria, change impact, lane review) or the main-CI check. Those are not per-type. |
+| Add a type. | Redeclare or alter a built-in, or another pack's type. |
+
+The trust file is read only when a manifest asks for an exemption. A present but invalid file
+is an error naming it, never an empty allow-list. The trust file lives in the home, not next
+to `packs.yaml`, because an environment variable would have to be set in every process that
+reads the registry (the CLI, the MCP server, each hook) and one that was not would silently
+differ.
+
+The repository's own `packs.yaml` declares no type today, and a test pins its governance
+profile, so adding one is a reviewed change to that test.
+
+One limit, stated rather than implied: before the declared-type check existed, `create`
+accepted any string, so a very old authority may hold a work order typed `dashboard` or
+`telemetry` (the two names the old `dashboard_truth` literal set carried, which no migration
+seeds and no door accepts today). Such a row is an undeclared type: it closes under the
+strictest defaults and no longer runs the `dashboard_truth` gate. That window closed with the
+declared-type check, so it is negligible, but it is not zero.
+
+What is not shipped:
+
+- `gate:register`: a pack cannot contribute a close gate, a pre-build or post-build gate for
+  its types, an executor or a workflow template. Close gates are still the fixed set in
+  `core.work_orders.close_gates` (`KNOWN_GATES`) bound to types by `business_work_order_types`
+  rows. It needs a gate registry (name, check, whether it can be previewed without executing),
+  a manifest key, and a decision on whether a type's `pre_build_gate` and `post_build_gate`
+  become manifest fields.
+- A runtime surface (CLI or MCP) for registering a type. A type exists because a manifest
+  declares it, in every process that reads that manifest.
+- Persisting a type, or recording which pack a work order's type came from.
+- A review of the loader against an installed wheel on a machine other than the one that built
+  it: the wheel test checks that `packs.yaml` ships, and `code_root()` is the existing
+  resolution for it, but no test installs a wheel and declares a pack type.
 
 ### Proposed
 
@@ -141,7 +269,7 @@ usable:
 | --- | --- | --- |
 | `finding:record`, `finding:list` | Record and read findings in one typed shape: severity, location, `confidence`, `limitations`, `coverage` (`complete` \| `partial` \| `unknown`), evidence refs. The read model carries the three honesty fields (see "Present today"); storing them in `security_events` is built (migration 161), recording them through a capability is not. The capability needs `record_finding`'s three parameters exposed in `integrations/mcp/tools.py` as a client-gated write tool, and `finding:list` reads `core.findings.collect_findings`. | Append to a JSONL file beside the work; `list` reads it back. |
 | `evidence:attach` | Attach a content-hashed artifact (scan output, reproduction log) to a finding or work order. | Write the file next to the work; record its SHA256 in the finding. |
-| `registry:work_order_type` (reach), `gate:register` | Let a pack supply work-order types (the registry exists, see above, but nothing loads a manifest into it) and gates (no registry yet; close gates are still bound to types by the `business_work_order_types` rows and literal sets in `close_main`). | Types and gates are read from the manifest and applied by the pack's own checklist. |
+| `gate:register` | Let a pack supply close gates and bind them to its types (work-order types are shipped, see above; gates have no registry yet, and close gates are still the fixed set in `close_gates` bound to types by the `business_work_order_types` rows). | Gates are read from the manifest and applied by the pack's own checklist. |
 | `artifact:write`, `artifact:read` | Named working artifacts (plans, audit reports). Replaces `ds files write` calls in skill text. | A project-local directory. |
 | `memory:record` | Record a lesson. | Append to a local lessons file. |
 | `telemetry:emit` | Emit a usage or cost event. | No-op, logged once. |
@@ -229,7 +357,8 @@ a separate repository is then mechanical.
 
 ## Open questions
 
-- Does `registry:*` run at install time or per session?
+- Does `registry:*` run at install time or per session? For work-order types: per process,
+  lazily, from the manifest the process is running (see "Present today"). Gates are open.
 - Who owns finding categories: the pack, or a shared vocabulary in the kernel?
 - Does standalone mode persist state between sessions, or is it stateless?
 - Which of `core.org_intelligence`, `core.pricing`, and `core.ontology` are live? Check

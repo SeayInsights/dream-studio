@@ -6,7 +6,8 @@ Generated from canonical sources so it cannot drift from the real routing:
 
 - routing table  ← packs.yaml + canonical skill metadata (reuses the Claude-Code
   compiler's table builder, so both targets stay byte-identical in routing)
-- work-order types ← the canonical 10-type set (canonical/skills/ds-project)
+- work-order types ← the work-order type registry (core.work_orders.type_registry): the
+  ten built-ins plus any type a pack declares in packs.yaml
 - gate definitions ← the canonical close/milestone gates (canonical/skills/ds-workorder)
 
 ``build_repo_agents_md`` — the CONTRIBUTOR file committed at the repository root,
@@ -29,8 +30,15 @@ every fresh install, which is why they are separate now and why
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from pathlib import Path
 
+from core.work_orders.type_manifest import default_manifest_path, read_pack_work_order_types
+from core.work_orders.type_registry import (
+    WorkOrderType,
+    builtin_work_order_types,
+    work_order_types_in_presentation_order,
+)
 from integrations.compiler.claude_code import _build_routing_table
 
 _COMPILER_DIR = Path(__file__).resolve().parent
@@ -117,9 +125,9 @@ They are ordinary Python and need no Dream Studio install.
 - Read the git history first. Something that looks missing is often a deliberate
   deletion: `git log --diff-filter=D -- <path>`.
 - Check whether a file is GENERATED before editing it. Several checked-in
-  artifacts are, including this one, `canonical/review_lanes.yml`,
-  `canonical/rules.yml` and everything under `dist/plugin/`. Edit the generator —
-  an edit to the artifact is discarded by the next render.
+  artifacts are, including this one, `canonical/review_lanes.yml` and everything
+  under `dist/plugin/`. Edit the generator — an edit to the artifact is discarded by
+  the next render. `canonical/rules.yml` is not one: it is maintained by hand.
 - After the change, validate imports, public API and route contracts, read-model
   shapes, and anything reading a SQLite boundary that moved.
 
@@ -131,20 +139,6 @@ They are ordinary Python and need no Dream Studio install.
 - Never push directly to `main` — branch first.
 - Write scratch output to a temp directory, never the repository root.
 """
-
-# Canonical 10 work-order types — mirrors canonical/skills/ds-project/SKILL.md.
-_WO_TYPES: list[tuple[str, str]] = [
-    ("ui_component", "Building a reusable UI element (button, card, modal, chart)"),
-    ("ui_page", "Building a complete screen/view with navigation and layout"),
-    ("api_endpoint", "Adding or modifying a backend route, including request/response contract"),
-    ("authentication", "Implementing login, session management, OAuth, or token handling"),
-    ("saas_feature", "A user-facing product capability that spans UI + API (e.g., billing)"),
-    ("data_pipeline", "ETL, ingestion, transformation, or batch processing work"),
-    ("game_mechanic", "A gameplay rule, interaction system, or physics behavior"),
-    ("deployment", "CI/CD pipeline, containerization, infrastructure-as-code, release automation"),
-    ("infrastructure", "Database schema, cloud resource provisioning, network configuration"),
-    ("documentation", "Technical specs, API references, architecture decision records"),
-]
 
 # Canonical close/milestone gates — mirrors canonical/skills/ds-workorder + core.work_orders.close.
 _GATES: list[tuple[str, str]] = [
@@ -192,8 +186,35 @@ forbidden, and `.planning` on disk is forbidden (denied by the on-edit enforceme
 """
 
 
-def _wo_types_section() -> str:
-    rows = "\n".join(f"| `{name}` | {desc} |" for name, desc in _WO_TYPES)
+def _declared_types(packs_yaml_path: Path | None) -> tuple[WorkOrderType, ...]:
+    """The types the table lists: this process's registry, or the built-ins plus the types
+    ``packs_yaml_path`` declares when it names a manifest other than the running one's.
+
+    The projection describes what an install accepts, and what an install accepts is its
+    built-ins plus what its packs declare. This repository's own packs.yaml declares none, so
+    its output is the ten built-ins, byte for byte what the hand-kept list produced.
+    """
+    if (
+        packs_yaml_path is None
+        or Path(packs_yaml_path).resolve() == default_manifest_path().resolve()
+    ):
+        return work_order_types_in_presentation_order()
+    # Read, not registered: rendering a manifest this process is not running must not swap the
+    # process-wide registry under whoever else is reading it.
+    extra = read_pack_work_order_types(Path(packs_yaml_path))
+    base = builtin_work_order_types()
+    last = max(t.order for t in base)
+    return base + tuple(replace(t, order=last + 10 * (i + 1)) for i, t in enumerate(extra))
+
+
+def _wo_types_section(packs_yaml_path: Path | None = None) -> str:
+    # From the registry (core.work_orders.type_registry), which holds each type's sentence and
+    # its position. This was a hand-kept second copy of the list; a type a pack's manifest
+    # declares is in the registry, and so in the table.
+    rows = "\n".join(
+        f"| `{declared.name}` | {declared.description} |"
+        for declared in _declared_types(packs_yaml_path)
+    )
     return "## Work Order Types\n\n" "| Type | Use when |\n|------|----------|\n" + rows + "\n"
 
 
@@ -278,7 +299,7 @@ def build_agents_md(
         _GENERATED_NOTICE,
         _OPERATOR_HEADER.rstrip(),
         "## Skill Routing\n\n" + routing_table.rstrip(),
-        _wo_types_section().rstrip(),
+        _wo_types_section(packs).rstrip(),
         _gates_section().rstrip(),
         _AUTHORITY_RULES.rstrip(),
         # The guidance rules, which reach an install through nothing else: the registry

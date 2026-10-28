@@ -11,6 +11,7 @@ in the three sibling modules.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from core.work_orders.models import (
     DEFAULT_WORK_ORDER_PRIORITY,
     WORK_ORDER_PRIORITIES,
 )
-from core.work_orders.type_registry import work_order_type_names
+from core.work_orders.type_registry import PackManifestError, work_order_type_names
 
 from interfaces.cli.commands.work_order_lifecycle import (
     _work_order_block,
@@ -56,6 +57,22 @@ from interfaces.cli.commands.work_order_tasks import (
 # ---------------------------------------------------------------------------
 # Parser registration
 # ---------------------------------------------------------------------------
+
+
+def _declared_type_choices() -> tuple[str, ...] | None:
+    """The declared types, for `--type`'s choices; None when the pack manifest cannot be loaded.
+
+    This runs while the parser is BUILT, which is before every command, so a manifest that does
+    not load must not make it raise: `ds --help`, `version`, `status`, `doctor` and `project
+    list` would all die with a traceback, and `ds doctor` is the command that diagnoses it.
+
+    The failure is deferred, not dropped. With no choices argparse accepts any `--type`, and
+    every command that reads a work-order type (create included) asks the registry, which raises
+    the same PackManifestError again; ds.py prints it as one line naming the manifest.
+    """
+    with contextlib.suppress(PackManifestError):
+        return work_order_type_names()
+    return None
 
 
 def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
@@ -116,7 +133,7 @@ def register(subcommands: argparse._SubParsersAction) -> None:  # type: ignore[t
         # REFUSED AT THE DOOR, not filed as infrastructure. This accepted any string while
         # its help said "one of the declared types"; nothing declared them where it could
         # ask. argparse prints the choices in the refusal, so the operator sees the list.
-        choices=work_order_type_names(),
+        choices=_declared_type_choices(),
         help="One of the declared work-order types (selects which standards review it)",
     )
     wo_create.add_argument(

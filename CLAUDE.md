@@ -89,9 +89,11 @@ root is not wanted, and nothing here should write into `~/.dream-studio`.
 - Read the relevant git history first. A thing that looks missing is often a
   deliberate deletion: `git log --diff-filter=D -- <path>`.
 - Check whether a file is **generated** before editing it. Several checked-in
-  artifacts are — `canonical/review_lanes.yml`, `canonical/rules.yml`,
+  artifacts are — `canonical/review_lanes.yml`,
   `canonical/normative_baseline.json`, `AGENTS.md`, `dist/plugin/**` and others.
   Edit the generator; an edit to the artifact is discarded by the next render.
+  `canonical/rules.yml` is NOT one of them: no generator writes it, it is maintained
+  by hand, and `core.gates.rule_enforcement` resolves every `enforced_by` node in it.
 - Classify what you are touching: product source, generated artifact, test
   fixture, local state, or external target.
 - After the change, validate imports, public API and route contracts, read-model

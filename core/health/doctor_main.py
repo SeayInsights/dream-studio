@@ -30,6 +30,7 @@ from .doctor_checks import (
     _check_handoff_spawner,
     _check_hook_freshness,
     _check_installed_app,
+    _check_pack_work_order_types,
     _check_stale_dbs,
     _check_version_current,
 )
@@ -67,6 +68,28 @@ def _ds_command(home: Path, *args: str) -> list[str]:
     ]
 
 
+def _overall_status(
+    *,
+    critical_fail: bool,
+    authority_attention: bool,
+    pack_types_ok: bool,
+    core_pass: bool,
+    has_warnings: bool,
+) -> str:
+    """The doctor's one-word verdict from its checks, strictest first.
+
+    A pack manifest that does not load is attention_required on its own: it breaks every
+    command that reads a work-order type, so it is never a pass or a warning.
+    """
+    if critical_fail:
+        return "fail"
+    if authority_attention or not pack_types_ok or not core_pass:
+        return "attention_required"
+    if has_warnings:
+        return "warn"
+    return "pass"
+
+
 def run_doctor_checks(
     *,
     source_root: Path,
@@ -100,6 +123,7 @@ def run_doctor_checks(
     stale_dbs_info = _check_stale_dbs(paths.dream_studio_home)
     hook_freshness_info = _check_hook_freshness(source_root, claude_dir)
     installed_app_info = _check_installed_app(paths.dream_studio_home)
+    pack_types_info = _check_pack_work_order_types()
 
     from core.config.schema_coherence import check_schema_coherence
 
@@ -196,16 +220,13 @@ def run_doctor_checks(
         or installed_app_info["warnings"]
         or authority_data_info.get("record_refused")
     )
-    if critical_fail:
-        overall = "fail"
-    elif authority_attention:
-        overall = "attention_required"
-    elif not core_pass:
-        overall = "attention_required"
-    elif has_warnings:
-        overall = "warn"
-    else:
-        overall = "pass"
+    overall = _overall_status(
+        critical_fail=critical_fail,
+        authority_attention=authority_attention,
+        pack_types_ok=pack_types_info["ok"],
+        core_pass=core_pass,
+        has_warnings=has_warnings,
+    )
 
     fix_actions: list[str] = []
     if fix:
@@ -294,6 +315,7 @@ def run_doctor_checks(
             "hook_freshness": hook_freshness_info,
             "bypass_audit": bypass_audit_info,
             "installed_app": installed_app_info,
+            "pack_work_order_types": pack_types_info,
             "authority_data": authority_data_info,
             "main_ci": main_ci_info,
         },

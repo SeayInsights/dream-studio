@@ -289,3 +289,37 @@ def _check_installed_app(dream_studio_home: Path) -> dict[str, Any]:
         "installed_sha": sha,
         "warnings": warnings,
     }
+
+
+def _check_pack_work_order_types() -> dict[str, Any]:
+    """Whether the pack manifest this ds runs from loads, and what the types it declares weaken.
+
+    A manifest that does not load breaks every command that reads a work-order type (create,
+    start, close, project state), so `ds doctor` is where an operator learns why: this reports
+    the error the loader raised, naming the file and the pack, instead of letting the doctor
+    crash. For a manifest that loads it lists the governance profile of every type a pack
+    declared (review standards, independent review at close, UI and dashboard gates), which is
+    the operator's chance to see what they are trusting.
+    """
+    from core.work_orders import type_manifest
+    from core.work_orders.type_registry import (
+        PackManifestError,
+        ensure_loaded,
+        work_order_types_in_presentation_order,
+    )
+
+    manifest = type_manifest.default_manifest_path()
+    try:
+        ensure_loaded()
+    except PackManifestError as exc:
+        return {"ok": False, "manifest": str(manifest), "error": str(exc), "pack_types": []}
+    return {
+        "ok": True,
+        "manifest": str(manifest),
+        "error": None,
+        "pack_types": [
+            type_manifest.governance_profile(t)
+            for t in work_order_types_in_presentation_order()
+            if t.declared_by is not None
+        ],
+    }

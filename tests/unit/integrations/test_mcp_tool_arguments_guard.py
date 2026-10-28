@@ -95,7 +95,9 @@ def _walk(schema: Any, path: str = ""):
 
 def violations(tool: Tool) -> list[str]:
     found: list[str] = []
-    schema = tool.input_schema
+    # The COMPUTED schema: a tool with a live enum (the work-order types) has none in
+    # `input_schema`, and the checks below must see what the server validates against.
+    schema = tool.schema()
 
     try:
         Draft202012Validator.check_schema(schema)

@@ -140,3 +140,98 @@ def test_end_to_end():
 
     # The committed repo-root AGENTS.md must itself be current (drift gate green).
     assert check_agents_md_fresh(REPO_ROOT / "AGENTS.md")["ok"] is True
+
+
+#: The operator AGENTS.md work-order table as the hand-kept `_WO_TYPES` list rendered it before
+#: the table was generated from the type registry. Copied from that list, in its order, with its
+#: sentences: a test that derived this from the registry would agree with any registry.
+_OLD_TABLE = (
+    "## Work Order Types\n\n"
+    "| Type | Use when |\n|------|----------|\n"
+    "| `ui_component` | Building a reusable UI element (button, card, modal, chart) |\n"
+    "| `ui_page` | Building a complete screen/view with navigation and layout |\n"
+    "| `api_endpoint` | Adding or modifying a backend route, including request/response contract |\n"
+    "| `authentication` | Implementing login, session management, OAuth, or token handling |\n"
+    "| `saas_feature` | A user-facing product capability that spans UI + API (e.g., billing) |\n"
+    "| `data_pipeline` | ETL, ingestion, transformation, or batch processing work |\n"
+    "| `game_mechanic` | A gameplay rule, interaction system, or physics behavior |\n"
+    "| `deployment` | CI/CD pipeline, containerization, infrastructure-as-code, release automation |\n"
+    "| `infrastructure` | Database schema, cloud resource provisioning, network configuration |\n"
+    "| `documentation` | Technical specs, API references, architecture decision records |\n"
+)
+
+_PACK_MANIFEST = """\
+schema_version: 2
+packs:
+  legal:
+    skill: legal
+    modes: [review]
+    contributes:
+      work_order_types:
+        - name: contract_review
+          artifact_class: document
+          description: Reviewing a contract or policy for completeness and accuracy
+          ui_bearing: false
+          exempt_from_verification: false
+"""
+
+
+def test_the_generated_type_table_is_the_old_hand_kept_table_byte_for_byte():
+    """Behaviour-preserving move: the registry holds each type's sentence and its position, and
+    the table it generates is exactly what the second copy rendered."""
+    from integrations.compiler.agents_md import _wo_types_section
+
+    assert _wo_types_section() == _OLD_TABLE
+    assert _OLD_TABLE in build_agents_md()
+
+
+def test_a_pack_declared_type_reaches_the_operator_projection_and_only_there(tmp_path):
+    """The projection describes what an install accepts: the built-ins plus what its packs
+    declare. This repository's own packs.yaml declares none, so its output is the ten built-ins
+    (the test above); a manifest that declares one adds a row, after the built-ins, and the
+    process-wide registry is untouched afterwards."""
+    from core.work_orders.type_registry import work_order_type_names
+    from integrations.compiler.agents_md import _wo_types_section
+
+    packs = tmp_path / "packs.yaml"
+    packs.write_text(_PACK_MANIFEST, encoding="utf-8")
+    before = work_order_type_names()
+
+    with_pack = _wo_types_section(packs)
+    assert with_pack.startswith(_OLD_TABLE)
+    added = with_pack.removeprefix(_OLD_TABLE)
+    assert added == (
+        "| `contract_review` | Reviewing a contract or policy for completeness and accuracy |\n"
+    )
+    assert "contract_review" not in _wo_types_section()
+    assert "contract_review" in build_agents_md(packs_yaml_path=packs)
+    assert "contract_review" not in build_agents_md()
+    assert work_order_type_names() == before
+    # The contributor file at the repo root carries no table, so no manifest can change it.
+    assert check_agents_md_fresh(REPO_ROOT / "AGENTS.md")["ok"] is True
+
+
+def test_types_from_an_alternate_manifest_keep_the_manifests_order_after_the_built_ins(tmp_path):
+    """Their order is the manifest's, not alphabetical and not all equal: a zeta type declared
+    before an alpha one is listed first, and both follow the ten built-ins."""
+    from integrations.compiler.agents_md import _declared_types
+
+    packs = tmp_path / "packs.yaml"
+    packs.write_text(
+        "schema_version: 2\n"
+        "packs:\n"
+        "  legal:\n"
+        "    contributes:\n"
+        "      work_order_types:\n"
+        "        - {name: zeta_review, artifact_class: document, description: Zeta first,"
+        " ui_bearing: false, exempt_from_verification: false}\n"
+        "        - {name: alpha_review, artifact_class: document, description: Alpha second,"
+        " ui_bearing: false, exempt_from_verification: false}\n",
+        encoding="utf-8",
+    )
+    declared = _declared_types(packs)
+    names = [t.name for t in declared]
+    assert names[-2:] == ["zeta_review", "alpha_review"], names
+    orders = [t.order for t in declared]
+    assert orders == sorted(orders) and len(set(orders)) == len(orders), orders
+    assert max(t.order for t in declared[:-2]) < declared[-2].order

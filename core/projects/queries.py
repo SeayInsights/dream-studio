@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from core.event_store.studio_db import _connect
+from core.work_orders.type_registry import get_work_order_type
 
 
 def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
@@ -568,6 +569,9 @@ def get_project_state(
                 precondition_skill = wo_row["precondition_skill"]
                 workflow_template = wo_row["workflow_template"]
                 task_generator = wo_row["task_generator"] or "ds-core:plan"
+                # A declared type with no seeded row (a pack's) has no label column.
+                declared_type = get_work_order_type(wo_type)
+                type_label = wo_row["label"] or (declared_type.label if declared_type else None)
 
                 gate_satisfied = True
                 if pre_gate:
@@ -628,7 +632,7 @@ def get_project_state(
                     "milestone_description": wo_row["milestone_description"],
                     "status": wo_row["status"],
                     "type": wo_type,
-                    "type_label": wo_row["label"],
+                    "type_label": type_label,
                     "workflow_template": workflow_template,
                     "pending_tasks": wo_row["pending_tasks"],
                     "total_tasks": wo_row["total_tasks"],

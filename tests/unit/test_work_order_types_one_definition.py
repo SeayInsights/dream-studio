@@ -15,18 +15,18 @@ import json
 import pytest
 
 from core.work_orders import type_registry
-from core.work_orders.type_registry import work_order_type_names
+from core.work_orders.type_registry import builtin_work_order_type_names, work_order_type_names
 
 # The declared set, read once. No test here registers a type; the ones that do (in
 # test_work_order_type_registry.py) restore the registry themselves.
-WORK_ORDER_TYPES = work_order_type_names()
+BUILTIN_TYPES = builtin_work_order_type_names()
 
 
 def test_every_declared_type_reviews_as_a_known_artifact_class():
     """review_rules decides how each type is reviewed from the registry. A declared type
     with no class would be created and then reviewed as nothing; registration refuses an
     unknown class, and this pins that the built-ins all carry one."""
-    for declared in WORK_ORDER_TYPES:
+    for declared in work_order_type_names():
         assert type_registry.artifact_class_for(declared) in type_registry.ARTIFACT_CLASSES
 
 
@@ -35,7 +35,7 @@ def test_the_ui_subsets_agree_on_what_ui_means():
     feature ships a surface); the milestone close does not (it demands a CWV result, which
     a feature with no page cannot produce). The smaller must sit inside the larger, or one
     gate would call UI what the other calls not."""
-    ui = {t for t in WORK_ORDER_TYPES if type_registry.is_ui_bearing(t)}
+    ui = {t for t in work_order_type_names() if type_registry.is_ui_bearing(t)}
     stales = set(type_registry.design_brief_staling_types())
     assert ui and ui <= stales
 
@@ -64,7 +64,7 @@ def test_the_door_refuses_an_undeclared_type(tmp_path, capsys):
     assert exc.value.code == 2
     err = capsys.readouterr().err
     assert "invalid choice: 'widget'" in err
-    for declared in WORK_ORDER_TYPES:
+    for declared in work_order_type_names():
         assert declared in err, f"the refusal does not list {declared}"
 
 
@@ -92,7 +92,7 @@ def test_create_refuses_an_undeclared_type_the_same_way_start_would():
     )
     assert result["ok"] is False
     assert "chore" in result["error"], result["error"]
-    for declared in WORK_ORDER_TYPES:
+    for declared in work_order_type_names():
         assert declared in result["error"], f"the refusal does not name {declared}"
 
 
@@ -118,7 +118,7 @@ def test_create_does_not_refuse_any_declared_type():
     positioning as the priority check it mirrors), so whatever stops the call below --
     "Project not found", or no authority in this test's isolated env -- it is never the
     type check."""
-    for wo_type in WORK_ORDER_TYPES:
+    for wo_type in work_order_type_names():
         error = _create_past_the_type_check(
             project_id="p-1-does-not-exist",
             milestone_id="m-1",
@@ -145,43 +145,237 @@ def test_create_does_not_refuse_an_absent_type():
     assert "is not one the platform declares" not in error
 
 
-#: The one remaining copy, named rather than waved through. The generated AGENTS.md lists
-#: every type with a sentence on when to use it, in a presentation order the registry does
-#: not hold. Making it read the registry means giving the registry descriptions and an
-#: order and regenerating AGENTS.md, which is its own change. The second test below fails
-#: the moment this stops being a copy, so the entry cannot outlive the thing it excuses.
-_KNOWN_COPIES = frozenset({"integrations/compiler/agents_md.py"})
+#: There is no exempt file and no exempt assignment. integrations/compiler/agents_md.py held the
+#: last copy (names, descriptions and presentation order for the generated operator AGENTS.md)
+#: until the registry took the descriptions and the order and the table was generated from it.
+#: A list planted back there, or anywhere else, is a failure of the scan below.
+
+#: How many declared names in ONE literal make it a second list. All ten is a copy; so is
+#: nine with one left out, which is the first thing anyone would do to dodge an exact match.
+_SECOND_LIST_THRESHOLD = 6
+
+#: How many declared names spread over SEVERAL collection literals in one file make it a copy
+#: split to dodge the per-literal threshold (two lists of five).
+_PER_FILE_THRESHOLD = 8
+
+_SPLIT_METHODS = frozenset({"split", "rsplit", "splitlines"})
 
 
-def _modules_naming_every_declared_type() -> set[str]:
+def _normalise(name: str) -> str:
+    """`UI-Page`, `UI_PAGE` and `ui_page` are the same name."""
+    return name.strip().lower().replace("-", "_")
+
+
+def second_list_lines(source: str) -> list[int]:
+    """Line numbers of every literal in ``source`` that spells out most of the built-in types.
+
+    Parsed, not grepped. A text match on `"name"` missed single-quoted lists, a list built as
+    `"a b c".split()`, and anything in a file exempted wholesale. What counts, when it holds
+    ``_SECOND_LIST_THRESHOLD`` or more of the built-in names whatever the quoting or case:
+
+    - a literal collection (list, tuple, set, dict keys, a tuple of pairs);
+    - two collections added together (``[...] + [...]``), which splits a copy across operands;
+    - a ``"..."`` literal ``.split()`` on whitespace, ``,``, ``/``, ``:``, ``|`` or ``;``;
+    - an ``Enum``-shaped class body (member names and values);
+    - a string that quotes the names, such as a SQL ``IN ('a', 'b', ...)`` list.
+
+    And, across a whole file, ``_PER_FILE_THRESHOLD`` or more names over several collections
+    (two lists of five). The BUILT-INS, not the live registry: a pack-declared type is not a
+    copy of them.
+
+    NOT CAUGHT, and said so rather than implied: ``.split()`` on a variable or on text read from
+    a file, a type spelled one assignment per name, and a list built by code (a comprehension
+    over something else). None of those can be found without running the code; the loader's
+    other guards (the reserved set, the explicit flags, the operator's allowance) do not depend
+    on this scan.
+    """
+    import ast
+    import re
+
+    declared = set(BUILTIN_TYPES)
+    tree = ast.parse(source)
+    hits: list[int] = []
+    in_collections: set[str] = set()
+
+    def constants(node: ast.AST) -> set[str]:
+        return {
+            _normalise(sub.value)
+            for sub in ast.walk(node)
+            if isinstance(sub, ast.Constant) and isinstance(sub.value, str)
+        }
+
+    for node in ast.walk(tree):
+        spelled: set[str] = set()
+        if isinstance(node, (ast.List, ast.Tuple, ast.Set, ast.Dict)):
+            spelled = constants(node)
+            in_collections |= spelled & declared
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            spelled = constants(node)
+        elif isinstance(node, ast.ClassDef):
+            spelled = constants(node) | {
+                _normalise(target.id)
+                for stmt in node.body
+                if isinstance(stmt, ast.Assign)
+                for target in stmt.targets
+                if isinstance(target, ast.Name)
+            }
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in _SPLIT_METHODS
+            and isinstance(node.func.value, ast.Constant)
+            and isinstance(node.func.value.value, str)
+        ):
+            spelled = {_normalise(p) for p in re.split(r"[\s,|;/:]+", node.func.value.value)}
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            spelled = {_normalise(t) for t in re.findall(r"""['"]([A-Za-z_-]+)['"]""", node.value)}
+        if len(spelled & declared) >= _SECOND_LIST_THRESHOLD:
+            hits.append(node.lineno)
+    if not hits and len(in_collections) >= _PER_FILE_THRESHOLD:
+        hits.append(1)
+    return hits
+
+
+def _modules_naming_most_declared_types() -> dict[str, list[int]]:
     from pathlib import Path
 
     repo = Path(__file__).resolve().parents[2]
-    full = set(WORK_ORDER_TYPES)
-    found = set()
+    found: dict[str, list[int]] = {}
     for root in ("core", "interfaces", "integrations"):
         for py in (repo / root).rglob("*.py"):
             if py.name == "type_registry.py" and py.parent.name == "work_orders":
                 continue
-            text = py.read_text(encoding="utf-8", errors="replace")
-            # Only a literal list of ALL ten counts. type_registry.py, skipped above, is
-            # the one definition and the only module that may name each one.
-            if all(f'"{t}"' in text for t in full):
-                found.add(py.relative_to(repo).as_posix())
+            rel = py.relative_to(repo).as_posix()
+            source = py.read_text(encoding="utf-8", errors="replace")
+            try:
+                lines = second_list_lines(source)
+            except SyntaxError:
+                continue
+            if lines:
+                found[rel] = lines
     return found
 
 
 def test_no_module_carries_a_second_full_list():
-    """A second copy of all ten anywhere in core/, interfaces/ or integrations/ is the
-    thing this file exists to end. Only the registry may name them; the one known
-    exception is listed above and checked below."""
-    offenders = _modules_naming_every_declared_type() - _KNOWN_COPIES
-    assert offenders == set(), f"a second full copy of the type list: {sorted(offenders)}"
+    """A second copy of the type list anywhere in core/, interfaces/ or integrations/ is the
+    thing this file exists to end. Only the registry may name them, and there is no exemption:
+    the generated AGENTS.md table, the last copy, now reads the registry."""
+    offenders = _modules_naming_most_declared_types()
+    assert offenders == {}, f"a second copy of the type list: {offenders}"
 
 
-def test_a_known_copy_is_still_a_copy():
-    """An allowlist entry for a file that no longer holds the list is a hole left open."""
-    assert _modules_naming_every_declared_type() >= _KNOWN_COPIES
+_SINGLE = ", ".join(repr(t) for t in BUILTIN_TYPES)
+_DOUBLE = ", ".join(f'"{t}"' for t in BUILTIN_TYPES)
+
+
+@pytest.mark.parametrize(
+    "planted",
+    [
+        pytest.param(f"X = [{_DOUBLE}]", id="double-quoted-list"),
+        pytest.param(f"X = [{_SINGLE}]", id="single-quoted-list"),
+        pytest.param(f"X = ({_SINGLE},)", id="tuple"),
+        pytest.param(f"X = {{{_SINGLE}}}", id="set"),
+        pytest.param("X = {" + ", ".join(f"{t!r}: 1" for t in BUILTIN_TYPES) + "}", id="dict"),
+        pytest.param(f"X = {' '.join(BUILTIN_TYPES)!r}.split()", id="split-string"),
+        pytest.param(f"X = {','.join(BUILTIN_TYPES)!r}.split(',')", id="comma-split"),
+        pytest.param("X = [" + ", ".join(repr(t) for t in BUILTIN_TYPES[:-1]) + "]", id="nine"),
+        pytest.param(
+            "X = [" + ", ".join(repr((t, "when to use it")) for t in BUILTIN_TYPES) + "]",
+            id="pairs-with-descriptions",
+        ),
+        pytest.param(
+            "def f():\n    return (\n        "
+            + ",\n        ".join(map(repr, BUILTIN_TYPES))
+            + ",\n    )\n",
+            id="inside-a-function-across-lines",
+        ),
+        pytest.param(
+            f"A = {list(BUILTIN_TYPES[:5])!r}\nB = {list(BUILTIN_TYPES[5:])!r}\n",
+            id="two-lists-of-five",
+        ),
+        pytest.param(
+            f"X = {list(BUILTIN_TYPES[:3])!r} + {list(BUILTIN_TYPES[3:])!r}",
+            id="list-plus-list",
+        ),
+        pytest.param(
+            f"X = {'/'.join(BUILTIN_TYPES)!r}.split('/')",
+            id="slash-delimited-split",
+        ),
+        pytest.param(
+            f"X = {':'.join(BUILTIN_TYPES)!r}.split(':')",
+            id="colon-delimited-split",
+        ),
+        pytest.param(
+            f"X = {'|'.join(BUILTIN_TYPES)!r}.split('|')",
+            id="pipe-delimited-split",
+        ),
+        pytest.param(
+            "from enum import Enum\nclass T(Enum):\n"
+            + "".join(f"    {t.upper()} = {t!r}\n" for t in BUILTIN_TYPES),
+            id="enum-members",
+        ),
+        pytest.param(
+            "X = [" + ", ".join(repr(t.upper().replace("_", "-")) for t in BUILTIN_TYPES) + "]",
+            id="uppercase-hyphenated",
+        ),
+        pytest.param(
+            'Q = "SELECT 1 FROM t WHERE work_order_type IN ('
+            + ", ".join(f"'{t}'" for t in BUILTIN_TYPES)
+            + ')"',
+            id="sql-in-list",
+        ),
+    ],
+)
+def test_the_scan_sees_a_second_list_however_it_is_spelled(planted):
+    assert second_list_lines(planted), planted
+
+
+@pytest.mark.parametrize(
+    "known_limit",
+    [
+        pytest.param(
+            "import os\nX = os.environ['TYPES'].split()\n", id="split-on-a-variable-or-a-file"
+        ),
+        pytest.param(
+            "\n".join(f"N{i} = {t!r}" for i, t in enumerate(BUILTIN_TYPES)),
+            id="one-assignment-per-name",
+        ),
+        pytest.param(
+            "X = [n for n in other_registry()]",
+            id="built-by-code",
+        ),
+    ],
+)
+def test_the_scan_does_not_claim_to_catch_what_needs_the_code_to_run(known_limit):
+    """Documented limits, pinned so they are a decision and not a surprise: none of these can be
+    found without executing the code, and the loader's other guards do not depend on the scan."""
+    assert second_list_lines(known_limit) == []
+
+
+@pytest.mark.parametrize(
+    "innocent",
+    [
+        "X = ['ui_page', 'ui_component', 'api_endpoint']",
+        "X = 'ui_page ui_component api_endpoint authentication saas_feature'",
+        '"""ui_page ui_component api_endpoint authentication saas_feature data_pipeline"""',
+        "X = {'a': 1}",
+    ],
+)
+def test_the_scan_leaves_a_few_names_and_prose_alone(innocent):
+    assert second_list_lines(innocent) == []
+
+
+def test_a_list_planted_in_the_generator_is_caught():
+    """integrations/compiler/agents_md.py used to be exempt wholesale, so a second list planted
+    anywhere in it passed. It is scanned like every other file: clean as it stands, and the
+    same file with a copy added beside the table generator fails."""
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    source = (repo / "integrations/compiler/agents_md.py").read_text(encoding="utf-8")
+    assert second_list_lines(source) == []
+    assert second_list_lines(source + f"\n_SNEAKY = [{_SINGLE}]\n")
+    assert second_list_lines(source + "\n_SNEAKY = " + repr(" ".join(BUILTIN_TYPES)) + ".split()\n")
 
 
 def test_the_declared_types_are_what_the_help_text_promises():
@@ -196,8 +390,8 @@ def test_the_declared_types_are_what_the_help_text_promises():
     wo_sub = next(a for a in wo._actions if getattr(a, "choices", None) and "create" in a.choices)
     create = wo_sub.choices["create"]
     type_action = next(a for a in create._actions if a.dest == "work_order_type")
-    assert tuple(type_action.choices) == WORK_ORDER_TYPES
-    assert type_action.default in WORK_ORDER_TYPES
+    assert tuple(type_action.choices) == work_order_type_names()
+    assert type_action.default in work_order_type_names()
 
 
 def test_the_authoring_skill_lists_exactly_the_declared_types():
@@ -222,7 +416,7 @@ def test_the_authoring_skill_lists_exactly_the_declared_types():
     if "\n## " in block:
         block = block[: block.index("\n## ")]
     listed = set(re.findall(r"^\| `([a-z_]+)` \|", block, re.M))
-    assert listed == set(WORK_ORDER_TYPES)
+    assert listed == set(BUILTIN_TYPES)
 
 
 def test_the_baseline_migration_seeds_exactly_the_declared_types():
@@ -249,8 +443,8 @@ def test_the_baseline_migration_seeds_exactly_the_declared_types():
     end = sql.index(";", start)
     block = sql[start:end]
     seeded = set(re.findall(r"^\s*\('([a-z_]+)',", block, re.M))
-    assert seeded == set(WORK_ORDER_TYPES), (
+    assert seeded == set(BUILTIN_TYPES), (
         "the tuple and the seeded type rows disagree; a type with no row cannot be started, "
-        f"a row with no type is unreachable. only-seeded={sorted(seeded - set(WORK_ORDER_TYPES))} "
-        f"only-declared={sorted(set(WORK_ORDER_TYPES) - seeded)}"
+        f"a row with no type is unreachable. only-seeded={sorted(seeded - set(BUILTIN_TYPES))} "
+        f"only-declared={sorted(set(BUILTIN_TYPES) - seeded)}"
     )

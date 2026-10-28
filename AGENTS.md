@@ -49,9 +49,9 @@ They are ordinary Python and need no Dream Studio install.
 - Read the git history first. Something that looks missing is often a deliberate
   deletion: `git log --diff-filter=D -- <path>`.
 - Check whether a file is GENERATED before editing it. Several checked-in
-  artifacts are, including this one, `canonical/review_lanes.yml`,
-  `canonical/rules.yml` and everything under `dist/plugin/`. Edit the generator —
-  an edit to the artifact is discarded by the next render.
+  artifacts are, including this one, `canonical/review_lanes.yml` and everything
+  under `dist/plugin/`. Edit the generator — an edit to the artifact is discarded by
+  the next render. `canonical/rules.yml` is not one: it is maintained by hand.
 - After the change, validate imports, public API and route contracts, read-model
   shapes, and anything reading a SQLite boundary that moved.
 

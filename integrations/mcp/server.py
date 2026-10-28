@@ -13,13 +13,22 @@ is the thin Streamable-HTTP transport wrapper around this.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator, validators
 
+from core.work_orders.type_registry import manifest_changed_since_load
+
 from .auth import Identity
 from .tools import TOOLS, TOOLS_BY_NAME, CallContext, Tool
+
+_LOG = logging.getLogger("dream_studio.mcp.server")
+
+#: Messages already logged, so a changed manifest is reported once per change, not per request.
+_WARNED_MANIFEST_CHANGES: set[str] = set()
+_MAX_REMEMBERED_WARNINGS = 64
 
 PROTOCOL_VERSION = "2026-03-26"
 SERVER_NAME = "dream-studio"
@@ -65,7 +74,7 @@ def _handle_tools_list(request_id: Any, _params: dict[str, Any]) -> dict[str, An
                 {
                     "name": t.name,
                     "description": t.description,
-                    "inputSchema": t.input_schema,
+                    "inputSchema": t.schema(),
                 }
                 for t in TOOLS
             ]
@@ -92,6 +101,16 @@ _VALIDATORS: dict[str, Any] = {}
 
 
 def _validator_for(tool: Tool) -> Any:
+    """The strict validator for a tool's schema.
+
+    A tool whose schema has a LIVE enum (`Tool.live_enums`: today the work-order types, which a
+    pack's manifest extends) gets a validator built from `tool.schema()` at every call. Cached by
+    tool name it would pin the first enum for the life of the process, so a type declared later
+    would be refused for good, and a type no longer declared would stay accepted. A static tool's
+    schema never changes, so its validator is built once.
+    """
+    if tool.live_enums:
+        return _StrictValidator(tool.schema())
     validator = _VALIDATORS.get(tool.name)
     if validator is None:
         validator = _VALIDATORS[tool.name] = _StrictValidator(tool.input_schema)
@@ -179,6 +198,21 @@ _METHODS = {
 }
 
 
+def _warn_if_manifest_changed() -> None:
+    """One log line, once per change, if the pack manifest was edited after this process loaded it.
+
+    The manifest is read once per process, so a long-lived server keeps serving the work-order
+    types it loaded until it is restarted. The comparison is a stat, not a read.
+    """
+    message = manifest_changed_since_load()
+    if message and message not in _WARNED_MANIFEST_CHANGES:
+        # Bounded: a long-lived server edited many times must not grow this without limit.
+        if len(_WARNED_MANIFEST_CHANGES) >= _MAX_REMEMBERED_WARNINGS:
+            _WARNED_MANIFEST_CHANGES.clear()
+        _WARNED_MANIFEST_CHANGES.add(message)
+        _LOG.warning(message)
+
+
 def handle_message(
     message: dict[str, Any],
     *,
@@ -208,6 +242,8 @@ def handle_message(
     if is_notification:
         return None  # any other notification: no response is ever sent
 
+    if method in ("tools/call", "tools/list"):
+        _warn_if_manifest_changed()
     if method == "tools/call":
         return _handle_tools_call(
             request_id, params, dream_studio_home=dream_studio_home, identity=identity
