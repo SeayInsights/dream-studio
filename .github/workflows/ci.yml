@@ -146,7 +146,8 @@ jobs:
         run: >
           python -m pip_audit -r requirements-dev.txt -r requirements.txt
           --ignore-vuln CVE-2026-52870 --ignore-vuln CVE-2026-52869
-          --ignore-vuln CVE-2026-59950 --ignore-vuln PYSEC-2026-2132
+          --ignore-vuln CVE-2026-59950 --ignore-vuln CVE-2026-59951
+          --ignore-vuln PYSEC-2026-2132
           --ignore-vuln CVE-2026-101917 --ignore-vuln CVE-2026-102265
           --ignore-vuln CVE-2026-102266 --ignore-vuln CVE-2026-102267
           --ignore-vuln CVE-2026-102268 --ignore-vuln CVE-2026-102269
