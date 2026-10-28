@@ -1,0 +1,101 @@
+---
+env:
+  contexts:
+    - name: "{{ target.name }}"
+      urls:
+        - "{{ target.url }}"
+{% if target.excluded_paths is defined and target.excluded_paths %}
+      excludePaths:
+{% for path in target.excluded_paths %}
+        - "{{ target.url }}{{ path }}"
+{% endfor %}
+{% endif %}
+{% if target.auth is defined and target.auth.type is defined %}
+{% if target.auth.type == 'oauth2' %}
+      authentication:
+        method: "script"
+        parameters:
+          script: "BearerTokenAuth"
+          token: "${env:{{ target.auth.token_env }}}"
+{% elif target.auth.type == 'api_key' %}
+      authentication:
+        method: "http"
+        parameters:
+          header: "{{ target.auth.header | default('Authorization') }}: ${env:{{ target.auth.token_env }}}"
+{% elif target.auth.type == 'basic' %}
+      authentication:
+        method: "http"
+        parameters:
+          header: "Authorization: Basic ${env:{{ target.auth.token_env }}}"
+{% endif %}
+{% endif %}
+
+  parameters:
+    failOnError: true
+    progressToStdout: true
+
+jobs:
+  # Technology detection
+  - type: spider
+    parameters:
+      context: "{{ target.name }}"
+      url: "{{ target.url }}"
+      maxDuration: 5
+      maxDepth: 5
+      maxChildren: 10
+{% if target.scan_profile == 'api-only' and target.openapi_spec is defined %}
+  - type: openapi
+    parameters:
+      apiUrl: "{{ target.url }}"
+      apiFile: "{{ target.openapi_spec }}"
+      context: "{{ target.name }}"
+{% endif %}
+
+  # Passive scan — always runs
+  - type: passiveScan-config
+    parameters:
+      maxAlertsPerRule: 10
+      scanOnlyInScope: true
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+
+{% if target.scan_profile in ['full', 'auth-only'] %}
+  # Active scan — only for full and auth-only profiles
+  - type: activeScan
+    parameters:
+      context: "{{ target.name }}"
+      policy: "Default Policy"
+      maxRuleDurationInMins: 5
+      maxScanDurationInMins: 30
+{% if target.scan_profile == 'auth-only' %}
+      # Auth-only: focus on authentication and session management
+      policyDefinition:
+        rules:
+          - id: 10011  # Cookie Without Secure Flag
+            strength: HIGH
+          - id: 10012  # Password Autocomplete
+            strength: HIGH
+          - id: 10054  # Cookie Without SameSite
+            strength: HIGH
+          - id: 40012  # Cross Site Scripting (Reflected)
+            strength: MEDIUM
+          - id: 40014  # Cross Site Scripting (Persistent)
+            strength: MEDIUM
+          - id: 40018  # SQL Injection
+            strength: HIGH
+{% endif %}
+{% endif %}
+
+  # Report generation
+  - type: report
+    parameters:
+      template: "traditional-json"
+      reportDir: "{{ output_dir | default('.') }}"
+      reportFile: "zap-report.json"
+    risks:
+      - high
+      - medium
+      - low
+      - info

@@ -93,22 +93,36 @@ class Read(NamedTuple):
     this parser reads. `degraded` are reasons the step was read only partly (records
     dropped by a cap, values ignored): they make the step, and so the scan, partial.
     `notes` are limitations that hold without lowering coverage (undecodable bytes
-    replaced, a check name the doc does not list).
+    replaced, a check name the doc does not list). `refusals` say why a file was found and
+    not accepted as the step's result (it is not that step's output, it has the wrong
+    shape): they are never cut by the note cap, because the unread-step limitation points
+    at them. `degrades` are (step, reason) pairs for a file that could not be read but is
+    known to belong to a step (a second semgrep SARIF that is corrupt): they make that step
+    partial without counting the file as a result read for it.
     """
 
     step: str | None
     findings: list
     degraded: list
     notes: list
+    refusals: list | tuple = ()
+    degrades: tuple = ()
 
 
 class ScanRead:
-    """Everything the parser learned about one scan directory, for assess_all()."""
+    """Everything the parser learned about one scan directory, for assess_all().
+
+    `refusals` (a file found and not read: it could not be read, is not the step's output,
+    could not be placed) are kept in full. `notes` are bounded, and `ignored` (a file not
+    named like a result, or left in a subdirectory) is what the bound cuts first.
+    """
 
     def __init__(self) -> None:
         self.steps: set[str] = set()
         self.degraded: dict[str, list[str]] = {}
         self.notes: list[str] = []
+        self.refusals: list[str] = []
+        self.ignored: list[str] = []
 
     def add(self, result: Read) -> None:
         if result.step is not None:
@@ -116,6 +130,9 @@ class ScanRead:
             if result.degraded:
                 self.degraded.setdefault(result.step, []).extend(result.degraded)
         self.notes.extend(result.notes)
+        self.refusals.extend(result.refusals)
+        for step, reason in result.degrades:
+            self.degraded.setdefault(step, []).append(reason)
 
 
 def _real(path: Path) -> Path:
@@ -158,11 +175,14 @@ def find_meta(start: Path, stop: Path, resolve: Resolver = _real) -> Path | None
 # decode_text() recognises what a BOM or an unmistakable NUL pattern says, decodes it, and
 # says so; content that is not text in a supported encoding raises instead of being guessed.
 
-_BAD_BYTES: list[int] = []
+#: Bytes the decoder could not decode in the current decode_text() call: a count, not a list.
+#: (A list with one entry per decoder error cost 20 million entries for a 20 MB file of
+#: nothing but bad bytes.) A one-cell list because the error handler is a plain function.
+_BAD_BYTES = [0]
 
 
 def _count_bad(exc: UnicodeError) -> tuple[str, int]:
-    _BAD_BYTES.append(exc.end - exc.start)
+    _BAD_BYTES[0] += exc.end - exc.start
     return "�", exc.end
 
 
@@ -214,9 +234,9 @@ def decode_text(data: bytes, name: str) -> Decoded:
         guessed = _guess_utf16(data)
         if guessed:
             encoding, label = guessed
-    del _BAD_BYTES[:]
+    _BAD_BYTES[0] = 0
     text = data.decode(encoding, errors="scan_coverage_count")
-    bad = sum(_BAD_BYTES)
+    bad = _BAD_BYTES[0]
 
     if "\x00" in text:
         raise ValueError(
@@ -268,6 +288,7 @@ def assess(
     were ignored). A step recorded ran and read but degraded is partial.
     """
     degraded = degraded or {}
+    run_partial, run_unknown, run_limitations = _assess_run(meta)
     steps = meta.get("steps") if meta is not None else None
     if not isinstance(steps, list):
         why = (
@@ -276,11 +297,12 @@ def assess(
             else "scan-meta.json has no run record (`steps`)"
         )
         return {
-            "coverage": UNKNOWN,
+            # A CI run that did not succeed is a known fact, and the more specific one.
+            "coverage": PARTIAL if run_partial else UNKNOWN,
             "skipped_steps": [],
             "unread_steps": [],
             "degraded_steps": [],
-            "limitations": [f"{why}; which steps ran is not known"],
+            "limitations": [f"{why}; which steps ran is not known", *run_limitations],
         }
 
     entries: dict[str, list[dict]] = {}
@@ -329,10 +351,11 @@ def assess(
 
     for name, why in unusable:
         limitations.append(f"{name}: {why}")
+    limitations.extend(run_limitations)
 
-    if skipped or unread or partly:
+    if skipped or unread or partly or run_partial:
         coverage = PARTIAL
-    elif unusable:
+    elif unusable or run_unknown:
         coverage = UNKNOWN
     else:
         coverage = COMPLETE
@@ -343,6 +366,142 @@ def assess(
         "degraded_steps": partly,
         "limitations": limitations,
     }
+
+
+def _word(value: object) -> str:
+    """A status-like value, case- and space-normalised ("" when it is not a string)."""
+    return value.strip().lower() if isinstance(value, str) else ""
+
+
+def is_not_scanned(meta: dict | None) -> bool:
+    """Whether a scan-meta.json is a not-scanned record (`outcome: not_scanned`, in any case)."""
+    return meta is not None and _word(meta.get("outcome")) == "not_scanned"
+
+
+def _type_problems(meta: dict) -> list[str]:
+    """Fields scan_coverage reads for a decision that hold the wrong type.
+
+    scan-meta.json is written by an agent following prose, so any field can hold anything,
+    and `_word()` reads a non-string as "" (absent). A field that is PRESENT with the wrong
+    type is a claim the record makes and the code cannot read: the scan is `unknown`, never
+    `complete`. `null` is no value, the same as absent. The documented types: `source`,
+    `outcome` and `run.status` are text; `planned_steps` is a list of text; `steps` is a
+    list of objects, each with text `step`, `status` and (for a step that ran) `tool`.
+    `run` and `run.conclusion` are read by the code that needs them.
+    """
+    problems: list[str] = []
+
+    def not_text(name: str, value: object) -> None:
+        if value is not None and not isinstance(value, str):
+            problems.append(f"`{name}` is {type(value).__name__}, not text")
+
+    not_text("source", meta.get("source"))
+    not_text("outcome", meta.get("outcome"))
+    run = meta.get("run")
+    if isinstance(run, dict):
+        not_text("run.status", run.get("status"))
+    planned = meta.get("planned_steps")
+    if planned is not None and not (
+        isinstance(planned, list) and all(isinstance(item, str) for item in planned)
+    ):
+        problems.append("`planned_steps` is not a list of text")
+    steps = meta.get("steps")
+    if isinstance(steps, list):
+        for index, entry in enumerate(steps):
+            if not isinstance(entry, dict):
+                problems.append(f"`steps[{index}]` is {type(entry).__name__}, not an object")
+    return problems
+
+
+def _assess_run(meta: dict | None) -> tuple[bool, bool, list[str]]:
+    """See _assess_whole_run; this adds the type check, which can only make a scan unknown."""
+    if meta is None:
+        return False, False, []
+    partial, unknown, limitations = _assess_whole_run(meta)
+    problems = _type_problems(meta)
+    if problems:
+        unknown = True
+        limitations = [
+            "scan-meta.json holds a field of the wrong type: " + "; ".join(problems),
+            *limitations,
+        ]
+    return partial, unknown, limitations
+
+
+def _assess_whole_run(meta: dict | None) -> tuple[bool, bool, list[str]]:
+    """What scan-meta.json says about the run as a whole: (partial, unknown, limitations).
+
+    Whole-run facts, beyond the per-step record. Every word is read case- and
+    space-normalised (`Not_Scanned`, ` Success `), so a spelling cannot turn a bad record
+    into a clean one.
+
+    * `outcome: not_scanned` (a target the mode did not scan at all) is partial and names
+      the reason. A record that says so while one of its steps is `ran` contradicts itself,
+      and a contradictory record is `unknown`, never complete.
+    * A scan whose `source` is `github-actions` has a workflow run by definition: with no
+      `run` recorded it is `unknown`. Modes that run locally (binary-scan, dast) record none
+      and are judged by their steps alone.
+    * `run`: {"run_id": "123", "status": "completed", "conclusion": "failure"}. A run that
+      did not conclude `success` (failure, cancelled, timed_out, neutral, skipped, ...) may
+      have produced only some of its results, whatever the steps say: partial, with the
+      conclusion named. A conclusion that cannot be read, or a conclusion recorded for a
+      run whose status is not `completed`, leaves the scan `unknown`.
+    """
+    if meta is None:
+        return False, False, []
+    if _word(meta.get("outcome")) == "not_scanned":
+        # `dast run` records a target it did not scan (unreachable URL, ZAP missing) as a
+        # scan directory holding only this scan-meta.json. Whatever its steps say, nothing
+        # was scanned, and the reason is the one thing a reader needs.
+        steps = meta.get("steps")
+        ran = sorted(
+            {
+                _text(e.get("step"))
+                for e in (steps if isinstance(steps, list) else [])
+                if isinstance(e, dict) and _word(e.get("status")) == STATUS_RAN
+            }
+        )
+        if ran:
+            return (
+                False,
+                True,
+                [
+                    "the record contradicts itself: outcome not_scanned, but step(s) "
+                    f"{', '.join(ran)} are recorded as ran"
+                ],
+            )
+        reason = meta.get("reason")
+        why = f": {_text(reason)}" if isinstance(reason, str) and reason.strip() else ""
+        return True, False, [f"the target was not scanned{why}"]
+    if "run" not in meta:
+        if _word(meta.get("source")) == "github-actions":
+            return (
+                False,
+                True,
+                ["the workflow run is not recorded (`run`) for a github-actions scan"],
+            )
+        return False, False, []
+    run = meta["run"]
+    conclusion = _word(run.get("conclusion")) if isinstance(run, dict) else ""
+    if not conclusion:
+        return False, True, ["the workflow run's conclusion is not recorded (`run.conclusion`)"]
+    limitations: list[str] = []
+    unknown = False
+    status = _word(run.get("status"))
+    if status and status != "completed":
+        unknown = True
+        limitations.append(
+            f"the workflow run's status is {_text(status)}, not completed, yet a conclusion "
+            f"({_text(conclusion)}) is recorded: the record contradicts itself"
+        )
+    partial = conclusion != "success"
+    if partial:
+        run_id = run.get("run_id")
+        which = f" (run {_text(run_id)})" if isinstance(run_id, (str, int)) and run_id else ""
+        limitations.append(
+            f"the workflow run{which} concluded {_text(conclusion)}: findings may be partial"
+        )
+    return partial, unknown, limitations
 
 
 def scan_key(
@@ -383,9 +542,39 @@ def scan_dirs(
 _NOTE_LIMIT = 20
 
 
+#: The steps a mode plans: one tuple for every scan, or a function of the scan's own
+#: scan-meta.json for a mode whose scanners differ per scan (`scan ingest`: the workflow
+#: runs semgrep plus whatever `scan.extra_scanners` the client profile lists).
+Planned = tuple[str, ...] | Callable[[dict | None], tuple[str, ...]]
+
+
+def _bounded_notes(state: ScanRead) -> list[str]:
+    """What a scan's files had to say, bounded, in the order that matters.
+
+    Refusals (a file found and not read, and why) come first and are never cut: the unread
+    limitation points at them ("named in another limitation"), and there are as many as
+    there are result files, which is few. Then the other notes, then the "ignored" notes,
+    sharing the `_NOTE_LIMIT` that bounds a pile of stray files. When the bound cuts, the
+    ignored notes go first and the cut is counted, so 25 misnamed files never hide the
+    reason a result could not be read.
+    """
+    refusals = [short(r) for r in state.refusals]
+    others = [short(n) for n in state.notes]
+    ignored = [short(n) for n in state.ignored]
+    kept = others[:_NOTE_LIMIT]
+    kept += ignored[: max(0, _NOTE_LIMIT - len(kept))]
+    cut = len(others) + len(ignored) - len(kept)
+    return refusals + kept + ([f"... and {cut} more notes"] if cut else [])
+
+
+def planned_for(planned: Planned, meta: dict | None) -> tuple[str, ...]:
+    """The planned steps of one scan directory."""
+    return planned(meta) if callable(planned) else planned
+
+
 def assess_all(
     dirs: dict[str, Path | None],
-    planned: tuple[str, ...],
+    planned: Planned,
     state_by_key: dict[str, ScanRead],
 ) -> dict[str, dict]:
     """Assess every scan directory: key -> {"scan_dir", "coverage", ..., "steps_read"}.
@@ -396,18 +585,24 @@ def assess_all(
     out: dict[str, dict] = {}
     for key, meta_path in dirs.items():
         state = state_by_key.get(key) or ScanRead()
-        read = state.steps & set(planned)
-        report = assess(load_meta(meta_path), planned, read, state.degraded)
-        notes = [short(n) for n in state.notes]
-        if len(notes) > _NOTE_LIMIT:
-            notes = notes[:_NOTE_LIMIT] + [f"... and {len(notes) - _NOTE_LIMIT} more notes"]
-        report["limitations"] = report["limitations"] + notes
-        out[key] = {"scan_dir": key, **report, "steps_read": [s for s in planned if s in read]}
+        meta = load_meta(meta_path)
+        planned_steps = planned_for(planned, meta)
+        read = state.steps & set(planned_steps)
+        report = assess(meta, planned_steps, read, state.degraded)
+        report["limitations"] = report["limitations"] + _bounded_notes(state)
+        out[key] = {
+            "scan_dir": key,
+            **report,
+            "steps_read": [s for s in planned_steps if s in read],
+        }
     return out
 
 
 def split_by_scan_dir(
-    scans_dir: Path, candidates: Iterable[Path], resolve: Resolver = _real
+    scans_dir: Path,
+    candidates: Iterable[Path],
+    resolve: Resolver = _real,
+    unplaceable: dict[Path, str] | None = None,
 ) -> tuple[list[Path], dict[str, list[Path]]]:
     """Keep only result files at the top level of their scan directory.
 
@@ -420,7 +615,10 @@ def split_by_scan_dir(
     Both sides of the comparison are resolved the same way (`resolve`), so a relative
     `scans_dir`, `.`, `..` segments, a trailing separator, a link or a differently-cased
     path decide exactly as the absolute path does. This never raises: a candidate it
-    cannot place is ignored and named, not a crash.
+    cannot place is not read and is not a crash either. It is NOT filed under `ignored`,
+    which says "this file is not named or placed like a result": an internal failure there
+    would read as a misnamed file. It goes into `unplaceable` (path -> the error), which the
+    caller reports as a failure.
     """
     kept: list[Path] = []
     ignored: dict[str, list[Path]] = {}
@@ -428,7 +626,10 @@ def split_by_scan_dir(
         try:
             key, _ = scan_key(path, scans_dir, resolve)
             top_level = _norm(key) == _norm(resolve(path.parent))
-        except Exception:  # noqa: BLE001 - discovery must degrade, never crash
+        except Exception as exc:  # noqa: BLE001 - discovery must degrade, never crash
+            if unplaceable is not None:
+                unplaceable[path] = f"{type(exc).__name__}: {short(exc)}"
+                continue
             key, top_level = str(resolve(scans_dir)), False
         if top_level:
             kept.append(path)
@@ -450,7 +651,7 @@ def note_ignored(state_by_key: dict[str, ScanRead], ignored: dict[str, list[Path
     for key, paths in ignored.items():
         state = state_by_key.setdefault(key, ScanRead())
         for path in paths:
-            state.notes.append(
+            state.ignored.append(
                 f"{_display(path, key)} was ignored: results are read only from {key} itself"
             )
 
@@ -492,7 +693,7 @@ def note_misnamed(
                 or not any(h in low for h in hints)
             ):
                 continue
-            state_by_key.setdefault(key, ScanRead()).notes.append(
+            state_by_key.setdefault(key, ScanRead()).ignored.append(
                 f"{entry.name} was ignored: results are read only from {listing}"
             )
 
@@ -501,7 +702,7 @@ def collect(
     tag: str,
     scans_dir: Path,
     candidates: list[Path],
-    planned: tuple[str, ...],
+    planned: Planned,
     read_file: Callable[[Path, str], Read],
     exact: Iterable[str],
     hints: tuple[str, ...],
@@ -513,11 +714,21 @@ def collect(
     parser. Both parse_*.py scripts run through here, so discovery, notes and coverage
     are one implementation.
     """
-    scan_files, ignored = split_by_scan_dir(scans_dir, candidates)
+    unplaceable: dict[Path, str] = {}
+    scan_files, ignored = split_by_scan_dir(scans_dir, candidates, unplaceable=unplaceable)
     dirs = scan_dirs(scans_dir, scan_files)
     state_by_key: dict[str, ScanRead] = {}
     note_ignored(state_by_key, ignored)
     note_misnamed(state_by_key, dirs, exact, hints)
+    for path, why in unplaceable.items():
+        # An internal failure, not a misnamed file: name the file and the error, in the scan
+        # directory the caller asked about (the one place a file with no scan has).
+        key = str(_real(scans_dir))
+        dirs.setdefault(key, None)
+        print(f"  [error] Could not place {path.name}: {why}", file=sys.stderr)
+        state_by_key.setdefault(key, ScanRead()).refusals.append(
+            f"{path.name} could not be placed in a scan directory, so it was not read: {why}"
+        )
 
     findings_by_key: dict[str, list[dict]] = {}
     for sf in scan_files:
@@ -529,7 +740,7 @@ def collect(
             result = read_file(sf, target_name)
         except Exception as exc:  # noqa: BLE001 - an unreadable file leaves its step unread
             print(f"  [error] Failed to parse {sf.name}: {exc}", file=sys.stderr)
-            state.notes.append(f"{sf.name} could not be read: {short(exc)}")
+            state.refusals.append(f"{sf.name} could not be read: {short(exc)}")
             continue
         state.add(result)
         findings_by_key.setdefault(key, []).extend(result.findings)
@@ -558,6 +769,73 @@ def stamp(findings: list[dict], report: dict) -> None:
     for f in findings:
         f["coverage"] = report["coverage"]
         f["limitations"] = list(report["limitations"])
+
+
+def finding_coverage(finding: dict) -> tuple[str, list[str]]:
+    """What a finding says about its own scan: (coverage, limitations), for a consumer.
+
+    A finding that carries no coverage, a blank one, or a value outside the vocabulary
+    reads `unknown`, never `complete`: a consumer that cannot tell must not say the scan
+    was whole. Limitations are always a list of short strings; a finding with no usable
+    coverage gets one limitation saying so, so an empty list never reads as "nothing
+    was missed" next to `unknown`.
+    """
+    raw = finding.get("coverage")
+    coverage = raw if isinstance(raw, str) and raw in (COMPLETE, PARTIAL, UNKNOWN) else UNKNOWN
+    limits = finding.get("limitations")
+    if isinstance(limits, str):
+        limits = [limits]
+    out = [short(x) for x in limits] if isinstance(limits, list) else []
+    if coverage == UNKNOWN and raw != UNKNOWN and not out:
+        out = ["scan coverage was not recorded for this finding"]
+    return coverage, out
+
+
+#: Weakest last: what one finding says when two scans disagree (see merge_duplicate).
+_WEAKNESS = {COMPLETE: 0, UNKNOWN: 1, PARTIAL: 2}
+
+
+def merge_duplicate(kept: dict, other: dict) -> None:
+    """`kept` absorbs `other`, the same finding (same fingerprint) from another scan.
+
+    A finding merged from scans with different coverage must not keep one scan's claim:
+    it takes the weaker coverage (partial, then unknown, then complete), the union of both
+    limitations, and says that another scan reported it. Two identically stamped findings,
+    or two with no coverage at all, are left exactly as they were.
+    """
+    kept_cov, kept_lim = finding_coverage(kept)
+    other_cov, other_lim = finding_coverage(other)
+    extra = [x for x in other_lim if x not in kept_lim]
+    if kept_cov == other_cov and not extra:
+        return
+    weaker = kept_cov if _WEAKNESS[kept_cov] >= _WEAKNESS[other_cov] else other_cov
+    merged = kept_lim + extra
+    merged.append(
+        f"also reported by another scan with coverage {other_cov}; "
+        f"the weaker coverage ({weaker}) is kept"
+    )
+    kept["coverage"] = weaker
+    kept["limitations"] = merged
+
+
+def deduplicate(findings: list[dict], severity_rank: dict[str, int]) -> list[dict]:
+    """One finding per fingerprint: the highest severity wins, and the winner carries the
+    weaker coverage of the scans that reported it (merge_duplicate). The three parse_*
+    scripts share this; each passes its own severity ranking."""
+    best: dict[str, dict] = {}
+    for f in findings:
+        fp = f["fingerprint"]
+        if fp not in best:
+            best[fp] = f
+            continue
+        current = best[fp]
+        if severity_rank.get(f["severity"], 0) > severity_rank.get(current["severity"], 0):
+            winner, loser = f, current
+        else:
+            winner, loser = current, f
+        merge_duplicate(winner, loser)
+        best[fp] = winner
+    return list(best.values())
 
 
 def unknown_report(scan_dir: str | None, limitation: str) -> dict:

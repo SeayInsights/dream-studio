@@ -26,20 +26,13 @@ import json
 import sys
 from pathlib import Path
 
-# This script runs in place from the repo (`py -3.12 templates/security/etl/...py`,
-# see templates/security/README.md), which puts its own directory on sys.path, not
-# the repo root -- the resolver import below needs a manual add.
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
 # scan_coverage.py is a sibling of this script (shared with the other parse_* scripts).
 _ETL_DIR = Path(__file__).resolve().parent
 if str(_ETL_DIR) not in sys.path:
     sys.path.insert(0, str(_ETL_DIR))
 
 import scan_coverage  # noqa: E402
-from core.config.paths import home_dir  # noqa: E402
+from etl_home import home_dir  # noqa: E402
 
 #: Every scanner `dast run` executes when all its tooling is present (examples.md R3-R4).
 #: Coverage is complete only when each one is recorded as run.
@@ -297,12 +290,37 @@ def nuclei_problems(text: str) -> list[str]:
     return problems
 
 
-def parse_nuclei_jsonl(path: Path, target_name: str, text: str | None = None) -> list[dict]:
+def _str_list(value: object) -> list[str]:
+    """`value` as a list of strings: a list keeps its string items, a string is split on
+    commas, anything else (null, a number, an object) is empty. Nuclei writes `tags` as a
+    list or a comma-separated string, and `null` where a template has none."""
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    if isinstance(value, list):
+        return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+    return []
+
+
+#: How many failing lines a limitation names; the rest are counted.
+_NUCLEI_NAMED_FAILURES = 5
+
+
+def parse_nuclei_jsonl(
+    path: Path,
+    target_name: str,
+    text: str | None = None,
+    degraded: list[str] | None = None,
+) -> list[dict]:
     """Findings from the lines that are Nuclei results; other lines are skipped with a warning.
 
     `text` is the decoded file (see scan_coverage.decode_text); read from `path` when omitted.
+    One odd line must not drop the file: a null `classification`, `tags` or `cwe-id` is read
+    as empty, and a line that still cannot be turned into a finding is skipped and named in
+    `degraded` (so the step reads partial) while every other line keeps its finding.
     """
     findings = []
+    failed: list[int] = []
+    first_error = ""
     if text is None:
         text = path.read_text(encoding="utf-8")
     for line_num, line in enumerate(text.splitlines(), 1):
@@ -311,7 +329,7 @@ def parse_nuclei_jsonl(path: Path, target_name: str, text: str | None = None) ->
             continue
         try:
             obj = json.loads(line)
-        except json.JSONDecodeError:
+        except (ValueError, RecursionError):
             print(f"  [warn] Skipping malformed line {line_num} in {path.name}", file=sys.stderr)
             continue
         if _nuclei_shape_problem(obj):
@@ -320,61 +338,74 @@ def parse_nuclei_jsonl(path: Path, target_name: str, text: str | None = None) ->
                 file=sys.stderr,
             )
             continue
-
-        template_id = obj.get("template-id", obj.get("templateID", "unknown"))
-        info = obj.get("info", {})
-        raw_sev = info.get("severity", "low")
-        severity = NUCLEI_SEVERITY_MAP.get(raw_sev, "low")
-        name = info.get("name", template_id)
-        desc = info.get("description", "")
-        classification = info.get("classification", {})
-        cwe_list = classification.get("cwe-id", [])
-        cwe = cwe_list[0] if cwe_list else ""
-        if cwe and not cwe.startswith("CWE-"):
-            cwe = f"CWE-{cwe}"
-
-        matched_at = obj.get("matched-at", obj.get("matched_at", ""))
-        url = obj.get("host", matched_at)
-        method = obj.get("request", "").split(" ")[0] if obj.get("request") else ""
-        curl_cmd = obj.get("curl-command", "")
-
-        rule_id = f"DAST-nuc-{template_id}"
-        fp = _fingerprint(target_name, url, rule_id)
-
-        tags = info.get("tags", [])
-        owasp = ""
-        for tag in (tags if isinstance(tags, list) else tags.split(",")):
-            tag = tag.strip()
-            if tag.startswith("owasp-"):
-                owasp = tag.replace("owasp-", "").upper()
-                break
-
-        findings.append(
-            {
-                "id": fp,
-                "repo": target_name,
-                "file": url,
-                "line": None,
-                "rule_id": rule_id,
-                "severity": severity,
-                "message": f"{name}: {desc[:200]}" if desc else name,
-                "cwe": cwe,
-                "owasp": owasp,
-                "scanner": "nuclei",
-                "raw_severity": raw_sev,
-                "fingerprint": fp,
-                "target_type": "webapp",
-                "target_name": target_name,
-                "url": url,
-                "http_method": method,
-                "binary_hash": "",
-                "parameter": "",
-                "response_code": "",
-                "evidence": obj.get("response", "")[:500] if obj.get("response") else "",
-                "attack_vector": curl_cmd[:500] if curl_cmd else "",
-            }
+        try:
+            findings.append(_nuclei_finding(obj, target_name))
+        except Exception as exc:  # noqa: BLE001 - one odd line must not drop the file
+            print(f"  [warn] Skipping line {line_num} in {path.name}: {exc}", file=sys.stderr)
+            failed.append(line_num)
+            first_error = first_error or f"{type(exc).__name__}: {scan_coverage.short(exc)[:60]}"
+    if failed and degraded is not None:
+        # one reason, short enough to survive the 200-character bound on a limitation
+        named = ", ".join(str(n) for n in failed[:_NUCLEI_NAMED_FAILURES])
+        more = ", ..." if len(failed) > _NUCLEI_NAMED_FAILURES else ""
+        degraded.append(
+            f"{len(failed)} line(s) of {path.name} were skipped, no finding "
+            f"(lines {named}{more}; first error {first_error})"
         )
     return findings
+
+
+def _nuclei_finding(obj: dict, target_name: str) -> dict:
+    """One normalized finding from a Nuclei result line (shape already checked)."""
+    template_id = obj.get("template-id", obj.get("templateID", "unknown"))
+    info = obj.get("info", {})
+    raw_sev = info.get("severity", "low")
+    severity = NUCLEI_SEVERITY_MAP.get(raw_sev, "low")
+    name = info.get("name", template_id)
+    desc = info.get("description", "")
+    classification = info.get("classification")
+    cwe_list = _str_list(classification.get("cwe-id") if isinstance(classification, dict) else None)
+    cwe = cwe_list[0] if cwe_list else ""
+    if cwe and not cwe.startswith("CWE-"):
+        cwe = f"CWE-{cwe}"
+
+    matched_at = obj.get("matched-at", obj.get("matched_at", ""))
+    url = obj.get("host", matched_at)
+    method = obj.get("request", "").split(" ")[0] if obj.get("request") else ""
+    curl_cmd = obj.get("curl-command", "")
+
+    rule_id = f"DAST-nuc-{template_id}"
+    fp = _fingerprint(target_name, url, rule_id)
+
+    owasp = ""
+    for tag in _str_list(info.get("tags")):
+        if tag.startswith("owasp-"):
+            owasp = tag.replace("owasp-", "").upper()
+            break
+
+    return {
+        "id": fp,
+        "repo": target_name,
+        "file": url,
+        "line": None,
+        "rule_id": rule_id,
+        "severity": severity,
+        "message": f"{name}: {desc[:200]}" if desc else name,
+        "cwe": cwe,
+        "owasp": owasp,
+        "scanner": "nuclei",
+        "raw_severity": raw_sev,
+        "fingerprint": fp,
+        "target_type": "webapp",
+        "target_name": target_name,
+        "url": url,
+        "http_method": method,
+        "binary_hash": "",
+        "parameter": "",
+        "response_code": "",
+        "evidence": obj.get("response", "")[:500] if obj.get("response") else "",
+        "attack_vector": curl_cmd[:500] if curl_cmd else "",
+    }
 
 
 # ── Auto-detect format ───────────────────────────────────────────────────────
@@ -417,36 +448,30 @@ def read_result_file(path: Path, target_name: str) -> scan_coverage.Read:
     decoded = scan_coverage.decode_text(path.read_bytes(), path.name)
     notes = list(decoded.notes)
     if expected == "nuclei":
-        findings = parse_nuclei_jsonl(path, target_name, decoded.text)
+        degraded = list(decoded.degraded)
+        findings = parse_nuclei_jsonl(path, target_name, decoded.text, degraded)
         problems = nuclei_problems(decoded.text)
         if not problems:
-            return scan_coverage.Read("nuclei", findings, list(decoded.degraded), notes)
+            return scan_coverage.Read("nuclei", findings, degraded, notes)
         more = f" (and {len(problems) - 1} more)" if len(problems) > 1 else ""
-        notes.append(f"{path.name} has lines that are not nuclei results: {problems[0]}{more}")
-        return scan_coverage.Read(None, findings, [], notes)
+        refusal = f"{path.name} has lines that are not nuclei results: {problems[0]}{more}"
+        return scan_coverage.Read(None, findings, [], notes, [refusal])
     raw = json.loads(decoded.text)
     findings = detect_and_parse(raw, path, target_name)
     if isinstance(raw, dict) and "@version" in raw and "site" in raw:
         return scan_coverage.Read("zap", findings, list(decoded.degraded), notes)
-    notes.append(f"{path.name} does not have the ZAP report shape")
-    return scan_coverage.Read(None, findings, [], notes)
+    return scan_coverage.Read(
+        None, findings, [], notes, [f"{path.name} does not have the ZAP report shape"]
+    )
 
 
 # ── Deduplication ────────────────────────────────────────────────────────────
 
 
 def deduplicate(findings: list[dict]) -> list[dict]:
-    best: dict[str, dict] = {}
-    for f in findings:
-        fp = f["fingerprint"]
-        if fp not in best:
-            best[fp] = f
-        else:
-            existing_rank = SEVERITY_RANK.get(best[fp]["severity"], 0)
-            new_rank = SEVERITY_RANK.get(f["severity"], 0)
-            if new_rank > existing_rank:
-                best[fp] = f
-    return list(best.values())
+    """One finding per fingerprint, the highest severity; scans that disagree about coverage
+    leave the weaker one on the merged finding (see scan_coverage.deduplicate)."""
+    return scan_coverage.deduplicate(findings, SEVERITY_RANK)
 
 
 # ── Sample data generator ────────────────────────────────────────────────────

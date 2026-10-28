@@ -177,13 +177,6 @@ def test_block_comments_exist_in_sql_but_not_in_hash_files() -> None:
     assert _signature_on_line("/* function f(a) */", is_py=False, style="c") is None
 
 
-def test_known_limit_a_regex_after_a_keyword_is_read_as_division() -> None:
-    """`return /'/.test(s)`: the previous token is a word, which could end an expression, so
-    the slash is taken as division and the quote opens a string. Pinned as a documented
-    false negative (a real `function` later on that line would be missed)."""
-    assert _signature_on_line("return /'/.test(s); function bar(a){}", is_py=False) is None
-
-
 # --- scanner semantics ------------------------------------------------------
 
 SCANNER = [

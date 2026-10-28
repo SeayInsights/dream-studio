@@ -397,14 +397,18 @@ def test_no_tracked_python_file_reads_a_non_def_as_one(monkeypatch: pytest.Monke
     the file exactly as in CI."""
     offenders: list[str] = []
     candidates = 0
-    # `_definition_modules` is reached only when the diff yielded a changed signature, so a
+    # `_definition_counts` is reached only when the diff yielded a changed signature, so a
     # spy on it is a stricter check than "no findings": a def read from text that no other
     # file happens to call would produce no finding and still be a misread.
     reached: list[str] = []
-    monkeypatch.setattr(hd, "_definition_modules", lambda root, name: reached.append(name) or 0)
+    monkeypatch.setattr(
+        hd,
+        "_definition_counts",
+        lambda files, names: reached.extend(names) or dict.fromkeys(names, 0),
+    )
     for path in _tracked_python_files():
         try:
-            text = path.read_text(encoding="utf-8")
+            text = path.read_bytes().decode("utf-8")  # no newline translation: git counts by LF
         except (OSError, UnicodeDecodeError):
             continue
         if not SHAPE.search(text):
@@ -420,17 +424,24 @@ def test_no_tracked_python_file_reads_a_non_def_as_one(monkeypatch: pytest.Monke
         }
         rel = path.relative_to(REPO_ROOT).as_posix()
         hunks = []
-        for number, line in enumerate(text.split("\n"), start=1):  # the diff's own line model
+        edited_lines = text.split("\n")  # the diff's own line model
+        for number, line in enumerate(edited_lines, start=1):
             if number in real or not SHAPE.search(line):
                 continue
             edited = SHAPE.sub(lambda m: m.group(0) + "zz_extra, ", line, count=1)
             hunks.append(f"@@ -{number},1 +{number},1 @@\n-{line}\n+{edited}\n")
+            edited_lines[number - 1] = edited
             candidates += 1
         if not hunks:
             continue
         diff = f"diff --git a/{rel} b/{rel}\n--- a/{rel}\n+++ b/{rel}\n" + "".join(hunks)
+        # The NEW file the diff describes is the file with every edit applied: the reader
+        # supplies it, as the gate's `git show HEAD:path` would for a committed edit.
+        edited_text = "\n".join(edited_lines)
         before = len(reached)
-        found = detect_changed_signature_callers(diff, repo_root=REPO_ROOT)
+        found = detect_changed_signature_callers(
+            diff, repo_root=REPO_ROOT, file_reader=lambda _p, t=edited_text: t
+        )
         if found or len(reached) != before:
             offenders.append(f"{rel}: read as a definition: {reached[before:][:3]}")
     assert candidates > 100, f"only {candidates} def-shaped non-def lines: the check proves little"

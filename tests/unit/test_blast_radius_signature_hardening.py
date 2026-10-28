@@ -439,11 +439,11 @@ def test_multi_line_parameter_text_is_classified_as_written() -> None:
     assert _signature_compatibility(old, "a,\n    b,\n    *,\n    c: int,\n") == "incompatible"
 
 
-def test_a_def_rewritten_across_lines_produces_no_finding_today(tmp_path: Path) -> None:
-    """KNOWN LIMIT, pinned honestly: `_SIG_RE` reads one line and needs a closing `)` on it,
-    so `def do_work(` alone never matches. A breaking change made while re-wrapping a def
-    across lines is therefore not detected, before and after the refinement. Widening
-    detection is a separate change; this test makes any such widening deliberate."""
+def test_a_def_rewritten_across_lines_is_now_read(tmp_path: Path) -> None:
+    """This was a pinned KNOWN LIMIT: a def whose parameter list continued on later lines
+    matched nothing, so a breaking change made while re-wrapping one was invisible. The
+    parameter list is now joined across the stream's own lines (tests/unit/
+    test_blast_radius_final_round.py has the bounds and the limits)."""
     _write(tmp_path / CALLER, "def test_it():\n    do_work('a')\n")
     diff = (
         "diff --git a/core/thing.py b/core/thing.py\n"
@@ -456,4 +456,5 @@ def test_a_def_rewritten_across_lines_produces_no_finding_today(tmp_path: Path) 
         "+    b,\n"
         "+):\n"
     )
-    assert detect_changed_signature_callers(diff, repo_root=tmp_path) == []
+    findings = detect_changed_signature_callers(diff, repo_root=tmp_path)
+    assert CALLER in {f["path"] for f in findings}

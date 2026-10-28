@@ -75,14 +75,16 @@ def test_an_added_duplicate_shape_is_reported(tmp_path: Path) -> None:
     assert _flagged(tmp_path, ["a"], ["a", "a"])
 
 
-def test_a_dropped_duplicate_is_not_a_new_shape(tmp_path: Path) -> None:
-    """Fewer definitions of the same shape introduce nothing a caller could meet."""
+def test_a_dropped_duplicate_of_a_surviving_shape_is_silent(tmp_path: Path) -> None:
+    """Fewer definitions of a shape that still exists introduce nothing a caller could meet."""
     assert not _flagged(tmp_path, ["a", "a"], ["a"])
     assert not _flagged(tmp_path, ["a, b", "a", "a, b"], ["a, b", "a"])
 
 
-def test_a_shape_gone_and_none_added_is_not_reported(tmp_path: Path) -> None:
-    assert not _flagged(tmp_path, ["a", "a, b"], ["a"])
+def test_a_shape_that_disappears_is_reported(tmp_path: Path) -> None:
+    """`(a, b)` no longer exists anywhere: that is a signature change, not a dropped duplicate
+    (issue #926 residuals, tests/unit/test_blast_radius_verifier_round.py)."""
+    assert _flagged(tmp_path, ["a", "a, b"], ["a"])
 
 
 def test_the_comparison_ignores_whitespace_but_not_content(tmp_path: Path) -> None:

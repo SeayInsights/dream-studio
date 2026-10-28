@@ -1,0 +1,212 @@
+# Semgrep rules — Data Protection
+# Generated for client: {{ client.name }}
+# Template: data-protection.yaml.j2
+# Coverage: logging sensitive data, unencrypted storage, client-side storage,
+#           URL parameter exposure, unmasked display
+rules:
+
+  # DP-001: Logging sensitive / critical data (Python)
+  - id: {{ client.name | lower }}-dp-001-log-sensitive-python
+    pattern-either:
+      {% for term in client.data.critical %}
+      - pattern: print(..., "{{ term }}", ...)
+      - pattern: print(..., {{ term }}, ...)
+      - pattern: logging.info(..., "{{ term }}", ...)
+      - pattern: logging.debug(..., "{{ term }}", ...)
+      - pattern: logging.warning(..., "{{ term }}", ...)
+      - pattern: logging.error(..., "{{ term }}", ...)
+      - pattern: logger.info(..., "{{ term }}", ...)
+      - pattern: logger.debug(..., "{{ term }}", ...)
+      - pattern: logger.warning(..., "{{ term }}", ...)
+      - pattern: logger.error(..., "{{ term }}", ...)
+      {% endfor %}
+      {% for term in client.data.sensitive %}
+      - pattern: print(..., "{{ term }}", ...)
+      - pattern: logging.info(..., "{{ term }}", ...)
+      - pattern: logger.info(..., "{{ term }}", ...)
+      {% endfor %}
+    message: >
+      Potential logging of sensitive {{ client.name }} data.
+      Critical fields ({{ client.data.critical | join(', ') }}) and sensitive fields
+      must not appear in log output. Mask or redact before logging.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      owasp: "A09:2021 - Security Logging and Monitoring Failures"
+      cwe: "CWE-532: Insertion of Sensitive Information into Log File"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+
+  # DP-002: Logging sensitive / critical data (JavaScript/TypeScript)
+  - id: {{ client.name | lower }}-dp-002-log-sensitive-js
+    pattern-either:
+      {% for term in client.data.critical %}
+      - pattern: console.log(..., "{{ term }}", ...)
+      - pattern: console.log(..., {{ term }}, ...)
+      - pattern: console.warn(..., "{{ term }}", ...)
+      - pattern: console.error(..., "{{ term }}", ...)
+      - pattern: console.debug(..., "{{ term }}", ...)
+      {% endfor %}
+      {% for term in client.data.sensitive %}
+      - pattern: console.log(..., "{{ term }}", ...)
+      - pattern: console.warn(..., "{{ term }}", ...)
+      {% endfor %}
+    message: >
+      Potential logging of sensitive {{ client.name }} data in JavaScript/TypeScript.
+      Critical fields ({{ client.data.critical | join(', ') }}) must not appear in
+      console output. Remove or redact before deploying to production.
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      owasp: "A09:2021 - Security Logging and Monitoring Failures"
+      cwe: "CWE-532: Insertion of Sensitive Information into Log File"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+
+  # DP-003: Unencrypted file storage of critical data (Python)
+  - id: {{ client.name | lower }}-dp-003-unencrypted-file-storage
+    patterns:
+      - pattern-either:
+          {% for term in client.data.critical %}
+          - pattern: |
+              $DATA = $OBJ.{{ term }}
+              ...
+              open($FILE, ...).write($DATA)
+          - pattern: |
+              open($FILE, ...).write(${{ term | upper }})
+          - pattern: |
+              json.dump({..., "{{ term }}": ..., ...}, $F)
+          - pattern: |
+              csv.writer($F).writerow([..., ${{ term | upper }}, ...])
+          {% endfor %}
+      - pattern-not: |
+          $ENC = Fernet(...)
+          ...
+          open($FILE, ...).write(...)
+      - pattern-not: |
+          $CIPHER = AES.new(...)
+          ...
+          open($FILE, ...).write(...)
+    message: >
+      Writing {{ client.name }} critical data ({{ client.data.critical | join(', ') }})
+      to a file without encryption. Use Fernet, AES, or equivalent encryption before
+      persisting sensitive business data to disk.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      owasp: "A02:2021 - Cryptographic Failures"
+      cwe: "CWE-312: Cleartext Storage of Sensitive Information"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+
+  # DP-004: Client-side storage of sensitive data (JavaScript/TypeScript)
+  - id: {{ client.name | lower }}-dp-004-client-side-storage
+    pattern-either:
+      {% for term in client.data.critical %}
+      - pattern: localStorage.setItem("{{ term }}", ...)
+      - pattern: localStorage.setItem($KEY, ${{ term | upper }})
+      - pattern: sessionStorage.setItem("{{ term }}", ...)
+      - pattern: sessionStorage.setItem($KEY, ${{ term | upper }})
+      - pattern: document.cookie = "{{ term }}=..."
+      {% endfor %}
+      {% for term in client.data.sensitive %}
+      - pattern: localStorage.setItem("{{ term }}", ...)
+      - pattern: sessionStorage.setItem("{{ term }}", ...)
+      {% endfor %}
+    message: >
+      Storing {{ client.name }} sensitive data in browser localStorage or sessionStorage.
+      Client-side storage is unencrypted and accessible to XSS attacks.
+      Use server-side sessions or encrypted storage for: {{ client.data.critical | join(', ') }}.
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      owasp: "A02:2021 - Cryptographic Failures"
+      cwe: "CWE-312: Cleartext Storage of Sensitive Information"
+      category: security
+      confidence: HIGH
+      client: {{ client.name }}
+
+  # DP-005: Critical data exposed in URL parameters (Python)
+  - id: {{ client.name | lower }}-dp-005-url-param-exposure-python
+    pattern-either:
+      {% for term in client.data.critical %}
+      - pattern: |
+          $URL = f"...{{ term }}={$VAL}..."
+      - pattern: |
+          $URL = "...{{ term }}=" + $VAL
+      - pattern: |
+          redirect(f"...?{{ term }}={$VAL}")
+      - pattern: |
+          request.args.get("{{ term }}")
+      - pattern: |
+          params = {..., "{{ term }}": $VAL, ...}
+          ...
+          requests.get($URL, params=params)
+      {% endfor %}
+    message: >
+      {{ client.name }} critical data field '{{ client.data.critical | join("' or '") }}'
+      detected in URL parameters. URL parameters are logged by proxies, browsers, and
+      servers. Transmit sensitive data in request body or headers, not query strings.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      owasp: "A02:2021 - Cryptographic Failures"
+      cwe: "CWE-598: Information Exposure Through Query Strings in GET Request"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+
+  # DP-006: Critical data exposed in URL parameters (JavaScript/TypeScript)
+  - id: {{ client.name | lower }}-dp-006-url-param-exposure-js
+    pattern-either:
+      {% for term in client.data.critical %}
+      - pattern: |
+          new URLSearchParams({..., "{{ term }}": $VAL, ...})
+      - pattern: |
+          $URL = `...{{ term }}=${$VAL}...`
+      - pattern: |
+          $ROUTER.push(`...?{{ term }}=${$VAL}`)
+      - pattern: |
+          history.pushState($S, $T, `...{{ term }}=${$VAL}...`)
+      {% endfor %}
+    message: >
+      {{ client.name }} critical data appended to URL query string in JavaScript.
+      URL query parameters are visible in browser history, server access logs, and
+      referrer headers. Use POST body or Authorization headers for sensitive fields:
+      {{ client.data.critical | join(', ') }}.
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      owasp: "A02:2021 - Cryptographic Failures"
+      cwe: "CWE-598: Information Exposure Through Query Strings in GET Request"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+
+  # DP-007: Unmasked display of critical data in templates (Python)
+  - id: {{ client.name | lower }}-dp-007-unmasked-display-python
+    pattern-either:
+      {% for term in client.data.critical %}
+      - pattern: |
+          return render_template($T, {{ term }}=$VAL)
+      - pattern: |
+          return jsonify({..., "{{ term }}": $VAL, ...})
+      - pattern: |
+          response = {"{{ term }}": $PLAIN, ...}
+          return response
+      {% endfor %}
+    message: >
+      {{ client.name }} critical data ({{ client.data.critical | join(', ') }}) returned
+      directly in API response or template without masking. Apply field-level masking
+      or redaction before rendering. Use a serializer that strips or masks sensitive fields.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      cwe: "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
+      category: security
+      confidence: LOW
+      client: {{ client.name }}

@@ -37,7 +37,7 @@ Unlike `scan` (which generates configs for CI execution only), `dast:run` CAN ex
 ## Anti-Patterns
 
 - **Active scanning against production without explicit config** — default to passive mode. Active mode requires `scan_profile: full` in the target config. Always warn before active scanning.
-- **Skipping auth config validation** — DAST against authenticated apps requires working auth. If auth config is incomplete, skip the target and report why.
+- **Skipping auth config validation** — DAST against authenticated apps requires working auth. If auth config is incomplete, skip the target, report why, and write its not-scanned record (see `examples.md`, Step R2): a skipped target must leave a trace `dast status` can read.
 - **Running without pre-flight URL check** — always verify the target URL is reachable before starting a scan. Scanning a dead URL wastes time and produces no findings.
 - **Overwhelming the target** — rate-limit Nuclei (`-rate-limit 10`). ZAP has built-in throttling via the Automation Framework config.
 - **Ingesting without scan-meta.json** — every scan directory must have `scan-meta.json` with `target_type: webapp`. Downstream skills depend on it.

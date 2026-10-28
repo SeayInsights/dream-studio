@@ -47,6 +47,7 @@ _ACCEPTED_DEV_CVES = (
     "CVE-2026-52870",  # mcp (fixed 1.27.2) — via semgrep
     "CVE-2026-52869",  # mcp (fixed 1.27.2) — via semgrep
     "CVE-2026-59950",  # mcp (fixed 1.28.1) — via semgrep
+    "CVE-2026-59951",  # mcp (fixed 1.30.0), via semgrep, which hard-pins mcp==1.29.0
     "PYSEC-2026-2132",  # click (fixed 8.3.3) — via semgrep
     "CVE-2026-101917",  # pyjwt (fixed 2.14.0) — via semgrep
     "CVE-2026-102265",  # pyjwt (fixed 2.14.0) — via semgrep

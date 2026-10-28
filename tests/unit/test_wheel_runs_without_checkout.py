@@ -619,3 +619,85 @@ def test_the_installed_doctor_writes_nothing_in_an_installed_home(installed):
     after = snap()
     changed = sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k))
     assert not changed, f"the installed doctor wrote: {changed}\n{proc.stderr[-1500:]}"
+
+
+SUPPORT_INSTALL_PROBE = r"""
+import json, sys
+from pathlib import Path
+from integrations.installer.claude_code import ClaudeCodeInstaller
+from core.config.paths import code_root
+
+config_root, home = Path(sys.argv[1]), Path(sys.argv[2])
+config_root.mkdir(parents=True, exist_ok=True)
+installer = ClaudeCodeInstaller(config_root, "user", ds_home=home, hook_mode="module")
+installer.install("execute")
+print(json.dumps({"code_root": str(code_root())}))
+"""
+
+
+def test_the_self_install_projection_ships_the_security_scripts_and_they_run(installed):
+    """`ds self-install` installs this wheel and runs `integrate install` from it, so the
+    skills a user gets are what the INSTALLED app's installer writes. The security modes say
+    `<skill-dir>/templates/security/...`; that directory must exist on this channel too, and
+    the scripts must run from it with `py -I`, with no checkout and no `core` of the app."""
+    tmp = installed["tmp"]
+    config_root, home = tmp / "claude-config", tmp / "ds-home"
+    proc = subprocess.run(
+        [str(installed["py"]), "-I", "-c", SUPPORT_INSTALL_PROBE, str(config_root), str(home)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=tmp,
+        env=_isolated_env(tmp),
+        timeout=900,
+    )
+    assert proc.returncode == 0, proc.stderr[-3000:]
+
+    skill = config_root / "skills" / "ds-security"
+    etl = skill / "templates" / "security" / "etl"
+    for needed in (
+        "parse_binary.py",
+        "parse_dast.py",
+        "parse_sarif.py",
+        "scan_coverage.py",
+        "etl_home.py",
+        "header_analysis.py",
+    ):
+        assert (etl / needed).is_file(), f"{needed} is not in the self-installed skill"
+    assert (skill / "templates" / "security" / "compliance" / "soc2-mapping.yaml").is_file()
+    assert not [p for p in skill.rglob("*") if "__pycache__" in p.parts or p.suffix == ".pyc"]
+
+    scan = tmp / "scans" / "app" / "2026-10-21"
+    scan.mkdir(parents=True)
+    (scan / "checksec.json").write_text(
+        json.dumps({"app.exe": {"nx": "no", "pie": "yes"}}), encoding="utf-8"
+    )
+    (scan / "scan-meta.json").write_text(
+        json.dumps({"steps": [{"step": "checksec", "status": "ran", "tool": "checksec"}]}),
+        encoding="utf-8",
+    )
+    out = tmp / "findings.json"
+    run = subprocess.run(
+        [
+            str(installed["py"]),
+            "-I",
+            str(etl / "parse_binary.py"),
+            "--client",
+            "acme",
+            "--scans-dir",
+            str(scan),
+            "--output",
+            str(out),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=tmp,
+        env=_isolated_env(tmp),
+        timeout=300,
+    )
+    assert run.returncode == 0, run.stderr[-2000:]
+    findings = json.loads(out.read_text(encoding="utf-8"))
+    assert [f["hardening_check"] for f in findings] == ["nx"]

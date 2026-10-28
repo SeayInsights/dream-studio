@@ -73,7 +73,7 @@ Extract from user input:
 
 #### Step F3: Load Mitigation Templates
 
-1. Read all 5 YAML files from `builds/dream-studio-clean/templates/security/mitigations/`.
+1. Read all 5 YAML files from `<skill-dir>/templates/security/mitigations/`.
 2. Build a flat lookup index: `{rule_pattern: template_entry}`.
 3. The `rule_pattern` field in each template is a pipe-delimited string of matching patterns (e.g., `"*-inj-*|CWE-89|sql-injection"`). Split on `|` and index each token.
 4. If a template file fails to load: warn with filename, skip that file, continue.
