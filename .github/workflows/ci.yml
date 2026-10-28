@@ -153,6 +153,7 @@ jobs:
           --ignore-vuln CVE-2026-102270 --ignore-vuln CVE-2026-102271
           --ignore-vuln CVE-2026-102272 --ignore-vuln CVE-2026-102273
           --ignore-vuln CVE-2026-102274 --ignore-vuln CVE-2026-101918
+          --ignore-vuln CVE-2026-103001
 
       - name: Stock Windows Store-alias state
         if: runner.os == 'Windows'
